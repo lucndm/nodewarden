@@ -384,21 +384,21 @@ function normalizeCipherLoginUrisForCompatibility(
 }
 
 export function validateCipherEncryptedFieldsForCompatibility(cipher: Cipher): string | null {
-  if (cipher.name != null && !optionalEncStringWithin(cipher.name, 1000)) return 'Cipher name must be an encrypted string up to 1000 characters.';
-  if (cipher.notes != null && !optionalEncStringWithin(cipher.notes, 10000)) return 'Cipher notes must be an encrypted string up to 10000 characters.';
+  if (cipher.name != null && !optionalEncStringWithin(cipher.name, 5000)) return 'Cipher name must be an encrypted string up to 5000 characters.';
+  if (cipher.notes != null && !optionalEncStringWithin(cipher.notes, 50000)) return 'Cipher notes must be an encrypted string up to 50000 characters.';
 
   const login = cipher.login as any;
   if (login && typeof login === 'object') {
-    if (login.username != null && !optionalEncStringWithin(login.username, 1000)) return 'Login username must be an encrypted string up to 1000 characters.';
-    if (login.password != null && !optionalEncStringWithin(login.password, 5000)) return 'Login password must be an encrypted string up to 5000 characters.';
-    if (login.totp != null && !optionalEncStringWithin(login.totp, 1000)) return 'Login TOTP must be an encrypted string up to 1000 characters.';
-    if (login.uri != null && !optionalEncStringWithin(login.uri, 10000)) return 'Login URI must be an encrypted string up to 10000 characters.';
+    if (login.username != null && !optionalEncStringWithin(login.username, 5000)) return 'Login username must be an encrypted string up to 5000 characters.';
+    if (login.password != null && !optionalEncStringWithin(login.password, 50000)) return 'Login password must be an encrypted string up to 50000 characters.';
+    if (login.totp != null && !optionalEncStringWithin(login.totp, 5000)) return 'Login TOTP must be an encrypted string up to 5000 characters.';
+    if (login.uri != null && !optionalEncStringWithin(login.uri, 20000)) return 'Login URI must be an encrypted string up to 20000 characters.';
 
     if (Array.isArray(login.uris)) {
       for (const uri of login.uris) {
         if (!uri || typeof uri !== 'object') continue;
-        if (uri.uri != null && !optionalEncStringWithin(uri.uri, 10000)) return 'Login URI must be an encrypted string up to 10000 characters.';
-        if (uri.uriChecksum != null && !optionalEncStringWithin(uri.uriChecksum, 10000)) return 'Login URI checksum must be an encrypted string up to 10000 characters.';
+        if (uri.uri != null && !optionalEncStringWithin(uri.uri, 20000)) return 'Login URI must be an encrypted string up to 20000 characters.';
+        if (uri.uriChecksum != null && !optionalEncStringWithin(uri.uriChecksum, 20000)) return 'Login URI checksum must be an encrypted string up to 20000 characters.';
       }
     }
 
