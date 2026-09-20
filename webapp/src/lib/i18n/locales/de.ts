@@ -1462,6 +1462,26 @@ Object.assign(de, {
 
 Object.assign(de, { "txt_password_security_last_checked": "Zuletzt überprüft: {value}" });
 Object.assign(de, { "txt_no_password_risks_in_filter": "Keine Passwortrisiken in dieser Kategorie" });
-Object.assign(de, { "txt_password_security_show_all": "Alle anzeigen", "txt_password_security_hide_all": "Alle ausblenden", "txt_password_security_jump": "Öffnen", "txt_password_security_exposed_short": "{count}-mal geleakt", "txt_password_security_weak_short": "Schwaches Passwort", "txt_password_security_reused_short": "Wiederverwendet" });
+Object.assign(de, { "txt_password_security_show_all": "Alle anzeigen", "txt_password_security_hide_all": "Alle ausblenden", "txt_password_security_jump": "Öffnen", "txt_password_security_exposed_short": "{count}-mal geleakt", "txt_password_security_weak_short": "Schwaches Passwort", "txt_password_security_reused_short": "Wiederverwendet" ,
+  "txt_generator_history": "Generator-Verlauf",
+  "txt_generator_history_clear": "Verlauf löschen",
+  "txt_generator_history_empty": "In dieser Sitzung wurde noch nichts generiert.",
+  "txt_generator_provider": "Anbieter",
+  "txt_generator_provider_simplelogin": "SimpleLogin / kompatibel (MailPal)",
+  "txt_generator_forwarded_email": "Weitergeleitetes E-Mail-Alias",
+  "txt_generator_forwarded_description": "Erzeugt ein echtes Alias über Ihren SimpleLogin-kompatiblen Server (z. B. MailPal oder SimpleLogin). Jede Generierung erstellt ein neues Alias.",
+  "txt_generator_server_url": "Server-URL",
+  "txt_generator_api_key": "API-Schlüssel",
+  "txt_generator_alias_type": "Alias-Typ",
+  "txt_generator_alias_type_word": "Zufälliges Wort",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "Eigenes Präfix",
+  "txt_generator_prefix": "Präfix",
+  "txt_generator_forwarded_error_config": "Geben Sie Server-URL und API-Schlüssel Ihres Alias-Anbieters ein und generieren Sie neu.",
+  "txt_generator_forwarded_error_network": "Der Alias-Anbieter konnte nicht erreicht werden. Prüfen Sie Server-URL und Verbindung.",
+  "txt_generator_forwarded_error_auth": "Der Alias-Anbieter hat den API-Schlüssel abgelehnt.",
+  "txt_generator_forwarded_error_quota": "Der Alias-Anbieter konnte das Alias nicht erstellen (Kontingent erreicht oder keine Domain verfügbar).",
+  "txt_generator_forwarded_error_generic": "Der Alias-Anbieter hat einen Fehler gemeldet. Bitte versuchen Sie es erneut.",
+});
 
 export default de;

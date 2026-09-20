@@ -69,6 +69,7 @@ import { APP_NOTIFY_EVENT, type AppNotifyDetail } from '@/lib/app-notify';
 import { dispatchBackupProgress, type BackupProgressDetail } from '@/lib/backup-restore-progress';
 import { clearOfflineUnlockRecord } from '@/lib/offline-auth';
 import { clearPasswordSecurityCache } from '@/lib/password-security-cache';
+import { clearGeneratorHistory } from '@/lib/generator-history';
 import { decryptSends, decryptVaultCore } from '@/lib/vault-decrypt';
 import { decryptSendsInWorker, decryptVaultCoreInWorker } from '@/lib/vault-worker';
 import {
@@ -940,6 +941,7 @@ export default function App() {
     clearProfileSnapshot();
     clearOfflineUnlockRecord();
     clearPasswordSecurityCache();
+    clearGeneratorHistory();
     setProfile(null);
     setUnlockPreparing(false);
     setPendingTotp(null);
@@ -2024,6 +2026,7 @@ export default function App() {
     profile,
     profileLoading: profileQuery.isFetching && !profile,
     session,
+    authedFetch,
     mobileLayout,
     mobileSidebarToggleKey,
     themePreference,

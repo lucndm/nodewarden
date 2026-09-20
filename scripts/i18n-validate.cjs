@@ -21,6 +21,12 @@ const intentionallyEnglishKeys = new Set([
   'txt_backup_destination_name_default_s3',
   'txt_dash',
   'txt_text_3',
+  // Technical term and a Swedish loanword identical to English.
+  'txt_generator_alias_type_uuid',
+  'txt_generator_prefix',
+  // "Provider" is a loanword in some locales; the other names brand products.
+  'txt_generator_provider',
+  'txt_generator_provider_simplelogin',
 ]);
 const intentionallyEnglishPrefixes = [
   'txt_log_action_',

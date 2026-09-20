@@ -1462,6 +1462,26 @@ Object.assign(fi, {
 
 Object.assign(fi, { "txt_password_security_last_checked": "Tarkistettu viimeksi: {value}" });
 Object.assign(fi, { "txt_no_password_risks_in_filter": "Tässä luokassa ei ole salasanojen riskejä" });
-Object.assign(fi, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" });
+Object.assign(fi, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" ,
+  "txt_generator_history": "Generaattorin historia",
+  "txt_generator_history_clear": "Tyhjennä historia",
+  "txt_generator_history_empty": "Mitään ei ole vielä luotu tässä istunnossa.",
+  "txt_generator_provider": "Tarjoaja",
+  "txt_generator_provider_simplelogin": "SimpleLogin / yhteensopiva (MailPal)",
+  "txt_generator_forwarded_email": "Edelleenlähetetty sähköpostialias",
+  "txt_generator_forwarded_description": "Luo oikean aliaksen SimpleLogin-yhteensopivan palvelimesi (esim. MailPal tai SimpleLogin) kautta. Jokainen luonti luo uuden aliaksen.",
+  "txt_generator_server_url": "Palvelimen URL",
+  "txt_generator_api_key": "API-avain",
+  "txt_generator_alias_type": "Aliaksen tyyppi",
+  "txt_generator_alias_type_word": "Satunnainen sana",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "Mukautettu etuliite",
+  "txt_generator_prefix": "Etuliite",
+  "txt_generator_forwarded_error_config": "Anna aliastarjoajasi palvelimen URL ja API-avain ja luo alias uudelleen.",
+  "txt_generator_forwarded_error_network": "Aliastarjoajaan ei saada yhteyttä. Tarkista palvelimen URL ja verkkoyhteys.",
+  "txt_generator_forwarded_error_auth": "Aliastarjoaja hylkäsi API-avaimen.",
+  "txt_generator_forwarded_error_quota": "Aliastarjoaja ei voinut luoda aliasta (kiintiö täyttynyt tai ei käytettävissä olevaa domainia).",
+  "txt_generator_forwarded_error_generic": "Aliastarjoaja palautti virheen. Yritä uudelleen.",
+});
 
 export default fi;

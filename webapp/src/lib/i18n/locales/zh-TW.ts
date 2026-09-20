@@ -1491,7 +1491,26 @@ Object.assign(zhTW, {
   "txt_open_vault": "開啟密碼庫",
   "txt_check_password_breach": "檢查外洩",
   "txt_password_not_found_in_breaches": "未在外洩密碼庫中發現",
-  "txt_password_security_check_failed": "無法完成外洩檢查。"
+  "txt_password_security_check_failed": "無法完成外洩檢查。",
+  "txt_generator_history": "產生器歷史",
+  "txt_generator_history_clear": "清空歷史",
+  "txt_generator_history_empty": "本次工作階段尚未產生任何內容。",
+  "txt_generator_provider": "供應商",
+  "txt_generator_provider_simplelogin": "SimpleLogin / 相容服務（MailPal）",
+  "txt_generator_forwarded_email": "轉寄信箱別名",
+  "txt_generator_forwarded_description": "透過相容 SimpleLogin 的伺服器（如 MailPal 或 SimpleLogin）建立真實別名。每次產生都會建立一個新別名。",
+  "txt_generator_server_url": "伺服器位址",
+  "txt_generator_api_key": "API 金鑰",
+  "txt_generator_alias_type": "別名類型",
+  "txt_generator_alias_type_word": "隨機單字",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "自訂前綴",
+  "txt_generator_prefix": "前綴",
+  "txt_generator_forwarded_error_config": "請輸入別名服務的伺服器位址和 API 金鑰，然後重新產生。",
+  "txt_generator_forwarded_error_network": "無法連線別名服務。請檢查伺服器位址和網路連線。",
+  "txt_generator_forwarded_error_auth": "別名服務拒絕了 API 金鑰。",
+  "txt_generator_forwarded_error_quota": "別名服務無法建立別名（已達配額或沒有可用網域）。",
+  "txt_generator_forwarded_error_generic": "別名服務回傳錯誤，請重試。",
 });
 
 export default zhTW;

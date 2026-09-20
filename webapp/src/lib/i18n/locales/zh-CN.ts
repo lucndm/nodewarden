@@ -1491,7 +1491,26 @@ Object.assign(zhCN, {
   "txt_open_vault": "打开密码库",
   "txt_check_password_breach": "检查泄露",
   "txt_password_not_found_in_breaches": "未在泄露密码库中发现",
-  "txt_password_security_check_failed": "无法完成泄露检查。"
+  "txt_password_security_check_failed": "无法完成泄露检查。",
+  "txt_generator_history": "生成器历史",
+  "txt_generator_history_clear": "清空历史",
+  "txt_generator_history_empty": "本次会话尚未生成任何内容。",
+  "txt_generator_provider": "服务商",
+  "txt_generator_provider_simplelogin": "SimpleLogin / 兼容服务（MailPal）",
+  "txt_generator_forwarded_email": "转发邮箱别名",
+  "txt_generator_forwarded_description": "通过兼容 SimpleLogin 的服务器（如 MailPal 或 SimpleLogin）创建真实别名。每次生成都会创建一个新别名。",
+  "txt_generator_server_url": "服务器地址",
+  "txt_generator_api_key": "API 密钥",
+  "txt_generator_alias_type": "别名类型",
+  "txt_generator_alias_type_word": "随机单词",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "自定义前缀",
+  "txt_generator_prefix": "前缀",
+  "txt_generator_forwarded_error_config": "请输入别名服务的服务器地址和 API 密钥，然后重新生成。",
+  "txt_generator_forwarded_error_network": "无法连接别名服务。请检查服务器地址和网络连接。",
+  "txt_generator_forwarded_error_auth": "别名服务拒绝了 API 密钥。",
+  "txt_generator_forwarded_error_quota": "别名服务无法创建别名（配额已满或没有可用域名）。",
+  "txt_generator_forwarded_error_generic": "别名服务返回错误，请重试。",
 });
 
 export default zhCN;
