@@ -146,6 +146,10 @@ import {
   saveUserDomainSettings as saveStoredUserDomainSettings,
 } from './storage-domain-rules-repo';
 import {
+  getStoredGeneratorSettings,
+  saveStoredGeneratorSettings,
+} from './storage-generator-settings-repo';
+import {
   consumeAccountPasskeyChallenge as consumeStoredAccountPasskeyChallenge,
   countAccountPasskeyCredentialsByUserId as countStoredAccountPasskeyCredentialsByUserId,
   deleteAccountPasskeyCredential as deleteStoredAccountPasskeyCredential,
@@ -164,7 +168,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-07-13-refresh-session-reuse';
+const STORAGE_SCHEMA_VERSION = '2026-09-20-generator-settings';
 const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
 
 // D1-backed storage.
@@ -397,6 +401,17 @@ export class StorageService {
       excludedGlobalEquivalentDomains,
       new Date().toISOString()
     );
+    await this.updateRevisionDate(userId);
+  }
+
+  // --- Username generator (forwarded alias) settings ---
+
+  async getUserGeneratorSettings(userId: string) {
+    return getStoredGeneratorSettings(this.db, userId);
+  }
+
+  async saveUserGeneratorSettings(userId: string, data: string): Promise<void> {
+    await saveStoredGeneratorSettings(this.db, userId, data);
     await this.updateRevisionDate(userId);
   }
 

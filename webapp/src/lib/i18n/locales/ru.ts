@@ -1462,6 +1462,26 @@ Object.assign(ru, {
 
 Object.assign(ru, { "txt_password_security_last_checked": "Последняя проверка: {value}" });
 Object.assign(ru, { "txt_no_password_risks_in_filter": "В этой категории нет рисков для паролей" });
-Object.assign(ru, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" });
+Object.assign(ru, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" ,
+  "txt_generator_history": "История генератора",
+  "txt_generator_history_clear": "Очистить историю",
+  "txt_generator_history_empty": "В этом сеансе ещё ничего не сгенерировано.",
+  "txt_generator_provider": "Провайдер",
+  "txt_generator_provider_simplelogin": "SimpleLogin / совместимый (MailPal)",
+  "txt_generator_forwarded_email": "Пересылаемый почтовый псевдоним",
+  "txt_generator_forwarded_description": "Создаёт настоящий псевдоним через ваш сервер, совместимый с SimpleLogin (например, MailPal или SimpleLogin). Каждая генерация создаёт новый псевдоним.",
+  "txt_generator_server_url": "URL сервера",
+  "txt_generator_api_key": "API-ключ",
+  "txt_generator_alias_type": "Тип псевдонима",
+  "txt_generator_alias_type_word": "Случайное слово",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "Свой префикс",
+  "txt_generator_prefix": "Префикс",
+  "txt_generator_forwarded_error_config": "Укажите URL сервера и API-ключ вашего провайдера псевдонимов и создайте заново.",
+  "txt_generator_forwarded_error_network": "Не удалось связаться с провайдером псевдонимов. Проверьте URL сервера и подключение.",
+  "txt_generator_forwarded_error_auth": "Провайдер псевдонимов отклонил API-ключ.",
+  "txt_generator_forwarded_error_quota": "Провайдер псевдонимов не смог создать псевдоним (достигнута квота или нет доступного домена).",
+  "txt_generator_forwarded_error_generic": "Провайдер псевдонимов вернул ошибку. Попробуйте ещё раз.",
+});
 
 export default ru;

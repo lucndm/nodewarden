@@ -1,5 +1,6 @@
 import type { Env, User } from './types';
 import { errorResponse, jsonResponse, unsupportedResponse } from './utils/response';
+import { handleGetGeneratorSettings, handleUpdateGeneratorSettings } from './handlers/generator-settings';
 import {
   handleGetProfile,
   handleUpdateProfile,
@@ -467,6 +468,12 @@ export async function handleAuthenticatedRoute(
   if (path === '/api/settings/domains' || path === '/settings/domains') {
     if (method === 'GET') return handleGetDomains(env, userId);
     if (method === 'PUT' || method === 'POST') return handleUpdateDomains(request, env, userId);
+    return null;
+  }
+
+  if (path === '/api/settings/generator' || path === '/settings/generator') {
+    if (method === 'GET') return handleGetGeneratorSettings(env, userId);
+    if (method === 'PUT' || method === 'POST') return handleUpdateGeneratorSettings(request, env, userId);
     return null;
   }
 

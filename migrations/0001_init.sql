@@ -294,3 +294,10 @@ CREATE TABLE IF NOT EXISTS used_attachment_download_tokens (
   jti TEXT PRIMARY KEY,
   expires_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS generator_settings (
+  user_id TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

@@ -1462,6 +1462,26 @@ Object.assign(sv, {
 
 Object.assign(sv, { "txt_password_security_last_checked": "Senast kontrollerad: {value}" });
 Object.assign(sv, { "txt_no_password_risks_in_filter": "Inga lösenordsrisker i denna kategori" });
-Object.assign(sv, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" });
+Object.assign(sv, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" ,
+  "txt_generator_history": "Generatorhistorik",
+  "txt_generator_history_clear": "Rensa historik",
+  "txt_generator_history_empty": "Inget har genererats än i den här sessionen.",
+  "txt_generator_provider": "Leverantör",
+  "txt_generator_provider_simplelogin": "SimpleLogin / kompatibel (MailPal)",
+  "txt_generator_forwarded_email": "Vidarebefordrat e-postalias",
+  "txt_generator_forwarded_description": "Skapar ett riktigt alias via din SimpleLogin-kompatibla server (t.ex. MailPal eller SimpleLogin). Varje generering skapar ett nytt alias.",
+  "txt_generator_server_url": "Server-URL",
+  "txt_generator_api_key": "API-nyckel",
+  "txt_generator_alias_type": "Aliastyp",
+  "txt_generator_alias_type_word": "Slumpord",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "Eget prefix",
+  "txt_generator_prefix": "Prefix",
+  "txt_generator_forwarded_error_config": "Ange server-URL och API-nyckel för din aliastjänst och tryck på Generera igen.",
+  "txt_generator_forwarded_error_network": "Kunde inte nå aliastjänsten. Kontrollera server-URL:en och din anslutning.",
+  "txt_generator_forwarded_error_auth": "Aliastjänsten avvisade API-nyckeln.",
+  "txt_generator_forwarded_error_quota": "Aliastjänsten kunde inte skapa aliaset (kvoten är nådd eller ingen domän tillgänglig).",
+  "txt_generator_forwarded_error_generic": "Aliastjänsten returnerade ett fel. Försök igen.",
+});
 
 export default sv;

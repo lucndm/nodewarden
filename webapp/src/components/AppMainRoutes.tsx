@@ -7,6 +7,7 @@ import LoadingState from '@/components/LoadingState';
 import type { AdminBackupImportResponse, AdminBackupRunResponse, AdminBackupSettings, RemoteBackupBrowserResponse } from '@/lib/api/backup';
 import type { AuditLogFilters } from '@/lib/api/admin';
 import type { CiphersImportPayload } from '@/lib/api/vault';
+import type { AuthedFetch } from '@/lib/api/shared';
 import { t } from '@/lib/i18n';
 import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
 import type { ExportRequest } from '@/lib/export-formats';
@@ -39,6 +40,7 @@ export interface AppMainRoutesProps {
   profile: Profile | null;
   profileLoading: boolean;
   session: SessionState | null;
+  authedFetch?: AuthedFetch | null;
   mobileLayout: boolean;
   mobileSidebarToggleKey: number;
   themePreference: 'system' | 'light' | 'dark';
@@ -226,7 +228,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
       </Route>
       <Route path="/generator">
         <Suspense fallback={<RouteContentFallback />}>
-          <PasswordGeneratorPage />
+          <PasswordGeneratorPage authedFetch={props.authedFetch} session={props.session} />
         </Suspense>
       </Route>
       <Route path="/sends">

@@ -1462,6 +1462,26 @@ Object.assign(fr, {
 
 Object.assign(fr, { "txt_password_security_last_checked": "Dernière vérification : {value}" });
 Object.assign(fr, { "txt_no_password_risks_in_filter": "Aucun risque de mot de passe dans cette catégorie" });
-Object.assign(fr, { "txt_password_security_show_all": "Tout afficher", "txt_password_security_hide_all": "Tout masquer", "txt_password_security_jump": "Ouvrir", "txt_password_security_exposed_short": "Exposé {count} fois", "txt_password_security_weak_short": "Mot de passe faible", "txt_password_security_reused_short": "Réutilisé" });
+Object.assign(fr, { "txt_password_security_show_all": "Tout afficher", "txt_password_security_hide_all": "Tout masquer", "txt_password_security_jump": "Ouvrir", "txt_password_security_exposed_short": "Exposé {count} fois", "txt_password_security_weak_short": "Mot de passe faible", "txt_password_security_reused_short": "Réutilisé" ,
+  "txt_generator_history": "Historique du générateur",
+  "txt_generator_history_clear": "Effacer l’historique",
+  "txt_generator_history_empty": "Rien n’a encore été généré dans cette session.",
+  "txt_generator_provider": "Fournisseur",
+  "txt_generator_provider_simplelogin": "SimpleLogin / compatible (MailPal)",
+  "txt_generator_forwarded_email": "Alias e-mail redirigé",
+  "txt_generator_forwarded_description": "Crée un véritable alias via votre serveur compatible SimpleLogin (MailPal ou SimpleLogin par ex.). Chaque génération crée un nouvel alias.",
+  "txt_generator_server_url": "URL du serveur",
+  "txt_generator_api_key": "Clé API",
+  "txt_generator_alias_type": "Type d’alias",
+  "txt_generator_alias_type_word": "Mot aléatoire",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "Préfixe personnalisé",
+  "txt_generator_prefix": "Préfixe",
+  "txt_generator_forwarded_error_config": "Saisissez l’URL du serveur et la clé API de votre fournisseur d’alias, puis régénérez.",
+  "txt_generator_forwarded_error_network": "Impossible de joindre le fournisseur d’alias. Vérifiez l’URL du serveur et votre connexion.",
+  "txt_generator_forwarded_error_auth": "Le fournisseur d’alias a rejeté la clé API.",
+  "txt_generator_forwarded_error_quota": "Le fournisseur d’alias n’a pas pu créer l’alias (quota atteint ou aucun domaine disponible).",
+  "txt_generator_forwarded_error_generic": "Le fournisseur d’alias a renvoyé une erreur. Veuillez réessayer.",
+});
 
 export default fr;

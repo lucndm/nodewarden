@@ -1462,6 +1462,26 @@ Object.assign(it, {
 
 Object.assign(it, { "txt_password_security_last_checked": "Ultimo controllo: {value}" });
 Object.assign(it, { "txt_no_password_risks_in_filter": "Nessun rischio password in questa categoria" });
-Object.assign(it, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" });
+Object.assign(it, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" ,
+  "txt_generator_history": "Cronologia del generatore",
+  "txt_generator_history_clear": "Cancella cronologia",
+  "txt_generator_history_empty": "Nessun elemento generato in questa sessione.",
+  "txt_generator_provider": "Provider",
+  "txt_generator_provider_simplelogin": "SimpleLogin / compatibile (MailPal)",
+  "txt_generator_forwarded_email": "Alias email inoltrato",
+  "txt_generator_forwarded_description": "Crea un vero alias tramite il tuo server compatibile SimpleLogin (es. MailPal o SimpleLogin). Ogni generazione crea un nuovo alias.",
+  "txt_generator_server_url": "URL del server",
+  "txt_generator_api_key": "Chiave API",
+  "txt_generator_alias_type": "Tipo di alias",
+  "txt_generator_alias_type_word": "Parola casuale",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "Prefisso personalizzato",
+  "txt_generator_prefix": "Prefisso",
+  "txt_generator_forwarded_error_config": "Inserisci URL del server e chiave API del provider di alias, poi rigenera.",
+  "txt_generator_forwarded_error_network": "Impossibile raggiungere il provider di alias. Controlla l’URL del server e la connessione.",
+  "txt_generator_forwarded_error_auth": "Il provider di alias ha rifiutato la chiave API.",
+  "txt_generator_forwarded_error_quota": "Il provider di alias non ha potuto creare l’alias (quota raggiunta o nessun dominio disponibile).",
+  "txt_generator_forwarded_error_generic": "Il provider di alias ha restituito un errore. Riprova.",
+});
 
 export default it;

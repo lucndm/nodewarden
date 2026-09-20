@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Check, Copy, Download, LoaderCircle, Minus, Plus, RefreshCw, ShieldCheck } from 'lucide-preact';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { t } from '@/lib/i18n';
@@ -10,6 +10,9 @@ import {
   normalizeGeneratorSettings,
   type EmailMode,
   type EmailOptions,
+  type ForwardedAliasType,
+  type ForwardedEmailOptions,
+  type ForwarderAccountConfig,
   type GeneratorMode,
   type GeneratorSettings,
   type PassphraseOptions,
@@ -18,9 +21,19 @@ import {
   type SshKeyOptions,
   type UsernameOptions,
 } from '@/lib/password-generator';
+import { ForwarderError, generateForwardedEmail, type ForwarderErrorKind } from '@/lib/simplelogin-forwarder';
 import { generateSshKey, type GeneratedSshKey } from '@/lib/ssh-key-generator';
+import { loadGeneratorSettings, saveGeneratorSettings, type ForwardedAliasAccountSettings } from '@/lib/api/generator-settings';
+import type { AuthedFetch } from '@/lib/api/shared';
+import type { SessionState } from '@/lib/types';
+import { clearGeneratorHistory, getGeneratorHistory, recordGenerated, type GeneratorHistoryEntry } from '@/lib/generator-history';
 
 const SETTINGS_KEY = 'nodewarden.passwordGenerator.settings.v2';
+
+interface PasswordGeneratorPageProps {
+  authedFetch?: AuthedFetch | null;
+  session?: SessionState | null;
+}
 
 function readSettings(): GeneratorSettings {
   try {
@@ -35,7 +48,19 @@ function readSettings(): GeneratorSettings {
   }
 }
 
-export default function PasswordGeneratorPage() {
+// The forwarder API key is stored server-side encrypted with the user key;
+// only the non-secret parts stay in localStorage.
+function settingsWithoutSecrets(settings: GeneratorSettings): GeneratorSettings {
+  return {
+    ...settings,
+    forwarded: {
+      ...settings.forwarded,
+      simplelogin: { ...settings.forwarded.simplelogin, apiKey: '' },
+    },
+  };
+}
+
+export default function PasswordGeneratorPage(props: PasswordGeneratorPageProps = {}) {
   const initial = useMemo(readSettings, []);
   const [settings, setSettings] = useState<GeneratorSettings>(initial);
   const [seed, setSeed] = useState(0);
@@ -43,8 +68,19 @@ export default function PasswordGeneratorPage() {
   const [sshKey, setSshKey] = useState<GeneratedSshKey | null>(null);
   const [sshKeyError, setSshKeyError] = useState('');
   const [sshKeyLoading, setSshKeyLoading] = useState(false);
+  const [forwardedValue, setForwardedValue] = useState('');
+  const [forwardedError, setForwardedError] = useState('');
+  const [forwardedLoading, setForwardedLoading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<readonly GeneratorHistoryEntry[]>(() => getGeneratorHistory());
+  const forwardedMode = settings.mode === 'email' && settings.email.type === 'forwarded';
+  const serverSettingsReady = props.authedFetch && props.session?.symEncKey && props.session?.symMacKey;
 
-  const generated = useMemo(() => settings.mode === 'sshKey' ? sshKey?.fingerprint || '' : generateValue(settings), [settings, seed, sshKey]);
+  const generated = useMemo(() => {
+    if (settings.mode === 'sshKey') return sshKey?.fingerprint || '';
+    if (forwardedMode) return forwardedValue;
+    return generateValue(settings);
+  }, [settings, seed, sshKey, forwardedMode, forwardedValue]);
   const strength = useMemo(
     () => estimateStrength(settings.mode, generated, settings.mode === 'passphrase' ? settings.passphrase.words : undefined),
     [generated, settings.mode, settings.passphrase.words],
@@ -55,11 +91,50 @@ export default function PasswordGeneratorPage() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsWithoutSecrets(settings)));
     } catch {
       // The generator remains fully usable when browser storage is unavailable.
     }
   }, [settings]);
+
+  // Hydrate the forwarded alias account config (incl. the API key) from the
+  // user-key-encrypted server copy once session keys become available.
+  const [serverSettingsHydrated, setServerSettingsHydrated] = useState(false);
+  const lastSavedForwarderRef = useRef('');
+  useEffect(() => {
+    if (!props.authedFetch || !props.session) return;
+    let cancelled = false;
+    void loadGeneratorSettings(props.authedFetch, props.session)
+      .then((stored) => {
+        if (cancelled) return;
+        const account = stored?.forwarders?.simplelogin;
+        if (account) {
+          setSettings((current) => ({
+            ...current,
+            forwarded: { ...current.forwarded, simplelogin: { ...current.forwarded.simplelogin, ...normalizeAccount(account) } },
+          }));
+        }
+        lastSavedForwarderRef.current = JSON.stringify(account ? normalizeAccount(account) : null);
+        setServerSettingsHydrated(true);
+      })
+      .catch(() => {
+        if (!cancelled) setServerSettingsHydrated(true);
+      });
+    return () => { cancelled = true; };
+  }, [props.authedFetch, props.session?.symEncKey, props.session?.symMacKey]);
+
+  // Persist forwarder account changes back to the server (encrypted, debounced).
+  useEffect(() => {
+    if (!serverSettingsHydrated || !props.authedFetch || !props.session) return;
+    const account: ForwardedAliasAccountSettings = settings.forwarded.simplelogin;
+    const serialized = JSON.stringify(account);
+    if (serialized === lastSavedForwarderRef.current) return;
+    const timer = window.setTimeout(() => {
+      lastSavedForwarderRef.current = serialized;
+      void saveGeneratorSettings(props.authedFetch!, props.session!, { forwarders: { simplelogin: account } }).catch(() => { /* retried on next change */ });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [settings.forwarded.simplelogin, serverSettingsHydrated, props.authedFetch, props.session]);
 
   useEffect(() => {
     if (settings.mode !== 'sshKey') return;
@@ -73,8 +148,50 @@ export default function PasswordGeneratorPage() {
     return () => { cancelled = true; };
   }, [settings.mode, settings.sshKey.type, settings.sshKey.rsaLength, seed]);
 
+  const forwardedTriggerRef = useRef<{ seed: number; aliasType: ForwardedAliasType } | null>(null);
+  useEffect(() => {
+    if (!forwardedMode) return;
+    const trigger = { seed, aliasType: settings.forwarded.simplelogin.aliasType };
+    const previous = forwardedTriggerRef.current;
+    forwardedTriggerRef.current = trigger;
+    // Visiting the page must not create a real alias: generation only runs on
+    // explicit Regenerate or an alias type change.
+    if (previous === null && seed === 0) return;
+    // Generating a forwarded alias contacts the remote provider and creates a
+    // real alias, so it only runs on Regenerate, mode/type switches and alias
+    // type changes — deliberately not on every keystroke in the fields.
+    let cancelled = false;
+    setForwardedLoading(true);
+    setForwardedError('');
+    setForwardedValue('');
+    generateForwardedEmail(settings.forwarded)
+      .then((value) => {
+        if (cancelled) return;
+        recordAndSync('email', value);
+        setForwardedValue(value);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setForwardedValue('');
+        const kind = error instanceof ForwarderError ? error.kind : 'server' satisfies ForwarderErrorKind;
+        setForwardedError(forwardedErrorKey(kind));
+      })
+      .finally(() => { if (!cancelled) setForwardedLoading(false); });
+    return () => { cancelled = true; };
+  }, [forwardedMode, settings.forwarded.provider, settings.forwarded.simplelogin.aliasType, seed]);
+
+  const recordAndSync = (mode: GeneratorMode, value: string) => {
+    recordGenerated(mode, value);
+    setHistory(getGeneratorHistory());
+  };
+
   const regenerate = () => {
     setCopied(false);
+    // Sync modes compute their next value immediately; forwarded aliases are
+    // recorded when the provider call resolves (see the effect below).
+    if (!forwardedMode && settings.mode !== 'sshKey') {
+      recordAndSync(settings.mode, generateValue(settings));
+    }
     setSeed((value) => value + 1);
   };
 
@@ -120,6 +237,16 @@ export default function PasswordGeneratorPage() {
     setCopied(false);
   };
 
+  const changeForwardedOption = <K extends keyof ForwardedEmailOptions>(key: K, value: ForwardedEmailOptions[K]) => {
+    setSettings((current) => ({ ...current, forwarded: { ...current.forwarded, [key]: value } }));
+    setCopied(false);
+  };
+
+  const changeForwardedAccountOption = <K extends keyof ForwarderAccountConfig>(key: K, value: ForwarderAccountConfig[K]) => {
+    setSettings((current) => ({ ...current, forwarded: { ...current.forwarded, simplelogin: { ...current.forwarded.simplelogin, [key]: value } } }));
+    setCopied(false);
+  };
+
   const changeSshKeyOption = <K extends keyof SshKeyOptions>(key: K, value: SshKeyOptions[K]) => {
     setSettings((current) => ({ ...current, sshKey: { ...current.sshKey, [key]: value } }));
     setCopied(false);
@@ -143,7 +270,7 @@ export default function PasswordGeneratorPage() {
           </div>
           {settings.mode === 'sshKey' ? (
             <SshKeyOutput value={sshKey} loading={sshKeyLoading} error={sshKeyError} comment={settings.sshKey.comment} />
-          ) : <output className={`generator-value ${generated ? '' : 'empty'}`} aria-label={t('txt_generated_value')}>{generated || t('txt_generator_email_required_hint')}</output>}
+          ) : <output className={`generator-value ${generated ? '' : 'empty'}`} aria-label={t('txt_generated_value')}>{forwardedMode && forwardedError ? t(forwardedError) : generated || t('txt_generator_email_required_hint')}</output>}
           {settings.mode !== 'sshKey' && <div className="generator-meta-row">
             {strength > 0 ? (
               <>
@@ -156,10 +283,33 @@ export default function PasswordGeneratorPage() {
             <span>{t('txt_generator_character_count', { count: generated.length })}</span>
           </div>}
           <div className="actions generator-actions">
-            <button type="button" className="btn btn-primary" disabled={sshKeyLoading} onClick={regenerate}>{sshKeyLoading ? <LoaderCircle size={16} className="btn-icon generator-spinner" /> : <RefreshCw size={16} className="btn-icon" />}{t('txt_regenerate')}</button>
+            <button type="button" className="btn btn-primary" disabled={sshKeyLoading || forwardedLoading} onClick={regenerate}>{sshKeyLoading || forwardedLoading ? <LoaderCircle size={16} className="btn-icon generator-spinner" /> : <RefreshCw size={16} className="btn-icon" />}{t('txt_regenerate')}</button>
             <button type="button" className="btn btn-secondary" disabled={(settings.mode === 'sshKey' && !sshKey) || !generated} onClick={() => void copy()}><Copy size={16} className="btn-icon" />{copied ? t('txt_copied') : settings.mode === 'sshKey' ? t('txt_generator_copy_public_key') : t('txt_copy')}</button>
           </div>
           <p className="generator-security-note"><Check size={15} />{t(settings.mode === 'sshKey' ? 'txt_generator_ssh_security_note' : 'txt_generator_security_note')}</p>
+          <div className="generator-history">
+            <button type="button" className="btn-link generator-history-toggle" aria-expanded={historyOpen} onClick={() => { setHistoryOpen((open) => !open); setHistory(getGeneratorHistory()); }}>{t('txt_generator_history')}</button>
+            {historyOpen && (
+              <div className="generator-history-panel">
+                <div className="generator-history-toolbar">
+                  <button type="button" className="btn btn-secondary small" disabled={history.length === 0} onClick={() => { clearGeneratorHistory(); setHistory(getGeneratorHistory()); }}>{t('txt_generator_history_clear')}</button>
+                </div>
+                {history.length === 0 ? (
+                  <p className="generator-options-note">{t('txt_generator_history_empty')}</p>
+                ) : (
+                  <ul className="generator-history-list">
+                    {history.map((entry) => (
+                      <li key={entry.id} className="generator-history-item">
+                        <code className="generator-history-value" title={entry.value}>{entry.value}</code>
+                        <span className="generator-history-meta">{modeLabel(entry.mode)} · {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <button type="button" className="btn btn-secondary small" onClick={() => void copyTextToClipboard(entry.value)}>{t('txt_copy')}</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="generator-options-card" aria-labelledby="generator-options-title">
@@ -189,7 +339,13 @@ export default function PasswordGeneratorPage() {
             <UsernameOptionFields options={settings.username} onChange={changeUsernameOption} />
           )}
           {settings.mode === 'email' && (
-            <EmailOptionFields options={settings.email} onChange={changeEmailOption} />
+            <EmailOptionFields
+              options={settings.email}
+              onChange={changeEmailOption}
+              forwarded={settings.forwarded}
+              onForwardedChange={changeForwardedOption}
+              onForwardedAccountChange={changeForwardedAccountOption}
+            />
           )}
           {settings.mode === 'sshKey' && (
             <SshKeyOptionFields options={settings.sshKey} onChange={changeSshKeyOption} />
@@ -237,19 +393,50 @@ function UsernameOptionFields(props: { options: UsernameOptions; onChange: <K ex
   );
 }
 
-function EmailOptionFields(props: { options: EmailOptions; onChange: <K extends keyof EmailOptions>(key: K, value: EmailOptions[K]) => void }) {
+function EmailOptionFields(props: {
+  options: EmailOptions;
+  onChange: <K extends keyof EmailOptions>(key: K, value: EmailOptions[K]) => void;
+  forwarded: ForwardedEmailOptions;
+  onForwardedChange: <K extends keyof ForwardedEmailOptions>(key: K, value: ForwardedEmailOptions[K]) => void;
+  onForwardedAccountChange: <K extends keyof ForwarderAccountConfig>(key: K, value: ForwarderAccountConfig[K]) => void;
+}) {
   const types: Array<[EmailMode, string]> = [
     ['plusAddressed', 'txt_generator_plus_addressed_email'],
     ['catchAll', 'txt_generator_catch_all_email'],
     ['subdomain', 'txt_generator_subdomain_email'],
+    ['forwarded', 'txt_generator_forwarded_email'],
+  ];
+  const providers: Array<[ForwardedEmailOptions['provider'], string]> = [
+    ['simplelogin', 'txt_generator_provider_simplelogin'],
   ];
   return (
     <>
       <label className="generator-select-field" htmlFor="generator-email-type"><span>{t('txt_generator_email_type')}</span><select id="generator-email-type" className="input" value={props.options.type} onChange={(event) => props.onChange('type', event.currentTarget.value as EmailMode)}>{types.map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>
       {props.options.type === 'catchAll'
         ? <label className="generator-text-field" htmlFor="generator-domain"><span>{t('txt_generator_domain')}</span><input id="generator-domain" className="input" type="text" autocomplete="off" value={props.options.domain} onInput={(event) => props.onChange('domain', event.currentTarget.value)} /></label>
-        : <label className="generator-text-field" htmlFor="generator-email"><span>{t('txt_generator_email')}</span><input id="generator-email" className="input" type="email" autocomplete="off" value={props.options.email} onInput={(event) => props.onChange('email', event.currentTarget.value)} /></label>}
-      <p className="generator-options-note">{t('txt_generator_email_description')}</p>
+        : props.options.type === 'forwarded'
+          ? <>
+              <label className="generator-select-field" htmlFor="generator-forwarded-provider"><span>{t('txt_generator_provider')}</span><select id="generator-forwarded-provider" className="input" value={props.forwarded.provider} onChange={(event) => props.onForwardedChange('provider', event.currentTarget.value as ForwardedEmailOptions['provider'])}>{providers.map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>
+              <ForwardedEmailFields options={props.forwarded.simplelogin} onChange={props.onForwardedAccountChange} />
+            </>
+          : <label className="generator-text-field" htmlFor="generator-email"><span>{t('txt_generator_email')}</span><input id="generator-email" className="input" type="email" autocomplete="off" value={props.options.email} onInput={(event) => props.onChange('email', event.currentTarget.value)} /></label>}
+      <p className="generator-options-note">{t(props.options.type === 'forwarded' ? 'txt_generator_forwarded_description' : 'txt_generator_email_description')}</p>
+    </>
+  );
+}
+
+function ForwardedEmailFields(props: { options: ForwarderAccountConfig; onChange: <K extends keyof ForwarderAccountConfig>(key: K, value: ForwarderAccountConfig[K]) => void }) {
+  const aliasTypes: Array<[ForwardedAliasType, string]> = [
+    ['word', 'txt_generator_alias_type_word'],
+    ['uuid', 'txt_generator_alias_type_uuid'],
+    ['custom', 'txt_generator_alias_type_custom'],
+  ];
+  return (
+    <>
+      <label className="generator-text-field" htmlFor="generator-forwarded-server"><span>{t('txt_generator_server_url')}</span><input id="generator-forwarded-server" className="input" type="url" inputmode="url" autocomplete="off" placeholder="https://mailpal.example.com" value={props.options.serverUrl} onInput={(event) => props.onChange('serverUrl', event.currentTarget.value)} /></label>
+      <label className="generator-text-field" htmlFor="generator-forwarded-api-key"><span>{t('txt_generator_api_key')}</span><input id="generator-forwarded-api-key" className="input" type="password" autocomplete="off" value={props.options.apiKey} onInput={(event) => props.onChange('apiKey', event.currentTarget.value)} /></label>
+      <label className="generator-select-field" htmlFor="generator-forwarded-alias-type"><span>{t('txt_generator_alias_type')}</span><select id="generator-forwarded-alias-type" className="input" value={props.options.aliasType} onChange={(event) => props.onChange('aliasType', event.currentTarget.value as ForwardedAliasType)}>{aliasTypes.map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>
+      {props.options.aliasType === 'custom' && <label className="generator-text-field" htmlFor="generator-forwarded-prefix"><span>{t('txt_generator_prefix')}</span><input id="generator-forwarded-prefix" className="input" type="text" autocomplete="off" maxLength={64} value={props.options.prefix} onInput={(event) => props.onChange('prefix', event.currentTarget.value)} /></label>}
     </>
   );
 }
@@ -258,6 +445,39 @@ function publicKeyWithComment(publicKey: string, comment: string): string {
   const base = publicKey.trim().split(/\s+/).slice(0, 2).join(' ');
   const safeComment = comment.replace(/[\r\n]+/g, ' ').trim();
   return safeComment ? `${base} ${safeComment}` : base;
+}
+
+function forwardedErrorKey(kind: ForwarderErrorKind): string {
+  const keys: Record<ForwarderErrorKind, string> = {
+    config: 'txt_generator_forwarded_error_config',
+    network: 'txt_generator_forwarded_error_network',
+    auth: 'txt_generator_forwarded_error_auth',
+    quota: 'txt_generator_forwarded_error_quota',
+    server: 'txt_generator_forwarded_error_generic',
+  };
+  return keys[kind];
+}
+
+function normalizeAccount(value: ForwardedAliasAccountSettings): ForwardedAliasAccountSettings {
+  return {
+    serverUrl: typeof value.serverUrl === 'string' ? value.serverUrl : '',
+    apiKey: typeof value.apiKey === 'string' ? value.apiKey : '',
+    aliasType: value.aliasType === 'uuid' || value.aliasType === 'custom' ? value.aliasType : 'word',
+    prefix: typeof value.prefix === 'string' ? value.prefix : '',
+    note: typeof value.note === 'string' ? value.note : '',
+  };
+}
+
+function modeLabel(mode: GeneratorMode): string {
+  const keys: Record<GeneratorMode, string> = {
+    password: 'txt_password',
+    passphrase: 'txt_passphrase',
+    pin: 'txt_generator_pin',
+    username: 'txt_generator_username',
+    email: 'txt_generator_email_alias',
+    sshKey: 'txt_generator_ssh_key',
+  };
+  return t(keys[mode]);
 }
 
 function downloadText(filename: string, value: string): void {

@@ -1541,7 +1541,26 @@ Object.assign(en, {
   "txt_open_vault": "Open vault",
   "txt_check_password_breach": "Check breach",
   "txt_password_not_found_in_breaches": "Not found in the breach database",
-  "txt_password_security_check_failed": "The breach check could not be completed."
+  "txt_password_security_check_failed": "The breach check could not be completed.",
+  "txt_generator_history": "Generator history",
+  "txt_generator_history_clear": "Clear history",
+  "txt_generator_history_empty": "Nothing generated yet in this session.",
+  "txt_generator_provider": "Provider",
+  "txt_generator_provider_simplelogin": "SimpleLogin / compatible (MailPal)",
+  "txt_generator_forwarded_email": "Forwarded email alias",
+  "txt_generator_forwarded_description": "Creates a real alias through your SimpleLogin-compatible server (e.g. MailPal or SimpleLogin). Each generate call creates a new alias.",
+  "txt_generator_server_url": "Server URL",
+  "txt_generator_api_key": "API key",
+  "txt_generator_alias_type": "Alias type",
+  "txt_generator_alias_type_word": "Random word",
+  "txt_generator_alias_type_uuid": "UUID",
+  "txt_generator_alias_type_custom": "Custom prefix",
+  "txt_generator_prefix": "Prefix",
+  "txt_generator_forwarded_error_config": "Enter the server URL and API key of your alias provider, then press Regenerate.",
+  "txt_generator_forwarded_error_network": "Could not reach the alias provider. Check the server URL and your connection.",
+  "txt_generator_forwarded_error_auth": "The alias provider rejected the API key.",
+  "txt_generator_forwarded_error_quota": "The alias provider refused to create the alias (quota reached or no domain available).",
+  "txt_generator_forwarded_error_generic": "The alias provider returned an error. Please try again.",
 });
 
 export default en;
