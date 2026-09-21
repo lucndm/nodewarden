@@ -5,6 +5,7 @@ import AppAuthenticatedShell from '@/components/AppAuthenticatedShell';
 import AppGlobalOverlays, { type AppConfirmState } from '@/components/AppGlobalOverlays';
 import AuthRequestApprovalDialog from '@/components/AuthRequestApprovalDialog';
 import AuthViews from '@/components/AuthViews';
+import SsoEntryPage, { type SsoEntryParams } from '@/components/SsoEntryPage';
 import NotFoundPage from '@/components/NotFoundPage';
 import PublicSendPage from '@/components/PublicSendPage';
 import RecoverTwoFactorPage from '@/components/RecoverTwoFactorPage';
@@ -2284,6 +2285,11 @@ export default function App() {
     );
   }
 
+  const ssoEntryParams = readSsoEntryParams();
+  if (ssoEntryParams) {
+    return <SsoEntryPage params={ssoEntryParams} />;
+  }
+
   if (isUnknownRoute) {
     return (
       <>
@@ -2509,4 +2515,22 @@ function ssoErrorTextKey(code: string): string {
     default:
       return 'txt_sso_error_generic';
   }
+}
+
+function readSsoEntryParams(): SsoEntryParams | null {
+  if (typeof window === 'undefined') return null;
+  const { pathname, hash, search } = window.location;
+  const hashPath = hash.startsWith('#/') ? hash.slice(2).split('?')[0] : '';
+  if (pathname !== '/sso' && hashPath !== 'sso') return null;
+  const query = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : search.replace(/^\?/, '');
+  const params = new URLSearchParams(query);
+  return {
+    clientId: params.get('clientId') ?? params.get('client_id') ?? '',
+    redirectUri: params.get('redirectUri') ?? params.get('redirect_uri') ?? '',
+    state: params.get('state') ?? '',
+    codeChallenge: params.get('codeChallenge') ?? params.get('code_challenge') ?? '',
+    codeChallengeMethod: params.get('codeChallengeMethod') ?? params.get('code_challenge_method') ?? 'S256',
+    email: params.get('email') ?? '',
+    ssoIdentifier: params.get('ssoIdentifier') ?? '',
+  };
 }

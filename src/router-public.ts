@@ -35,7 +35,7 @@ import { isSafeWebsiteIconContentType } from './utils/content-type';
 import { jsonResponse, unsupportedResponse } from './utils/response';
 import { StorageService } from './services/storage';
 import type { Env } from './types';
-import { handleSsoCallback, handleSsoStart, isSsoEnabled } from './handlers/identity';
+import { handleSsoAuthorize, handleSsoCallback, handleSsoPrevalidate, handleSsoStart, isSsoEnabled } from './handlers/identity';
 import { getConfiguredWebAuthnAllowedOrigins } from './utils/origins';
 import { buildConfigResponse } from './config-response';
 
@@ -309,6 +309,18 @@ export async function handlePublicRoute(
     const blocked = await enforcePublicRateLimit('public-read', LIMITS.rateLimit.publicReadRequestsPerMinute);
     if (blocked) return blocked;
     return jsonResponse(await buildWebBootstrapResponse(env));
+  }
+
+  if ((path === '/api/sso/prevalidate' || path === '/sso/prevalidate') && (method === 'GET' || method === 'POST')) {
+    const blocked = await enforcePublicRateLimit('public-read', LIMITS.rateLimit.publicReadRequestsPerMinute);
+    if (blocked) return blocked;
+    return handleSsoPrevalidate(request, env);
+  }
+
+  if ((path === '/identity/connect/authorize' || path === '/connect/authorize') && method === 'GET') {
+    const blocked = await enforcePublicRateLimit('public-read', LIMITS.rateLimit.publicReadRequestsPerMinute);
+    if (blocked) return blocked;
+    return handleSsoAuthorize(request, env);
   }
 
   if ((path === '/auth/sso/start' || path === '/auth/sso/callback') && method === 'GET') {

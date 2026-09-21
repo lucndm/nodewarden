@@ -921,6 +921,108 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
       ? withWebRefreshCookie(request, baseResponse, refreshToken)
       : baseResponse;
 
+  } else if (grantType === 'authorization_code') {
+    // Official Bitwarden client SSO: exchange the short-lived authorization
+    // code (with its PKCE verifier) for tokens. The client then unlocks the
+    // vault with the master password — no key escrow involved.
+    const code = String(body.code || '').trim();
+    const codeVerifier = String(body.code_verifier || body.codeVerifier || '').trim();
+    const redirectUri = String(body.redirect_uri || body.redirectUri || '').trim();
+    if (!code || !codeVerifier) {
+      return identityErrorResponse('code and code_verifier are required', 'invalid_request', 400);
+    }
+
+    const ssoStorage = new StorageService(env.DB);
+    const codeHash = await sha256Hex(code);
+    const record = await ssoStorage.getSsoAuthorizationCode(codeHash);
+    if (!record || record.consumedAt || new Date(record.expiresAt).getTime() < Date.now()) {
+      await safeWriteAuditEvent(env, {
+        action: 'auth.sso.client.exchange.failed',
+        category: 'auth',
+        level: 'warn',
+        targetType: 'sso',
+        metadata: { reason: 'invalid_or_expired_code', ...auditRequestMetadata(request) },
+      });
+      return identityErrorResponse('Invalid or expired authorization code', 'invalid_grant', 400);
+    }
+    if (redirectUri && redirectUri !== record.redirectUri) {
+      return identityErrorResponse('redirect_uri mismatch', 'invalid_grant', 400);
+    }
+    const verifierDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
+    if (base64UrlFromBytes(new Uint8Array(verifierDigest)) !== record.codeChallenge) {
+      await safeWriteAuditEvent(env, {
+        action: 'auth.sso.client.exchange.failed',
+        category: 'auth',
+        level: 'warn',
+        targetType: 'sso',
+        metadata: { reason: 'pkce_mismatch', ...auditRequestMetadata(request) },
+      });
+      return identityErrorResponse('PKCE verification failed', 'invalid_grant', 400);
+    }
+    if (!(await ssoStorage.consumeSsoAuthorizationCode(codeHash))) {
+      return identityErrorResponse('Invalid or expired authorization code', 'invalid_grant', 400);
+    }
+
+    const ssoUser = await ssoStorage.getUserById(record.userId);
+    if (!ssoUser || ssoUser.status !== 'active') {
+      return identityErrorResponse('Account is not available', 'invalid_grant', 400);
+    }
+
+    const ssoDeviceInfo = readAuthRequestDeviceInfo(body, request);
+    const ssoDeviceSession = await persistAndResolveDeviceSession(ssoStorage, ssoUser.id, ssoDeviceInfo);
+    if (ssoDeviceSession) {
+      await persistIdentityDevicePushToken(env, ssoStorage, ssoUser.id, ssoDeviceSession, ssoDeviceInfo.deviceType, body);
+    }
+
+    const ssoAccessToken = await auth.generateAccessToken(ssoUser, ssoDeviceSession);
+    const ssoRefreshToken = await auth.generateRefreshToken(ssoUser, ssoDeviceSession, resolveRefreshClientType(request, body));
+    const ssoAccountKeys = buildAccountKeys(ssoUser);
+    const ssoUserDecryptionOptions = buildUserDecryptionOptions(ssoUser);
+    await safeWriteAuditEvent(env, {
+      actorUserId: ssoUser.id,
+      action: 'auth.login.success',
+      category: 'auth',
+      level: 'info',
+      targetType: 'user',
+      targetId: ssoUser.id,
+      metadata: {
+        grantType,
+        clientId: clientIdentifier,
+        webSession: shouldUseWebSession(request),
+        deviceIdentifier: ssoDeviceSession?.identifier ?? ssoDeviceInfo.deviceIdentifier,
+        deviceType: ssoDeviceInfo.deviceType,
+        ...auditRequestMetadata(request),
+      },
+    });
+
+    const ssoResponse: TokenResponse = {
+      access_token: ssoAccessToken,
+      expires_in: LIMITS.auth.accessTokenTtlSeconds,
+      token_type: 'Bearer',
+      ...(shouldUseWebSession(request) ? { web_session: true } : { refresh_token: ssoRefreshToken }),
+      Key: ssoUser.key,
+      PrivateKey: ssoUser.privateKey,
+      AccountKeys: ssoAccountKeys,
+      accountKeys: ssoAccountKeys,
+      Kdf: ssoUser.kdfType,
+      KdfIterations: ssoUser.kdfIterations,
+      KdfMemory: ssoUser.kdfMemory,
+      KdfParallelism: ssoUser.kdfParallelism,
+      ForcePasswordReset: false,
+      ResetMasterPassword: false,
+      MasterPasswordPolicy: masterPasswordPolicyResponse(),
+      ApiUseKeyConnector: false,
+      scope: 'api offline_access',
+      unofficialServer: true,
+      UserDecryptionOptions: ssoUserDecryptionOptions,
+      userDecryptionOptions: ssoUserDecryptionOptions,
+    };
+
+    const ssoBaseResponse = identityJsonResponse(ssoResponse);
+    return shouldUseWebSession(request)
+      ? withWebRefreshCookie(request, ssoBaseResponse, ssoRefreshToken)
+      : ssoBaseResponse;
+
   } else if (grantType === 'send_access') {
     const sendAccessLimit = await rateLimit.consumeBudget(`${clientIdentifier}:public`, LIMITS.rateLimit.publicRequestsPerMinute);
     if (!sendAccessLimit.allowed) {
@@ -1187,9 +1289,16 @@ interface SsoStatePayload {
   verifier: string;
   nonce: string;
   exp: number;
-  purpose: 'login' | 'link';
+  purpose: 'login' | 'link' | 'client_sso';
   /** Set for purpose=link: the authenticated account that requested the bind. */
   userId?: string;
+  /** Set for purpose=client_sso: the official Bitwarden client parameters. */
+  clientId?: string;
+  clientState?: string;
+  clientRedirectUri?: string;
+  clientCodeChallenge?: string;
+  clientCodeChallengeMethod?: string;
+  clientEmail?: string;
 }
 
 function base64UrlFromBytes(bytes: Uint8Array): string {
@@ -1232,8 +1341,16 @@ async function unsealSsoState(token: string, secret: string): Promise<SsoStatePa
   try {
     const payload = JSON.parse(new TextDecoder().decode(bytesFromBase64Url(body))) as Partial<SsoStatePayload>;
     if (!payload.state || !payload.verifier || !payload.nonce || typeof payload.exp !== 'number') return null;
-    if (payload.purpose !== 'login' && payload.purpose !== 'link') return null;
+    if (payload.purpose !== 'login' && payload.purpose !== 'link' && payload.purpose !== 'client_sso') {
+      return null;
+    }
     if (payload.purpose === 'link' && !payload.userId) return null;
+    if (
+      payload.purpose === 'client_sso' &&
+      (!payload.clientRedirectUri || !payload.clientCodeChallenge || !payload.clientCodeChallengeMethod)
+    ) {
+      return null;
+    }
     return payload as SsoStatePayload;
   } catch {
     return null;
@@ -1311,8 +1428,8 @@ async function hasActiveWebSessionFor(request: Request, env: Env, userId: string
 async function buildSsoAuthorize(
   request: Request,
   env: Env,
-  purpose: 'login' | 'link',
-  userId?: string
+  purpose: 'login' | 'link' | 'client_sso',
+  extras: Partial<SsoStatePayload> = {}
 ): Promise<{ authorizeUrl: string; stateCookie: string } | null> {
   const config = getOidcConfig(env);
   const secret = (env.JWT_SECRET || '').trim();
@@ -1328,7 +1445,7 @@ async function buildSsoAuthorize(
     nonce: base64UrlFromBytes(crypto.getRandomValues(new Uint8Array(16))),
     exp: Date.now() + SSO_STATE_TTL_SECONDS * 1000,
     purpose,
-    ...(userId ? { userId } : {}),
+    ...extras,
   };
   const sealed = await sealSsoState(payload, secret);
   return {
@@ -1372,7 +1489,7 @@ export async function handleSsoStart(request: Request, env: Env): Promise<Respon
  */
 export async function handleSsoLinkStart(request: Request, env: Env, userId: string): Promise<Response> {
   try {
-    const built = await buildSsoAuthorize(request, env, 'link', userId);
+    const built = await buildSsoAuthorize(request, env, 'link', { userId });
     if (!built) return errorResponse('SSO is not configured', 404);
     const response = jsonResponse({ authorizeUrl: built.authorizeUrl });
     response.headers.append('Set-Cookie', built.stateCookie);
@@ -1388,6 +1505,90 @@ export async function handleSsoLinkStart(request: Request, env: Env, userId: str
     });
     return errorResponse('Failed to start the SSO link flow', 502);
   }
+}
+
+// Bitwarden client SSO entry points -------------------------------------------------
+
+const BITWARDEN_SSO_CLIENT_IDS = new Set(['web', 'cli', 'desktop', 'browser', 'mobile', 'sdk']);
+const SSO_REDIRECT_SCHEME_RE = /^bitwarden[a-z-]*:\/\//i;
+
+function isAllowedClientRedirectUri(redirectUri: string): boolean {
+  if (redirectUri.startsWith('/') && !redirectUri.startsWith('//')) return true;
+  return SSO_REDIRECT_SCHEME_RE.test(redirectUri);
+}
+
+/**
+ * GET /identity/connect/authorize — front-channel entry of the official
+ * Bitwarden client SSO flow. Validates the client request, seals it into the
+ * SSO state and redirects to the identity provider (Zitadel).
+ */
+export async function handleSsoAuthorize(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const clientId = String(url.searchParams.get('client_id') || url.searchParams.get('clientId') || '').toLowerCase();
+  const redirectUri = String(url.searchParams.get('redirect_uri') || url.searchParams.get('redirectUri') || '');
+  const state = String(url.searchParams.get('state') || '');
+  const codeChallenge = String(url.searchParams.get('code_challenge') || url.searchParams.get('codeChallenge') || '');
+  const codeChallengeMethod = String(url.searchParams.get('code_challenge_method') || '').toUpperCase();
+  const email = String(url.searchParams.get('email') || '').trim().toLowerCase();
+
+  if (!BITWARDEN_SSO_CLIENT_IDS.has(clientId)) {
+    return errorResponse('Unknown client_id', 400);
+  }
+  if (!redirectUri || !isAllowedClientRedirectUri(redirectUri)) {
+    return errorResponse('Invalid redirect_uri', 400);
+  }
+  if (!state || !codeChallenge || codeChallengeMethod !== 'S256') {
+    return errorResponse('PKCE code_challenge (S256) and state are required', 400);
+  }
+
+  try {
+    const built = await buildSsoAuthorize(request, env, 'client_sso', {
+      clientId,
+      clientState: state,
+      clientRedirectUri: redirectUri,
+      clientCodeChallenge: codeChallenge,
+      clientCodeChallengeMethod: codeChallengeMethod,
+      ...(email ? { clientEmail: email } : {}),
+    });
+    if (!built) return errorResponse('SSO is not configured', 404);
+
+    const headers = new Headers({
+      Location: built.authorizeUrl,
+      'Cache-Control': 'no-store',
+      Pragma: 'no-cache',
+    });
+    headers.append('Set-Cookie', built.stateCookie);
+    return new Response(null, { status: 302, headers });
+  } catch (error) {
+    await safeWriteAuditEvent(env, {
+      action: 'auth.sso.client.authorize.failed',
+      category: 'auth',
+      level: 'error',
+      targetType: 'sso',
+      metadata: { error: error instanceof Error ? error.message : String(error), ...auditRequestMetadata(request) },
+    });
+    return errorResponse('Failed to start the SSO flow', 502);
+  }
+}
+
+/**
+ * GET/POST /api/sso/prevalidate — tells the SSO page whether the identity
+ * provider is available for the submitted email domain.
+ */
+export async function handleSsoPrevalidate(request: Request, env: Env): Promise<Response> {
+  let domain = new URL(request.url).searchParams.get('domain') || '';
+  if (request.method === 'POST') {
+    const body = (await request.json().catch(() => ({}))) as { domain?: string; email?: string };
+    domain = body.domain || body.email || domain;
+  }
+  const normalized = String(domain || '').trim().toLowerCase();
+  if (!normalized) return errorResponse('domain is required', 400);
+
+  return identityJsonResponse({
+    object: 'ssoPrevalidate',
+    ssoAvailable: isSsoEnabled(env),
+    ssoIdentifier: 'zitadel',
+  });
 }
 
 /** GET /api/settings/sso — SSO configuration + link status for the account. */
@@ -1492,6 +1693,67 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
   }
 
   const storage = new StorageService(env.DB);
+
+  // Official Bitwarden client SSO: resolve the linked account by subject and
+  // hand the client a short-lived authorization code via its redirect URI.
+  if (payload.purpose === 'client_sso') {
+    const redirectUri = payload.clientRedirectUri!;
+    const withRedirectParams = (params: Record<string, string>, error?: string) => {
+      try {
+        const target = new URL(redirectUri, 'https://placeholder.invalid');
+        for (const [key, value] of Object.entries(params)) {
+          if (value) target.searchParams.set(key, value);
+        }
+        if (error) target.searchParams.set('error', error);
+        return target.toString().replace('https://placeholder.invalid', '') || target.toString();
+      } catch {
+        return null;
+      }
+    };
+    const deny = async (code: string, reason: string, level: 'info' | 'warn' = 'warn'): Promise<Response> => {
+      await safeWriteAuditEvent(env, {
+        action: `auth.sso.client.failed.${reason}`,
+        category: 'auth',
+        level,
+        targetType: 'sso',
+        metadata: { reason, clientId: payload.clientId ?? null, ...auditRequestMetadata(request) },
+      });
+      const location = withRedirectParams({ state: payload.clientState ?? '' }, code);
+      return location ? ssoRedirect(location, request) : fail(reason, level);
+    };
+
+    const user = await storage.getUserBySsoSubject(claims.sub);
+    if (!user) return deny('access_denied', 'sso_not_linked');
+    if (user.status !== 'active') return deny('access_denied', 'account_disabled');
+    if (payload.clientEmail && payload.clientEmail.toLowerCase() !== user.email.toLowerCase()) {
+      return deny('access_denied', 'email_mismatch');
+    }
+
+    const code = base64UrlFromBytes(crypto.getRandomValues(new Uint8Array(32)));
+    const codeHash = await sha256Hex(code);
+    const now = Date.now();
+    await storage.putSsoAuthorizationCode(codeHash, {
+      userId: user.id,
+      clientState: payload.clientState ?? null,
+      redirectUri,
+      codeChallenge: payload.clientCodeChallenge!,
+      codeChallengeMethod: payload.clientCodeChallengeMethod!,
+      createdAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + 5 * 60 * 1000).toISOString(),
+    });
+    await safeWriteAuditEvent(env, {
+      action: 'auth.sso.client.code_issued',
+      category: 'auth',
+      level: 'info',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { clientId: payload.clientId ?? null, ...auditRequestMetadata(request) },
+    });
+
+    const location = withRedirectParams({ code, state: payload.clientState ?? '' });
+    if (!location) return deny('access_denied', 'invalid_redirect');
+    return ssoRedirect(location, request);
+  }
 
   // Explicit link flow: authorized by the session that started it, never by
   // the IdP email claim. Bind the immutable subject to that exact account.
