@@ -1512,9 +1512,16 @@ export async function handleSsoLinkStart(request: Request, env: Env, userId: str
 const BITWARDEN_SSO_CLIENT_IDS = new Set(['web', 'cli', 'desktop', 'browser', 'mobile', 'sdk']);
 const SSO_REDIRECT_SCHEME_RE = /^bitwarden[a-z-]*:\/\//i;
 
-function isAllowedClientRedirectUri(redirectUri: string): boolean {
+function isAllowedClientRedirectUri(redirectUri: string, requestOrigin: string): boolean {
   if (redirectUri.startsWith('/') && !redirectUri.startsWith('//')) return true;
-  return SSO_REDIRECT_SCHEME_RE.test(redirectUri);
+  if (SSO_REDIRECT_SCHEME_RE.test(redirectUri)) return true;
+  // Absolute URLs are allowed only when they stay on this same origin
+  // (e.g. the browser extension's /sso-connector.html).
+  try {
+    return new URL(redirectUri).origin === requestOrigin;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -1534,7 +1541,7 @@ export async function handleSsoAuthorize(request: Request, env: Env): Promise<Re
   if (!BITWARDEN_SSO_CLIENT_IDS.has(clientId)) {
     return errorResponse('Unknown client_id', 400);
   }
-  if (!redirectUri || !isAllowedClientRedirectUri(redirectUri)) {
+  if (!redirectUri || !isAllowedClientRedirectUri(redirectUri, url.origin)) {
     return errorResponse('Invalid redirect_uri', 400);
   }
   if (!state || !codeChallenge || codeChallengeMethod !== 'S256') {
