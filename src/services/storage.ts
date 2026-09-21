@@ -14,6 +14,7 @@ import {
   deleteUserById as deleteStoredUserById,
   getAllUsers as listStoredUsers,
   getUser as findStoredUserByEmail,
+  getUserBySsoSubject as getStoredUserBySsoSubject,
   getUserById as findStoredUserById,
   getUserCount as countStoredUsers,
   saveUser as saveStoredUser,
@@ -295,6 +296,10 @@ export class StorageService {
 
   async getUser(email: string): Promise<User | null> {
     return findStoredUserByEmail(this.db, email);
+  }
+
+  async getUserBySsoSubject(subject: string): Promise<User | null> {
+    return getStoredUserBySsoSubject(this.db, subject);
   }
 
   async getUserById(id: string): Promise<User | null> {

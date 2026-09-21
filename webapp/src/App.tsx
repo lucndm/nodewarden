@@ -212,6 +212,10 @@ export default function App() {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('sso_error');
   });
+  const [ssoLinkedFlag] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('sso_linked') === '1';
+  });
   const [session, setSessionState] = useState<SessionState | null>(initialBootstrap.session);
   const [profile, setProfile] = useState<Profile | null>(initialProfileSnapshot);
   const [defaultKdfIterations, setDefaultKdfIterations] = useState(initialBootstrap.defaultKdfIterations);
@@ -510,11 +514,44 @@ export default function App() {
   }, [initialBootstrap]);
 
   useEffect(() => {
+    // The login screen must always reflect the server's SSO capability, even
+    // after a logout that happened before the bootstrap response landed.
+    if (phase !== 'login' || ssoEnabled) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/web-bootstrap', { headers: { Accept: 'application/json' } });
+        if (!response.ok) return;
+        const data = (await response.json()) as { ssoEnabled?: boolean };
+        if (!cancelled && data?.ssoEnabled === true) setSsoEnabled(true);
+      } catch {
+        // login page stays usable without SSO
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, ssoEnabled]);
+
+  useEffect(() => {
     if (!ssoError || typeof window === 'undefined') return;
     const url = new URL(window.location.href);
     url.searchParams.delete('sso_error');
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
   }, [ssoError]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('sso_linked') || url.searchParams.has('sso_error')) {
+      url.searchParams.delete('sso_linked');
+      url.searchParams.delete('sso_error');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+    if (ssoLinkedFlag) {
+      pushToast('success', t('txt_sso_linked_success'));
+    }
+  }, [ssoLinkedFlag]);
 
   useEffect(() => {
     if (phase !== 'locked' || !session) return;
@@ -2461,8 +2498,12 @@ export default function App() {
 
 function ssoErrorTextKey(code: string): string {
   switch (code) {
-    case 'unknown_account':
-      return 'txt_sso_error_no_account';
+    case 'sso_not_linked':
+      return 'txt_sso_error_not_linked';
+    case 'already_linked':
+      return 'txt_sso_error_already_linked';
+    case 'subject_taken':
+      return 'txt_sso_error_subject_taken';
     case 'inactive':
       return 'txt_sso_error_disabled';
     default:

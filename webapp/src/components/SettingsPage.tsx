@@ -3,6 +3,8 @@ import { Clipboard, KeyRound, RefreshCw, ShieldCheck, ShieldOff, Trash2 } from '
 import { copyTextToClipboard } from '@/lib/clipboard';
 import qrcode from 'qrcode-generator';
 import type { AccountPasskeyCredential, Profile, TwoFactorPasskeyCredential, TwoFactorPasskeySettings, YubiKeyOtpSettings } from '@/lib/types';
+import { deriveLoginHash } from '@/lib/api/auth';
+import type { AuthedFetch } from '@/lib/api/shared';
 import { AVAILABLE_LOCALES, getLocale, setLocale, t, type Locale } from '@/lib/i18n';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -39,11 +41,12 @@ interface SettingsPageProps {
   onRefreshTwoFactorStatus: () => Promise<void>;
   onLockTimeoutChange: (minutes: 0 | 1 | 5 | 15 | 30) => void;
   onSessionTimeoutActionChange: (action: 'lock' | 'logout') => void;
+  authedFetch?: AuthedFetch | null;
   onNotify?: (type: 'success' | 'error' | 'warning', text: string) => void;
 }
 
 type ThemePreference = 'system' | 'light' | 'dark';
-type SettingsSection = 'appearance' | 'session' | 'masterPassword' | 'twoStep' | 'keys';
+type SettingsSection = 'appearance' | 'session' | 'masterPassword' | 'twoStep' | 'keys' | 'sso';
 
 type MasterPasswordPromptAction =
   | 'enableTotp'
@@ -164,6 +167,73 @@ export default function SettingsPage(props: SettingsPageProps) {
   const [masterPasswordPromptSubmitting, setMasterPasswordPromptSubmitting] = useState(false);
   const [selectedLocale, setSelectedLocale] = useState<Locale>(() => getLocale());
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
+  const [ssoStatus, setSsoStatus] = useState<{ enabled: boolean; linked: boolean; subjectPreview: string | null } | null>(null);
+  const [ssoPassword, setSsoPassword] = useState('');
+  const [ssoBusy, setSsoBusy] = useState(false);
+  const [ssoMessage, setSsoMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  async function refreshSsoStatus(): Promise<void> {
+    if (!props.authedFetch) return;
+    try {
+      const response = await props.authedFetch('/api/settings/sso');
+      if (!response.ok) return;
+      const data = (await response.json()) as { enabled: boolean; linked: boolean; subjectPreview: string | null };
+      setSsoStatus(data);
+    } catch {
+      // Settings stay usable when the status endpoint is unreachable.
+    }
+  }
+
+  useEffect(() => {
+    if (activeSection !== 'sso') return;
+    void refreshSsoStatus();
+  }, [activeSection]);
+
+  async function startSsoLink(): Promise<void> {
+    if (!props.authedFetch) return;
+    setSsoBusy(true);
+    setSsoMessage(null);
+    try {
+      const response = await props.authedFetch('/api/settings/sso/link', { method: 'POST' });
+      const data = (await response.json().catch(() => ({}))) as { authorizeUrl?: string; error?: string };
+      if (!response.ok || !data.authorizeUrl) {
+        setSsoMessage({ kind: 'error', text: data.error || t('txt_login_failed') });
+        return;
+      }
+      window.location.href = data.authorizeUrl;
+    } catch {
+      setSsoMessage({ kind: 'error', text: t('txt_login_failed') });
+    } finally {
+      setSsoBusy(false);
+    }
+  }
+
+  async function unlinkSso(): Promise<void> {
+    if (!props.authedFetch || !props.profile) return;
+    setSsoBusy(true);
+    setSsoMessage(null);
+    try {
+      const derived = await deriveLoginHash(props.profile.email, ssoPassword, 600000);
+      const response = await props.authedFetch('/api/settings/sso', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ masterPasswordHash: derived.hash }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setSsoMessage({ kind: 'error', text: data.error === 'Invalid password' ? t('txt_invalid_password') : (data.error || t('txt_login_failed')) });
+        return;
+      }
+      setSsoPassword('');
+      setSsoMessage({ kind: 'success', text: t('txt_sso_unlinked_success') });
+      props.onNotify?.('success', t('txt_sso_unlinked_success'));
+      await refreshSsoStatus();
+    } catch {
+      setSsoMessage({ kind: 'error', text: t('txt_login_failed') });
+    } finally {
+      setSsoBusy(false);
+    }
+  }
 
   useEffect(() => {
     clearLegacyTotpSetupSecrets();
@@ -535,6 +605,7 @@ export default function SettingsPage(props: SettingsPageProps) {
     { id: 'masterPassword', label: t('txt_master_password') },
     { id: 'twoStep', label: t('txt_two_step_login') },
     { id: 'keys', label: t('txt_keys') },
+    { id: 'sso', label: t('txt_sso_account_title') },
   ];
 
   return (
@@ -831,6 +902,60 @@ export default function SettingsPage(props: SettingsPageProps) {
                     </button>
                   </div>
                 </div>
+              </section>
+            </div>
+          )}
+
+          {activeSection === 'sso' && (
+            <div className="settings-section-stack">
+              <section className="settings-submodule">
+                <h3>{t('txt_sso_account_title')}</h3>
+                <p className="field-help">{t('txt_sso_account_description')}</p>
+                {ssoStatus?.enabled ? (
+                  <div className="settings-form-stack">
+                    <div className="field">
+                      <span>{t('txt_sso_account_title')}</span>
+                      <strong>{ssoStatus.linked ? t('txt_sso_status_linked') : t('txt_sso_status_not_linked')}</strong>
+                      {ssoStatus.linked && ssoStatus.subjectPreview ? (
+                        <div className="field-help">{ssoStatus.subjectPreview}</div>
+                      ) : null}
+                    </div>
+                    {ssoStatus.linked ? (
+                      <div className="settings-form-stack">
+                        <label className="field">
+                          <span>{t('txt_master_password')}</span>
+                          <input
+                            className="input"
+                            type="password"
+                            autoComplete="current-password"
+                            value={ssoPassword}
+                            onInput={(e) => setSsoPassword((e.currentTarget as HTMLInputElement).value)}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={ssoBusy || !ssoPassword}
+                          onClick={() => void unlinkSso()}
+                        >
+                          {t('txt_sso_unlink_button')}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={ssoBusy}
+                        onClick={() => void startSsoLink()}
+                      >
+                        {t('txt_sso_link_button')}
+                      </button>
+                    )}
+                    {ssoMessage ? <p role="alert" className="field-help">{ssoMessage.text}</p> : null}
+                  </div>
+                ) : (
+                  <p className="field-help">{t('txt_sso_not_configured')}</p>
+                )}
               </section>
             </div>
           )}

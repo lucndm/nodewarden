@@ -48,6 +48,14 @@ export async function getUser(db: D1Database, email: string): Promise<User | nul
   return mapUserRow(row);
 }
 
+export async function getUserBySsoSubject(db: D1Database, subject: string): Promise<User | null> {
+  const row = await db
+    .prepare(`SELECT ${USER_SELECT_COLUMNS} FROM users WHERE sso_subject = ?`)
+    .bind(subject)
+    .first<any>();
+  return row ? mapUserRow(row) : null;
+}
+
 export async function getUserById(db: D1Database, id: string): Promise<User | null> {
   const row = await db
     .prepare(`SELECT ${USER_SELECT_COLUMNS} FROM users WHERE id = ?`)
