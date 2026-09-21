@@ -1467,6 +1467,7 @@ Object.assign(ru, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_history_clear": "Очистить историю",
   "txt_generator_history_empty": "В этом сеансе ещё ничего не сгенерировано.",
   "txt_sso_required": "Эта учётная запись требует входа через SSO. Используйте «Продолжить с SSO».",
+  "txt_sso_web_completed": "Вход выполнен. Можно закрыть эту вкладку и вернуться в Bitwarden.",
   "txt_sso_page_title": "Вход через SSO",
   "txt_sso_page_description": "Введите email вашей учётной записи NodeWarden, чтобы продолжить к поставщику удостоверений.",
   "txt_sso_unavailable": "SSO недоступен на этом сервере.",

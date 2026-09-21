@@ -1467,6 +1467,7 @@ Object.assign(fi, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_history_clear": "Tyhjennä historia",
   "txt_generator_history_empty": "Mitään ei ole vielä luotu tässä istunnossa.",
   "txt_sso_required": "Tämä tili vaatii SSO-kirjautumisen. Käytä ”Jatka SSO:lla”.",
+  "txt_sso_web_completed": "Kirjautuminen valmis. Voit sulkea tämän välilehden ja palata Bitwardeniin.",
   "txt_sso_page_title": "Kirjaudu SSO:lla",
   "txt_sso_page_description": "Anna NodeWarden-tilisi sähköposti jatkaaksesi identiteettipalveluntarjoajalle.",
   "txt_sso_unavailable": "SSO ei ole käytettävissä tällä palvelimella.",

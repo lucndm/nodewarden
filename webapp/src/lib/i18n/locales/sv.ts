@@ -1467,6 +1467,7 @@ Object.assign(sv, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_history_clear": "Rensa historik",
   "txt_generator_history_empty": "Inget har genererats än i den här sessionen.",
   "txt_sso_required": "Detta konto kräver SSO-inloggning. Använd ”Fortsätt med SSO”.",
+  "txt_sso_web_completed": "Inloggningen är klar. Du kan stänga fliken och återgå till Bitwarden.",
   "txt_sso_page_title": "Logga in med SSO",
   "txt_sso_page_description": "Ange e-postadressen för ditt NodeWarden-konto för att fortsätta till din identitetsleverantör.",
   "txt_sso_unavailable": "SSO är inte tillgängligt på denna server.",
