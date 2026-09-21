@@ -418,7 +418,7 @@ export async function handlePublicRoute(
     return handleGetAuthRequestResponse(request, env, authRequestResponseMatch[1]);
   }
 
-  if (path === '/identity/connect/token' && method === 'POST') {
+  if ((path === '/identity/connect/token' || path === '/connect/token') && method === 'POST') {
     return handleToken(request, env);
   }
 
@@ -439,13 +439,13 @@ export async function handlePublicRoute(
     return handleRevocation(request, env);
   }
 
-  if (path === '/identity/accounts/prelogin' && method === 'POST') {
+  if ((path === '/identity/accounts/prelogin' || path === '/accounts/prelogin') && method === 'POST') {
     const blocked = await enforcePublicRateLimit('public-sensitive', LIMITS.rateLimit.sensitivePublicRequestsPerMinute);
     if (blocked) return blocked;
     return handlePrelogin(request, env);
   }
 
-  if (path === '/identity/accounts/prelogin/password' && method === 'POST') {
+  if ((path === '/identity/accounts/prelogin/password' || path === '/accounts/prelogin/password') && method === 'POST') {
     const blocked = await enforcePublicRateLimit('public-sensitive', LIMITS.rateLimit.sensitivePublicRequestsPerMinute);
     if (blocked) return blocked;
     return handlePrelogin(request, env);

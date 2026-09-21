@@ -1593,10 +1593,14 @@ export async function handleSsoAuthorize(request: Request, env: Env): Promise<Re
  * provider is available for the submitted email domain.
  */
 export async function handleSsoPrevalidate(request: Request, env: Env): Promise<Response> {
-  let domain = new URL(request.url).searchParams.get('domain') || '';
+  // The official mobile apps send the organization identifier as `domainHint`
+  // (Bitwarden) while the web vault uses `domain`. Both are opaque to this
+  // server: any non-empty value enables the single configured provider.
+  const params = new URL(request.url).searchParams;
+  let domain = params.get('domain') || params.get('domainHint') || '';
   if (request.method === 'POST') {
-    const body = (await request.json().catch(() => ({}))) as { domain?: string; email?: string };
-    domain = body.domain || body.email || domain;
+    const body = (await request.json().catch(() => ({}))) as { domain?: string; domainHint?: string; email?: string };
+    domain = body.domain || body.domainHint || body.email || domain;
   }
   const normalized = String(domain || '').trim().toLowerCase();
   if (!normalized) return errorResponse('domain is required', 400);

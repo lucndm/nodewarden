@@ -11,6 +11,11 @@ const BACKEND_PATH_PREFIXES = [
   '/auth/sso',
   // Bitwarden client SSO protocol entry point.
   '/identity/connect/authorize',
+  // Root-level aliases used by the official mobile apps (Retrofit paths with
+  // a leading slash resolve against the host root, not the /identity prefix).
+  '/sso',
+  '/connect',
+  '/accounts',
   // Compatibility aliases retained for older Bitwarden clients.
   '/devices',
   '/auth-requests',
