@@ -35,6 +35,7 @@ import { isSafeWebsiteIconContentType } from './utils/content-type';
 import { jsonResponse, unsupportedResponse } from './utils/response';
 import { StorageService } from './services/storage';
 import type { Env } from './types';
+import { handleSsoCallback, handleSsoStart, isSsoEnabled } from './handlers/identity';
 import { getConfiguredWebAuthnAllowedOrigins } from './utils/origins';
 import { buildConfigResponse } from './config-response';
 
@@ -48,6 +49,7 @@ export interface WebBootstrapResponse {
   registrationInviteRequired: boolean;
   webAuthnAllowedOrigins: string[];
   websiteIconsEnabled: boolean;
+  ssoEnabled: boolean;
 }
 
 function isWebsiteIconProxyEnabled(env: Env): boolean {
@@ -282,6 +284,7 @@ export async function buildWebBootstrapResponse(env: Env): Promise<WebBootstrapR
     registrationInviteRequired: userCount > 0,
     webAuthnAllowedOrigins: getConfiguredWebAuthnAllowedOrigins(env),
     websiteIconsEnabled: isWebsiteIconProxyEnabled(env),
+    ssoEnabled: isSsoEnabled(env),
   };
 }
 
@@ -306,6 +309,14 @@ export async function handlePublicRoute(
     const blocked = await enforcePublicRateLimit('public-read', LIMITS.rateLimit.publicReadRequestsPerMinute);
     if (blocked) return blocked;
     return jsonResponse(await buildWebBootstrapResponse(env));
+  }
+
+  if ((path === '/auth/sso/start' || path === '/auth/sso/callback') && method === 'GET') {
+    const blocked = await enforcePublicRateLimit('public-read', LIMITS.rateLimit.publicReadRequestsPerMinute);
+    if (blocked) return blocked;
+    return path === '/auth/sso/start'
+      ? handleSsoStart(request, env)
+      : handleSsoCallback(request, env);
   }
 
   if (path === '/fill-assist/manifest.json' && method === 'GET') {

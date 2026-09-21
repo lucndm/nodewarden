@@ -27,6 +27,14 @@ import { createPasskeyUserVerificationToken } from '../utils/user-verification-t
 import { constantTimeEquals, verifyApiKey } from '../utils/api-key';
 import { isYubiKeyEnabled, userYubiKeyPublicIds, verifyYubicoOtp, yubiKeyPublicIdFromOtp } from '../utils/yubico-otp';
 import { getYubicoCredentials, initializeYubicoCredentialsOnce } from '../services/yubico-config';
+import {
+  buildAuthorizeUrl,
+  createPkcePair,
+  discoverOidc,
+  exchangeAuthorizationCode,
+  getOidcConfig,
+  verifyIdToken,
+} from '../lib/oidc';
 
 const TWO_FACTOR_REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const TWO_FACTOR_PROVIDER_AUTHENTICATOR = 0;
@@ -162,13 +170,18 @@ async function loginRateLimitKey(clientIdentifier: string, grantType: string, su
   return `${clientIdentifier}:login:${grantType}:${subjectHash}`;
 }
 
-function buildRefreshCookie(request: Request, refreshToken: string, maxAgeSeconds: number): string {
+function buildRefreshCookie(
+  request: Request,
+  refreshToken: string,
+  maxAgeSeconds: number,
+  sameSite: 'Strict' | 'Lax' = 'Strict'
+): string {
   const isHttps = new URL(request.url).protocol === 'https:';
   const parts = [
     `${WEB_REFRESH_COOKIE}=${encodeURIComponent(refreshToken)}`,
     'Path=/identity/connect',
     'HttpOnly',
-    'SameSite=Strict',
+    `SameSite=${sameSite}`,
     `Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}`,
   ];
   if (isHttps) parts.push('Secure');
@@ -1124,6 +1137,250 @@ export async function handleRevocation(request: Request, env: Env): Promise<Resp
   return shouldUseWebSession(request)
     ? withWebRefreshCookie(request, baseResponse, null)
     : baseResponse;
+}
+
+// ─── Zitadel / OIDC SSO (web vault login) ───────────────────────────────────
+// Design (Option 1): SSO authenticates the web session; the vault stays LOCKED
+// and is still unlocked with the master password (or passkey PRF). No key
+// escrow, no server-side decryption — zero-knowledge is preserved. Only
+// pre-existing accounts can sign in (link-only, never auto-provisioned).
+
+const SSO_STATE_COOKIE = 'nw_sso_state';
+const SSO_STATE_TTL_SECONDS = 10 * 60;
+
+interface SsoStatePayload {
+  state: string;
+  verifier: string;
+  nonce: string;
+  exp: number;
+}
+
+function base64UrlFromBytes(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+function bytesFromBase64Url(value: string): Uint8Array {
+  const padded = value.replaceAll('-', '+').replaceAll('_', '/');
+  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+async function hmacBase64Url(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
+  return base64UrlFromBytes(new Uint8Array(signature));
+}
+
+async function sealSsoState(payload: SsoStatePayload, secret: string): Promise<string> {
+  const body = base64UrlFromBytes(new TextEncoder().encode(JSON.stringify(payload)));
+  const signature = await hmacBase64Url(secret, body);
+  return `${body}.${signature}`;
+}
+
+async function unsealSsoState(token: string, secret: string): Promise<SsoStatePayload | null> {
+  const dot = token.indexOf('.');
+  if (dot === -1) return null;
+  const body = token.slice(0, dot);
+  const signature = token.slice(dot + 1);
+  const expected = await hmacBase64Url(secret, body);
+  if (!constantTimeEquals(signature, expected)) return null;
+  try {
+    const payload = JSON.parse(new TextDecoder().decode(bytesFromBase64Url(body))) as Partial<SsoStatePayload>;
+    if (!payload.state || !payload.verifier || !payload.nonce || typeof payload.exp !== 'number') return null;
+    return payload as SsoStatePayload;
+  } catch {
+    return null;
+  }
+}
+
+function buildSsoStateCookie(request: Request, sealed: string | null): string {
+  const isHttps = new URL(request.url).protocol === 'https:';
+  const parts = [
+    `${SSO_STATE_COOKIE}=${sealed ? encodeURIComponent(sealed) : ''}`,
+    'Path=/auth/sso',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${sealed ? SSO_STATE_TTL_SECONDS : 0}`,
+  ];
+  if (isHttps) parts.push('Secure');
+  return parts.join('; ');
+}
+
+function ssoRedirect(location: string, request: Request, refreshToken?: string | null): Response {
+  const headers = new Headers({
+    Location: location,
+    'Cache-Control': 'no-store',
+    Pragma: 'no-cache',
+  });
+  headers.append('Set-Cookie', buildSsoStateCookie(request, null));
+  // The SSO callback is a cross-site top-level redirect; a Strict cookie would
+  // be rejected by the browser there. Lax still withholds the cookie from
+  // cross-site POSTs, and the token endpoint only accepts POSTs.
+  headers.append(
+    'Set-Cookie',
+    refreshToken
+      ? buildRefreshCookie(request, refreshToken, Math.floor(getRefreshTokenSlidingTtlMs('web') / 1000), 'Lax')
+      : buildClearedRefreshCookie(request)
+  );
+  return new Response(null, { status: 302, headers });
+}
+
+export function isSsoEnabled(env: Env): boolean {
+  return getOidcConfig(env) !== null;
+}
+
+export async function handleSsoStart(request: Request, env: Env): Promise<Response> {
+  const config = getOidcConfig(env);
+  const secret = (env.JWT_SECRET || '').trim();
+  if (!config || !secret) {
+    return errorResponse('SSO is not configured', 404);
+  }
+
+  const url = new URL(request.url);
+  const redirectUri = `${url.origin}/auth/sso/callback`;
+
+  try {
+    const discovery = await discoverOidc(config.issuer);
+    const pkce = await createPkcePair();
+    const payload: SsoStatePayload = {
+      state: base64UrlFromBytes(crypto.getRandomValues(new Uint8Array(16))),
+      verifier: pkce.verifier,
+      nonce: base64UrlFromBytes(crypto.getRandomValues(new Uint8Array(16))),
+      exp: Date.now() + SSO_STATE_TTL_SECONDS * 1000,
+    };
+    const sealed = await sealSsoState(payload, secret);
+    const authorizeUrl = buildAuthorizeUrl(config, discovery, {
+      redirectUri,
+      state: payload.state,
+      nonce: payload.nonce,
+      challenge: pkce.challenge,
+    });
+
+    const headers = new Headers({
+      Location: authorizeUrl,
+      'Cache-Control': 'no-store',
+      Pragma: 'no-cache',
+    });
+    headers.append('Set-Cookie', buildSsoStateCookie(request, sealed));
+    return new Response(null, { status: 302, headers });
+  } catch (error) {
+    await safeWriteAuditEvent(env, {
+      action: 'auth.sso.start.failed',
+      category: 'auth',
+      level: 'error',
+      targetType: 'sso',
+      metadata: { reason: 'discovery_failed', error: error instanceof Error ? error.message : String(error), ...auditRequestMetadata(request) },
+    });
+    return ssoRedirect('/?sso_error=upstream_error', request);
+  }
+}
+
+export async function handleSsoCallback(request: Request, env: Env): Promise<Response> {
+  const config = getOidcConfig(env);
+  const secret = (env.JWT_SECRET || '').trim();
+  if (!config || !secret) {
+    return errorResponse('SSO is not configured', 404);
+  }
+
+  const url = new URL(request.url);
+  const fail = async (reason: string, level: 'info' | 'warn' = 'info'): Promise<Response> => {
+    await safeWriteAuditEvent(env, {
+      action: `auth.sso.login.failed.${reason}`,
+      category: 'auth',
+      level,
+      targetType: 'sso',
+      metadata: { reason, ...auditRequestMetadata(request) },
+    });
+    return ssoRedirect(`/?sso_error=${encodeURIComponent(reason)}`, request);
+  };
+
+  if (url.searchParams.get('error')) return fail('denied');
+
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  if (!code || !state) return fail('invalid_request');
+
+  const sealed = parseCookieValue(request, SSO_STATE_COOKIE);
+  const payload = sealed ? await unsealSsoState(sealed, secret) : null;
+  if (!payload || payload.state !== state || payload.exp < Date.now()) {
+    return fail('invalid_state', 'warn');
+  }
+
+  let claims: Awaited<ReturnType<typeof verifyIdToken>>;
+  try {
+    const discovery = await discoverOidc(config.issuer);
+    const tokens = await exchangeAuthorizationCode(config, discovery, {
+      code,
+      redirectUri: `${url.origin}/auth/sso/callback`,
+      verifier: payload.verifier,
+    });
+    claims = await verifyIdToken(config, discovery, tokens.id_token, payload.nonce);
+  } catch (error) {
+    await safeWriteAuditEvent(env, {
+      action: 'auth.sso.login.failed.upstream_error',
+      category: 'auth',
+      level: 'warn',
+      targetType: 'sso',
+      metadata: { reason: 'token_exchange_or_verify', error: error instanceof Error ? error.message : String(error), ...auditRequestMetadata(request) },
+    });
+    return ssoRedirect('/?sso_error=upstream_error', request);
+  }
+
+  const storage = new StorageService(env.DB);
+  const user = await storage.getUser(claims.email);
+  if (!user) return fail('unknown_account', 'warn');
+  if (user.status !== 'active') return fail('inactive', 'warn');
+  if (user.ssoSubject && user.ssoSubject !== claims.sub) return fail('subject_mismatch', 'warn');
+
+  if (!user.ssoSubject) {
+    user.ssoSubject = claims.sub;
+    user.updatedAt = new Date().toISOString();
+    await storage.saveUser(user);
+    AuthService.invalidateUserCache(user.id);
+    await safeWriteAuditEvent(env, {
+      action: 'auth.sso.link',
+      category: 'auth',
+      level: 'info',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { email: user.email, subject: claims.sub, ...auditRequestMetadata(request) },
+    });
+  }
+
+  const deviceInfo = {
+    deviceIdentifier: generateUUID(),
+    deviceName: 'Zitadel SSO',
+    deviceType: 14,
+  };
+  const deviceSession = await persistAndResolveDeviceSession(storage, user.id, deviceInfo);
+  const auth = new AuthService(env);
+  const refreshToken = await auth.generateRefreshToken(user, deviceSession, 'web');
+
+  await safeWriteAuditEvent(env, {
+    action: 'auth.login.success',
+    category: 'auth',
+    level: 'info',
+    targetType: 'user',
+    targetId: user.id,
+    metadata: {
+      grantType: 'sso_oidc',
+      provider: 'zitadel',
+      email: user.email,
+      deviceIdentifier: deviceSession?.identifier ?? deviceInfo.deviceIdentifier,
+      deviceType: deviceInfo.deviceType,
+      ...auditRequestMetadata(request),
+    },
+  });
+
+  return ssoRedirect('/', request, refreshToken);
 }
 
 export function checkClientCredentialsParam(clientId: string, clientSecret: string, scope: string): boolean {

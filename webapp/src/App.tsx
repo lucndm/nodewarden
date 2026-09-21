@@ -207,6 +207,11 @@ export default function App() {
   const [pendingAuthAction, setPendingAuthAction] = useState<'login' | 'passkey' | 'register' | 'unlock' | null>(null);
   const [location, navigate] = useLocation();
   const [phase, setPhase] = useState<AppPhase>(initialBootstrap.phase);
+  const [ssoEnabled, setSsoEnabled] = useState<boolean>(initialBootstrap.ssoEnabled === true);
+  const [ssoError] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('sso_error');
+  });
   const [session, setSessionState] = useState<SessionState | null>(initialBootstrap.session);
   const [profile, setProfile] = useState<Profile | null>(initialProfileSnapshot);
   const [defaultKdfIterations, setDefaultKdfIterations] = useState(initialBootstrap.defaultKdfIterations);
@@ -492,6 +497,7 @@ export default function App() {
       setDefaultKdfIterations(boot.defaultKdfIterations);
       setRegistrationInviteRequired(boot.registrationInviteRequired);
       setJwtWarning(boot.jwtWarning);
+      setSsoEnabled(boot.ssoEnabled === true);
       setSession(boot.session);
       setProfile(boot.profile);
       setPhase(boot.phase);
@@ -502,6 +508,13 @@ export default function App() {
       mounted = false;
     };
   }, [initialBootstrap]);
+
+  useEffect(() => {
+    if (!ssoError || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('sso_error');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [ssoError]);
 
   useEffect(() => {
     if (phase !== 'locked' || !session) return;
@@ -2272,6 +2285,9 @@ export default function App() {
           unlockReady={!!session?.email}
           unlockPreparing={unlockPreparing}
           sessionRefreshError={lockedSessionRefreshError}
+          ssoEnabled={ssoEnabled}
+          ssoErrorText={ssoError ? t(ssoErrorTextKey(ssoError)) : null}
+          onSsoLogin={() => { window.location.href = '/auth/sso/start'; }}
           loginValues={loginValues}
           pendingPasskeyPasswordEmail={pendingPasskeyPassword?.email || null}
           passkeyPassword={passkeyPassword}
@@ -2441,4 +2457,15 @@ export default function App() {
       />
     </>
   );
+}
+
+function ssoErrorTextKey(code: string): string {
+  switch (code) {
+    case 'unknown_account':
+      return 'txt_sso_error_no_account';
+    case 'inactive':
+      return 'txt_sso_error_disabled';
+    default:
+      return 'txt_sso_error_generic';
+  }
 }
