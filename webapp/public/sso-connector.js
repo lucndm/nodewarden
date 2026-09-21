@@ -1,9 +1,11 @@
 // SSO connector page — mirrors the official Bitwarden connector
-// (bitwarden/clients apps/web/src/connectors/sso.ts) so the browser
-// extension and web flow behave identically:
+// (bitwarden/clients apps/web/src/connectors/sso.ts) with one hardening
+// difference: the authResult message is delivered through an extension
+// handshake, because the content script can be injected after this page's
+// load event (document_idle race) and would then miss a single post.
 //
-// - state containing ":clientId=browser" → post the authResult window
-//   message that the extension's content script forwards to the background
+// - state containing ":clientId=browser" (or lp=1) → hand the code to the
+//   browser extension
 // - otherwise → hand the code back to the web app SSO route
 //
 // Desktop, mobile and CLI never load this page: they receive the IdP
@@ -31,9 +33,37 @@ window.addEventListener('load', () => {
   }
 });
 
-function initiateBrowserSso(code, state, lastpass) {
-  window.postMessage({ command: 'authResult', code, state, lastpass }, window.location.origin);
+let delivered = false;
 
+function postAuthResult(code, state, lastpass) {
+  if (delivered) return;
+  delivered = true;
+  window.postMessage({ command: 'authResult', code, state, lastpass }, window.location.origin);
+  showHandoffMessage();
+}
+
+function initiateBrowserSso(code, state, lastpass) {
+  const onMessage = (event) => {
+    if (event.source !== window) return;
+    const command = event.data && event.data.command;
+    if (command === 'hasBwInstalled') {
+      postAuthResult(code, state, lastpass);
+    }
+  };
+  window.addEventListener('message', onMessage);
+
+  // Ask the extension to announce itself (the content script replies with
+  // hasBwInstalled once it is listening). Repeat a few times to cover a slow
+  // document_idle injection, then fall back to a plain post.
+  const ping = () =>
+    window.postMessage({ command: 'checkIfBWExtensionInstalled' }, window.location.origin);
+  ping();
+  window.setTimeout(() => { if (!delivered) ping(); }, 600);
+  window.setTimeout(() => { if (!delivered) ping(); }, 1500);
+  window.setTimeout(() => { if (!delivered) postAuthResult(code, state, lastpass); }, 3000);
+}
+
+function showHandoffMessage() {
   const handOffMessage = ('; ' + document.cookie)
     .split('; ssoHandOffMessage=')
     .pop()
