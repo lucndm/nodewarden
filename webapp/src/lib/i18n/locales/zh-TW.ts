@@ -1495,6 +1495,7 @@ Object.assign(zhTW, {
   "txt_generator_history": "產生器歷史",
   "txt_generator_history_clear": "清空歷史",
   "txt_generator_history_empty": "本次工作階段尚未產生任何內容。",
+  "txt_sso_required": "此帳戶需要使用 SSO 登入。請使用「使用 SSO 繼續」。",
   "txt_sso_continue": "使用 SSO 繼續",
   "txt_sso_error_no_account": "沒有帳戶與此身分相符。請先用主密碼登入，再綁定 SSO。",
   "txt_sso_error_disabled": "此帳戶已停用。",

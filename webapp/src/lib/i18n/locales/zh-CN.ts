@@ -1495,6 +1495,7 @@ Object.assign(zhCN, {
   "txt_generator_history": "生成器历史",
   "txt_generator_history_clear": "清空历史",
   "txt_generator_history_empty": "本次会话尚未生成任何内容。",
+  "txt_sso_required": "该账户需要 SSO 登录，请使用“使用 SSO 继续”。",
   "txt_sso_continue": "使用 SSO 继续",
   "txt_sso_error_no_account": "没有账户与此身份匹配。请先用主密码登录，然后绑定 SSO。",
   "txt_sso_error_disabled": "该账户已被禁用。",

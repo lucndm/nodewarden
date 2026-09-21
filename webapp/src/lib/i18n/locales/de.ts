@@ -1466,6 +1466,7 @@ Object.assign(de, { "txt_password_security_show_all": "Alle anzeigen", "txt_pass
   "txt_generator_history": "Generator-Verlauf",
   "txt_generator_history_clear": "Verlauf löschen",
   "txt_generator_history_empty": "In dieser Sitzung wurde noch nichts generiert.",
+  "txt_sso_required": "Dieses Konto erfordert SSO-Anmeldung. Verwenden Sie „Mit SSO fortfahren“.",
   "txt_sso_continue": "Mit SSO fortfahren",
   "txt_sso_error_no_account": "Kein Konto passt zu dieser Identität. Melden Sie sich zuerst mit dem Master-Passwort an und verknüpfen Sie dann SSO.",
   "txt_sso_error_disabled": "Dieses Konto ist deaktiviert.",

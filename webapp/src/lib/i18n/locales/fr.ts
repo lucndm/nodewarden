@@ -1466,6 +1466,7 @@ Object.assign(fr, { "txt_password_security_show_all": "Tout afficher", "txt_pass
   "txt_generator_history": "Historique du générateur",
   "txt_generator_history_clear": "Effacer l’historique",
   "txt_generator_history_empty": "Rien n’a encore été généré dans cette session.",
+  "txt_sso_required": "Ce compte nécessite une connexion SSO. Utilisez « Continuer avec SSO ».",
   "txt_sso_continue": "Continuer avec SSO",
   "txt_sso_error_no_account": "Aucun compte ne correspond à cette identité. Connectez-vous d’abord avec votre mot de passe principal, puis liez le SSO.",
   "txt_sso_error_disabled": "Ce compte est désactivé.",

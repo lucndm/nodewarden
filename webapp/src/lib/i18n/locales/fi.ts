@@ -1466,6 +1466,7 @@ Object.assign(fi, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_history": "Generaattorin historia",
   "txt_generator_history_clear": "Tyhjennä historia",
   "txt_generator_history_empty": "Mitään ei ole vielä luotu tässä istunnossa.",
+  "txt_sso_required": "Tämä tili vaatii SSO-kirjautumisen. Käytä ”Jatka SSO:lla”.",
   "txt_sso_continue": "Jatka SSO:lla",
   "txt_sso_error_no_account": "Mikään tili ei vastaa tätä identiteettiä. Kirjaudu ensin pääsalasanalla ja linkitä sitten SSO.",
   "txt_sso_error_disabled": "Tämä tili on poistettu käytöstä.",

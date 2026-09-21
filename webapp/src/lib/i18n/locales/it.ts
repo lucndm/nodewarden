@@ -1466,6 +1466,7 @@ Object.assign(it, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_history": "Cronologia del generatore",
   "txt_generator_history_clear": "Cancella cronologia",
   "txt_generator_history_empty": "Nessun elemento generato in questa sessione.",
+  "txt_sso_required": "Questo account richiede l’accesso SSO. Usa “Continua con SSO”.",
   "txt_sso_continue": "Continua con SSO",
   "txt_sso_error_no_account": "Nessun account corrisponde a questa identità. Accedi prima con la master password, poi collega l’SSO.",
   "txt_sso_error_disabled": "Questo account è disabilitato.",
