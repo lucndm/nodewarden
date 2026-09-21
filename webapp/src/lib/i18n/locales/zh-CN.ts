@@ -1496,6 +1496,7 @@ Object.assign(zhCN, {
   "txt_generator_history_clear": "清空历史",
   "txt_generator_history_empty": "本次会话尚未生成任何内容。",
   "txt_sso_required": "该账户需要 SSO 登录，请使用“使用 SSO 继续”。",
+  "txt_sso_web_completed": "登录完成。您可以关闭此标签页并返回 Bitwarden。",
   "txt_sso_page_title": "使用 SSO 登录",
   "txt_sso_page_description": "输入您 NodeWarden 账户的邮箱，以继续前往身份提供商。",
   "txt_sso_unavailable": "此服务器未提供 SSO。",

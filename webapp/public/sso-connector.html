@@ -4,10 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
-    />
     <title>NodeWarden SSO Connector</title>
     <style>
       :root {
@@ -33,8 +29,9 @@
         justify-content: center;
       }
 
-      p {
+      #content p {
         max-width: 420px;
+        margin: 0;
         padding: 12px 16px;
         border-radius: 10px;
         background: #eef4ff;
@@ -46,7 +43,9 @@
     </style>
   </head>
   <body>
-    <p id="sso-status" aria-live="polite">Completing sign-in…</p>
+    <div id="content">
+      <p aria-live="polite">Completing sign-in…</p>
+    </div>
     <script type="module" src="/sso-connector.js"></script>
   </body>
 </html>

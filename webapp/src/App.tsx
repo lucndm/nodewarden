@@ -2532,5 +2532,6 @@ function readSsoEntryParams(): SsoEntryParams | null {
     codeChallengeMethod: params.get('codeChallengeMethod') ?? params.get('code_challenge_method') ?? 'S256',
     email: params.get('email') ?? '',
     ssoIdentifier: params.get('ssoIdentifier') ?? '',
+    code: params.get('code') ?? undefined,
   };
 }

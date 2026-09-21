@@ -1546,6 +1546,7 @@ Object.assign(en, {
   "txt_generator_history_clear": "Clear history",
   "txt_generator_history_empty": "Nothing generated yet in this session.",
   "txt_sso_required": "This account requires SSO sign-in. Use “Continue with SSO”.",
+  "txt_sso_web_completed": "Sign-in complete. You can close this tab and return to Bitwarden.",
   "txt_sso_page_title": "Sign in with SSO",
   "txt_sso_page_description": "Enter the email of your NodeWarden account to continue to your identity provider.",
   "txt_sso_unavailable": "SSO is not available on this server.",

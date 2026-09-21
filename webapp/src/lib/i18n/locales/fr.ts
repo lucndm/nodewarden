@@ -1467,6 +1467,7 @@ Object.assign(fr, { "txt_password_security_show_all": "Tout afficher", "txt_pass
   "txt_generator_history_clear": "Effacer l’historique",
   "txt_generator_history_empty": "Rien n’a encore été généré dans cette session.",
   "txt_sso_required": "Ce compte nécessite une connexion SSO. Utilisez « Continuer avec SSO ».",
+  "txt_sso_web_completed": "Connexion terminée. Vous pouvez fermer cet onglet et revenir à Bitwarden.",
   "txt_sso_page_title": "Se connecter avec SSO",
   "txt_sso_page_description": "Saisissez l’adresse e-mail de votre compte NodeWarden pour continuer vers votre fournisseur d’identité.",
   "txt_sso_unavailable": "Le SSO n’est pas disponible sur ce serveur.",

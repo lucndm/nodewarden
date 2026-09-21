@@ -1,33 +1,66 @@
-// SSO connector page for the Bitwarden browser extension.
+// SSO connector page — mirrors the official Bitwarden connector
+// (bitwarden/clients apps/web/src/connectors/sso.ts) so the browser
+// extension and web flow behave identically:
 //
-// The extension opens the web vault SSO page with
-// redirectUri=<webVault>/sso-connector.html and its own content script
-// listens on this page for a `ssoCallback` window message carrying the
-// authorization code and state, which it forwards to the extension
-// background.
+// - state containing ":clientId=browser" → post the authResult window
+//   message that the extension's content script forwards to the background
+// - otherwise → hand the code back to the web app SSO route
+//
+// Desktop, mobile and CLI never load this page: they receive the IdP
+// callback via deep links or a localhost HTTP server.
 
-const params = new URLSearchParams(window.location.search);
-const code = params.get('code');
-const state = params.get('state') || '';
-const error = params.get('error');
-
-const status = document.getElementById('sso-status');
-
-function clientIdFromState(value) {
-  const marker = ':clientId=';
-  const index = value.indexOf(marker);
-  return index === -1 ? '' : value.slice(index + marker.length).trim();
+function getQsParam(name) {
+  try {
+    return new URL(window.location.href).searchParams.get(name);
+  } catch {
+    return null;
+  }
 }
 
-if (error) {
-  if (status) status.textContent = `Sign-in was not completed (${error}). You can close this window and try again.`;
-} else if (!code) {
-  if (status) status.textContent = 'Missing authorization code. Open this page through a Bitwarden sign-in flow.';
-} else {
-  const message = { command: 'ssoCallback', code, state };
-  // The extension content script listens for this message; the payload is the
-  // same data that is already visible in this window's URL.
-  window.postMessage(message, window.location.origin);
-  window.postMessage(message, '*');
-  if (status) status.textContent = 'Signed in. You can close this window and return to Bitwarden.';
+window.addEventListener('load', () => {
+  const code = getQsParam('code');
+  const state = getQsParam('state');
+  const lastpass = getQsParam('lp');
+
+  if (lastpass === '1') {
+    initiateBrowserSso(code, state, true);
+  } else if (state != null && state.includes(':clientId=browser')) {
+    initiateBrowserSso(code, state, false);
+  } else {
+    initiateWebAppSso(code, state);
+  }
+});
+
+function initiateBrowserSso(code, state, lastpass) {
+  window.postMessage({ command: 'authResult', code, state, lastpass }, window.location.origin);
+
+  const handOffMessage = ('; ' + document.cookie)
+    .split('; ssoHandOffMessage=')
+    .pop()
+    .split(';')
+    .shift();
+  document.cookie = 'ssoHandOffMessage=;SameSite=strict;max-age=0';
+
+  const content = document.getElementById('content');
+  if (!content) return;
+  content.innerHTML = '';
+  const p = document.createElement('p');
+  p.innerText = handOffMessage || 'You are signed in. You can close this tab and return to Bitwarden.';
+  content.appendChild(p);
+}
+
+function initiateWebAppSso(code, state) {
+  const returnUri = extractFromRegex(state || '', "(?<=_returnUri=')(.*)(?=')");
+  if (returnUri) {
+    window.location.href = window.location.origin + '/#' + returnUri;
+    return;
+  }
+  window.location.href =
+    window.location.origin + '/#/sso?code=' + encodeURIComponent(code || '') + '&state=' + encodeURIComponent(state || '');
+}
+
+function extractFromRegex(s, regexString) {
+  const regex = new RegExp(regexString);
+  const results = regex.exec(s);
+  return results ? results[0] : null;
 }

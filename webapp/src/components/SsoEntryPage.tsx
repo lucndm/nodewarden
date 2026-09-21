@@ -15,11 +15,14 @@ export interface SsoEntryParams {
   codeChallengeMethod: string;
   email: string;
   ssoIdentifier: string;
+  /** Present when the connector handed the web flow back with an authorization code. */
+  code?: string;
 }
 
 export default function SsoEntryPage(props: { params: SsoEntryParams }) {
   const params = props.params;
   const clientFlowValid = Boolean(params.clientId && params.redirectUri && params.state && params.codeChallenge);
+  const webCompleted = Boolean(params.code && params.state);
   const [email, setEmail] = useState(params.email);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -69,7 +72,9 @@ export default function SsoEntryPage(props: { params: SsoEntryParams }) {
           void submit(e);
         }}
       >
-        {!clientFlowValid ? (
+        {webCompleted ? (
+          <p className="muted standalone-muted" role="status">{t('txt_sso_web_completed')}</p>
+        ) : !clientFlowValid ? (
           <p className="muted standalone-muted" role="alert">{t('txt_sso_client_only')}</p>
         ) : (
           <>
