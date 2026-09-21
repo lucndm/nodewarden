@@ -1512,9 +1512,19 @@ export async function handleSsoLinkStart(request: Request, env: Env, userId: str
 const BITWARDEN_SSO_CLIENT_IDS = new Set(['web', 'cli', 'desktop', 'browser', 'mobile', 'sdk']);
 const SSO_REDIRECT_SCHEME_RE = /^bitwarden[a-z-]*:\/\//i;
 
-function isAllowedClientRedirectUri(redirectUri: string, requestOrigin: string): boolean {
+const SSO_LOOPBACK_REDIRECT_RE = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?(?:\/[^\s]*)?$/i;
+
+function isAllowedClientRedirectUri(redirectUri: string, requestOrigin: string, clientId: string): boolean {
   if (redirectUri.startsWith('/') && !redirectUri.startsWith('//')) return true;
   if (SSO_REDIRECT_SCHEME_RE.test(redirectUri)) return true;
+  // CLI (and the desktop AppImage fallback) receive the callback on a
+  // loopback HTTP server, mirroring the official server's behaviour.
+  if (
+    (clientId === 'cli' || clientId === 'desktop' || clientId === 'mobile') &&
+    SSO_LOOPBACK_REDIRECT_RE.test(redirectUri)
+  ) {
+    return true;
+  }
   // Absolute URLs are allowed only when they stay on this same origin
   // (e.g. the browser extension's /sso-connector.html).
   try {
@@ -1541,7 +1551,7 @@ export async function handleSsoAuthorize(request: Request, env: Env): Promise<Re
   if (!BITWARDEN_SSO_CLIENT_IDS.has(clientId)) {
     return errorResponse('Unknown client_id', 400);
   }
-  if (!redirectUri || !isAllowedClientRedirectUri(redirectUri, url.origin)) {
+  if (!redirectUri || !isAllowedClientRedirectUri(redirectUri, url.origin, clientId)) {
     return errorResponse('Invalid redirect_uri', 400);
   }
   if (!state || !codeChallenge || codeChallengeMethod !== 'S256') {
@@ -1591,10 +1601,22 @@ export async function handleSsoPrevalidate(request: Request, env: Env): Promise<
   const normalized = String(domain || '').trim().toLowerCase();
   if (!normalized) return errorResponse('domain is required', 400);
 
+  // The official web vault reads `token` from this endpoint as proof that the
+  // server supports SSO. Clients never verify it, but the field must exist.
+  let token: string | null = null;
+  const secret = (env.JWT_SECRET || '').trim();
+  if (isSsoEnabled(env) && secret) {
+    const body = base64UrlFromBytes(
+      new TextEncoder().encode(JSON.stringify({ purpose: 'sso_prevalidate', exp: Date.now() + 120_000 }))
+    );
+    token = `${body}.${await hmacBase64Url(secret, body)}`;
+  }
+
   return identityJsonResponse({
     object: 'ssoPrevalidate',
     ssoAvailable: isSsoEnabled(env),
     ssoIdentifier: 'zitadel',
+    token,
   });
 }
 
@@ -1705,18 +1727,21 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
   // hand the client a short-lived authorization code via its redirect URI.
   if (payload.purpose === 'client_sso') {
     const redirectUri = payload.clientRedirectUri!;
-    const withRedirectParams = (params: Record<string, string>, error?: string) => {
+    const issuer = new URL(request.url).origin;
+    const withRedirectParams = (params: Record<string, string>) => {
       try {
         const target = new URL(redirectUri, 'https://placeholder.invalid');
         for (const [key, value] of Object.entries(params)) {
           if (value) target.searchParams.set(key, value);
         }
-        if (error) target.searchParams.set('error', error);
         return target.toString().replace('https://placeholder.invalid', '') || target.toString();
       } catch {
         return null;
       }
     };
+    // Official clients only read `code` and `state` (and expect `scope`/`iss`
+    // for iOS redirection), so failures also come back through `code` — the
+    // token exchange then rejects it with invalid_grant.
     const deny = async (code: string, reason: string, level: 'info' | 'warn' = 'warn'): Promise<Response> => {
       await safeWriteAuditEvent(env, {
         action: `auth.sso.client.failed.${reason}`,
@@ -1725,7 +1750,12 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
         targetType: 'sso',
         metadata: { reason, clientId: payload.clientId ?? null, ...auditRequestMetadata(request) },
       });
-      const location = withRedirectParams({ state: payload.clientState ?? '' }, code);
+      const location = withRedirectParams({
+        code: payload.clientState ?? '',
+        state: payload.clientState ?? '',
+        scope: 'api offline_access',
+        iss: issuer,
+      });
       return location ? ssoRedirect(location, request) : fail(reason, level);
     };
 
@@ -1757,7 +1787,12 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
       metadata: { clientId: payload.clientId ?? null, ...auditRequestMetadata(request) },
     });
 
-    const location = withRedirectParams({ code, state: payload.clientState ?? '' });
+    const location = withRedirectParams({
+      code,
+      state: payload.clientState ?? '',
+      scope: 'api offline_access',
+      iss: issuer,
+    });
     if (!location) return deny('access_denied', 'invalid_redirect');
     return ssoRedirect(location, request);
   }
