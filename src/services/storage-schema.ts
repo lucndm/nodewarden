@@ -175,6 +175,15 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'CREATE TABLE IF NOT EXISTS generator_settings (' +
   'user_id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, ' +
   'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',
+
+  // Short-lived, single-use authorization codes for the Bitwarden client SSO
+  // flow (client receives the code via redirect and exchanges it with PKCE).
+  'CREATE TABLE IF NOT EXISTS sso_authorization_codes (' +
+  'code_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, client_state TEXT, redirect_uri TEXT NOT NULL, ' +
+  'code_challenge TEXT NOT NULL, code_challenge_method TEXT NOT NULL, ' +
+  'created_at TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT, ' +
+  'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',
+  'CREATE INDEX IF NOT EXISTS idx_sso_codes_expires ON sso_authorization_codes(expires_at)',
 ];
 
 async function executeSchemaStatement(db: D1Database, statement: string): Promise<void> {

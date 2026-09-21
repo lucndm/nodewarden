@@ -151,6 +151,12 @@ import {
   saveStoredGeneratorSettings,
 } from './storage-generator-settings-repo';
 import {
+  consumeSsoAuthorizationCode,
+  getSsoAuthorizationCode,
+  putSsoAuthorizationCode,
+  type StoredSsoAuthorizationCode,
+} from './storage-sso-code-repo';
+import {
   consumeAccountPasskeyChallenge as consumeStoredAccountPasskeyChallenge,
   countAccountPasskeyCredentialsByUserId as countStoredAccountPasskeyCredentialsByUserId,
   deleteAccountPasskeyCredential as deleteStoredAccountPasskeyCredential,
@@ -169,7 +175,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-09-21-sso-subject';
+const STORAGE_SCHEMA_VERSION = '2026-09-21-sso-authorization-codes';
 const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
 
 // D1-backed storage.
@@ -407,6 +413,23 @@ export class StorageService {
       new Date().toISOString()
     );
     await this.updateRevisionDate(userId);
+  }
+
+  // --- SSO authorization codes (Bitwarden client SSO flow) ---
+
+  async putSsoAuthorizationCode(
+    codeHash: string,
+    record: Omit<StoredSsoAuthorizationCode, 'consumedAt'>
+  ): Promise<void> {
+    await putSsoAuthorizationCode(this.db, codeHash, record);
+  }
+
+  async getSsoAuthorizationCode(codeHash: string): Promise<StoredSsoAuthorizationCode | null> {
+    return getSsoAuthorizationCode(this.db, codeHash);
+  }
+
+  async consumeSsoAuthorizationCode(codeHash: string): Promise<boolean> {
+    return consumeSsoAuthorizationCode(this.db, codeHash);
   }
 
   // --- Username generator (forwarded alias) settings ---
