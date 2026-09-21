@@ -430,7 +430,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
       });
       return identityErrorResponse('Account is disabled', 'invalid_grant', 400);
     }
-    if (isSsoLoginRequired(env, user)) {
+    if (isSsoLoginRequired(env, user) && !(await hasActiveWebSessionFor(request, env, user.id))) {
       await safeWriteAuditEvent(env, {
         actorUserId: user.id,
         action: 'auth.login.failed.sso_required',
@@ -726,7 +726,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
       await rateLimit.recordFailedLogin(loginIdentifier);
       return identityErrorResponse('Account is disabled', 'invalid_grant', 400);
     }
-    if (isSsoLoginRequired(env, user)) {
+    if (isSsoLoginRequired(env, user) && !(await hasActiveWebSessionFor(request, env, user.id))) {
       await safeWriteAuditEvent(env, {
         actorUserId: user.id,
         action: 'auth.login.failed.sso_required',
@@ -1187,6 +1187,9 @@ interface SsoStatePayload {
   verifier: string;
   nonce: string;
   exp: number;
+  purpose: 'login' | 'link';
+  /** Set for purpose=link: the authenticated account that requested the bind. */
+  userId?: string;
 }
 
 function base64UrlFromBytes(bytes: Uint8Array): string {
@@ -1229,6 +1232,8 @@ async function unsealSsoState(token: string, secret: string): Promise<SsoStatePa
   try {
     const payload = JSON.parse(new TextDecoder().decode(bytesFromBase64Url(body))) as Partial<SsoStatePayload>;
     if (!payload.state || !payload.verifier || !payload.nonce || typeof payload.exp !== 'number') return null;
+    if (payload.purpose !== 'login' && payload.purpose !== 'link') return null;
+    if (payload.purpose === 'link' && !payload.userId) return null;
     return payload as SsoStatePayload;
   } catch {
     return null;
@@ -1255,15 +1260,17 @@ function ssoRedirect(location: string, request: Request, refreshToken?: string |
     Pragma: 'no-cache',
   });
   headers.append('Set-Cookie', buildSsoStateCookie(request, null));
-  // The SSO callback is a cross-site top-level redirect; a Strict cookie would
-  // be rejected by the browser there. Lax still withholds the cookie from
-  // cross-site POSTs, and the token endpoint only accepts POSTs.
-  headers.append(
-    'Set-Cookie',
-    refreshToken
-      ? buildRefreshCookie(request, refreshToken, Math.floor(getRefreshTokenSlidingTtlMs('web') / 1000), 'Lax')
-      : buildClearedRefreshCookie(request)
-  );
+  // Only a successful SSO login refreshes the web session cookie. Error and
+  // link-flow redirects must never clear an existing session: the callback is
+  // a cross-site top-level redirect, and a Strict cookie would be rejected
+  // there — Lax still withholds the cookie from cross-site POSTs, and the
+  // token endpoint only accepts POSTs.
+  if (refreshToken) {
+    headers.append(
+      'Set-Cookie',
+      buildRefreshCookie(request, refreshToken, Math.floor(getRefreshTokenSlidingTtlMs('web') / 1000), 'Lax')
+    );
+  }
   return new Response(null, { status: 302, headers });
 }
 
@@ -1282,39 +1289,70 @@ export function isSsoLoginRequired(env: Env, user: Pick<User, 'ssoSubject'>): bo
   return getOidcConfig(env) !== null && Boolean(user.ssoSubject);
 }
 
-export async function handleSsoStart(request: Request, env: Env): Promise<Response> {
+/**
+ * True when the request carries a valid web refresh cookie for this user.
+ * The webapp re-uses the password/webauthn grants to UNLOCK an existing
+ * session (it re-sends the master password hash to obtain fresh tokens and
+ * the profile). SSO enforcement must only block fresh sign-ins, not session
+ * re-establishment, which is what this check distinguishes.
+ */
+async function hasActiveWebSessionFor(request: Request, env: Env, userId: string): Promise<boolean> {
+  if (!shouldUseWebSession(request)) return false;
+  const refreshToken = parseCookieValue(request, WEB_REFRESH_COOKIE);
+  if (!refreshToken) return false;
+  try {
+    const result = await new AuthService(env).refreshAccessTokenDetailed(refreshToken);
+    return result.ok === true && result.user.id === userId;
+  } catch {
+    return false;
+  }
+}
+
+async function buildSsoAuthorize(
+  request: Request,
+  env: Env,
+  purpose: 'login' | 'link',
+  userId?: string
+): Promise<{ authorizeUrl: string; stateCookie: string } | null> {
   const config = getOidcConfig(env);
   const secret = (env.JWT_SECRET || '').trim();
-  if (!config || !secret) {
-    return errorResponse('SSO is not configured', 404);
-  }
+  if (!config || !secret) return null;
 
   const url = new URL(request.url);
   const redirectUri = `${url.origin}/auth/sso/callback`;
-
-  try {
-    const discovery = await discoverOidc(config.issuer);
-    const pkce = await createPkcePair();
-    const payload: SsoStatePayload = {
-      state: base64UrlFromBytes(crypto.getRandomValues(new Uint8Array(16))),
-      verifier: pkce.verifier,
-      nonce: base64UrlFromBytes(crypto.getRandomValues(new Uint8Array(16))),
-      exp: Date.now() + SSO_STATE_TTL_SECONDS * 1000,
-    };
-    const sealed = await sealSsoState(payload, secret);
-    const authorizeUrl = buildAuthorizeUrl(config, discovery, {
+  const discovery = await discoverOidc(config.issuer);
+  const pkce = await createPkcePair();
+  const payload: SsoStatePayload = {
+    state: base64UrlFromBytes(crypto.getRandomValues(new Uint8Array(16))),
+    verifier: pkce.verifier,
+    nonce: base64UrlFromBytes(crypto.getRandomValues(new Uint8Array(16))),
+    exp: Date.now() + SSO_STATE_TTL_SECONDS * 1000,
+    purpose,
+    ...(userId ? { userId } : {}),
+  };
+  const sealed = await sealSsoState(payload, secret);
+  return {
+    authorizeUrl: buildAuthorizeUrl(config, discovery, {
       redirectUri,
       state: payload.state,
       nonce: payload.nonce,
       challenge: pkce.challenge,
-    });
+    }),
+    stateCookie: buildSsoStateCookie(request, sealed),
+  };
+}
+
+export async function handleSsoStart(request: Request, env: Env): Promise<Response> {
+  try {
+    const built = await buildSsoAuthorize(request, env, 'login');
+    if (!built) return errorResponse('SSO is not configured', 404);
 
     const headers = new Headers({
-      Location: authorizeUrl,
+      Location: built.authorizeUrl,
       'Cache-Control': 'no-store',
       Pragma: 'no-cache',
     });
-    headers.append('Set-Cookie', buildSsoStateCookie(request, sealed));
+    headers.append('Set-Cookie', built.stateCookie);
     return new Response(null, { status: 302, headers });
   } catch (error) {
     await safeWriteAuditEvent(env, {
@@ -1326,6 +1364,80 @@ export async function handleSsoStart(request: Request, env: Env): Promise<Respon
     });
     return ssoRedirect('/?sso_error=upstream_error', request);
   }
+}
+
+/**
+ * POST /api/settings/sso/link (authenticated) — starts the explicit account
+ * link flow. Binding is authorized by the caller's session, never by email.
+ */
+export async function handleSsoLinkStart(request: Request, env: Env, userId: string): Promise<Response> {
+  try {
+    const built = await buildSsoAuthorize(request, env, 'link', userId);
+    if (!built) return errorResponse('SSO is not configured', 404);
+    const response = jsonResponse({ authorizeUrl: built.authorizeUrl });
+    response.headers.append('Set-Cookie', built.stateCookie);
+    return response;
+  } catch (error) {
+    await safeWriteAuditEvent(env, {
+      action: 'auth.sso.link_start.failed',
+      category: 'auth',
+      level: 'error',
+      targetType: 'user',
+      targetId: userId,
+      metadata: { error: error instanceof Error ? error.message : String(error), ...auditRequestMetadata(request) },
+    });
+    return errorResponse('Failed to start the SSO link flow', 502);
+  }
+}
+
+/** GET /api/settings/sso — SSO configuration + link status for the account. */
+export async function handleSsoStatus(env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const user = await storage.getUserById(userId);
+  if (!user) return errorResponse('User not found', 404);
+  return identityJsonResponse({
+    enabled: isSsoEnabled(env),
+    linked: Boolean(user.ssoSubject),
+    subjectPreview: user.ssoSubject ? `${user.ssoSubject.slice(0, 8)}…` : null,
+  });
+}
+
+/**
+ * DELETE /api/settings/sso — unlink, confirmed with the master password hash.
+ * Unlinking re-opens password/passkey login for the account.
+ */
+export async function handleSsoUnlink(request: Request, env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const auth = new AuthService(env);
+  const user = await storage.getUserById(userId);
+  if (!user) return errorResponse('User not found', 404);
+  if (!user.ssoSubject) return errorResponse('SSO is not linked', 400);
+
+  let body: Record<string, string | undefined>;
+  try {
+    body = (await request.json()) as Record<string, string | undefined>;
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+  const providedHash = String(body.masterPasswordHash || body.master_password_hash || '').trim();
+  if (!providedHash) return errorResponse('masterPasswordHash is required', 400);
+  if (!(await auth.verifyPassword(providedHash, user.masterPasswordHash, user.email))) {
+    return errorResponse('Invalid password', 400);
+  }
+
+  user.ssoSubject = null;
+  user.updatedAt = new Date().toISOString();
+  await storage.saveUser(user);
+  AuthService.invalidateUserCache(user.id);
+  await safeWriteAuditEvent(env, {
+    action: 'auth.sso.unlink',
+    category: 'auth',
+    level: 'warn',
+    targetType: 'user',
+    targetId: user.id,
+    metadata: { email: user.email, ...auditRequestMetadata(request) },
+  });
+  return jsonResponse({ ok: true });
 }
 
 export async function handleSsoCallback(request: Request, env: Env): Promise<Response> {
@@ -1380,25 +1492,39 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
   }
 
   const storage = new StorageService(env.DB);
-  const user = await storage.getUser(claims.email);
-  if (!user) return fail('unknown_account', 'warn');
-  if (user.status !== 'active') return fail('inactive', 'warn');
-  if (user.ssoSubject && user.ssoSubject !== claims.sub) return fail('subject_mismatch', 'warn');
 
-  if (!user.ssoSubject) {
-    user.ssoSubject = claims.sub;
-    user.updatedAt = new Date().toISOString();
-    await storage.saveUser(user);
-    AuthService.invalidateUserCache(user.id);
-    await safeWriteAuditEvent(env, {
-      action: 'auth.sso.link',
-      category: 'auth',
-      level: 'info',
-      targetType: 'user',
-      targetId: user.id,
-      metadata: { email: user.email, subject: claims.sub, ...auditRequestMetadata(request) },
-    });
+  // Explicit link flow: authorized by the session that started it, never by
+  // the IdP email claim. Bind the immutable subject to that exact account.
+  if (payload.purpose === 'link') {
+    const user = await storage.getUserById(payload.userId!);
+    if (!user) return fail('unknown_account', 'warn');
+    if (user.status !== 'active') return fail('inactive', 'warn');
+    const owner = await storage.getUserBySsoSubject(claims.sub);
+    if (owner && owner.id !== user.id) return fail('subject_taken', 'warn');
+    if (user.ssoSubject && user.ssoSubject !== claims.sub) {
+      return fail('already_linked', 'warn');
+    }
+    if (user.ssoSubject !== claims.sub) {
+      user.ssoSubject = claims.sub;
+      user.updatedAt = new Date().toISOString();
+      await storage.saveUser(user);
+      AuthService.invalidateUserCache(user.id);
+      await safeWriteAuditEvent(env, {
+        action: 'auth.sso.link',
+        category: 'auth',
+        level: 'info',
+        targetType: 'user',
+        targetId: user.id,
+        metadata: { email: user.email, subject: claims.sub, ...auditRequestMetadata(request) },
+      });
+    }
+    return ssoRedirect('/?sso_linked=1', request);
   }
+
+  // Login flow: only accounts explicitly linked to this subject may sign in.
+  const user = await storage.getUserBySsoSubject(claims.sub);
+  if (!user) return fail('sso_not_linked', 'warn');
+  if (user.status !== 'active') return fail('inactive', 'warn');
 
   const deviceInfo = {
     deviceIdentifier: generateUUID(),

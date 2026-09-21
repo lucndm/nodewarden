@@ -303,6 +303,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             <Suspense fallback={<RouteContentFallback />}>
               <SettingsPage
                 profile={props.profile}
+                authedFetch={props.authedFetch}
                 totpEnabled={props.totpEnabled}
                 yubikeyEnabled={props.yubikeyEnabled}
                 passkey2faEnabled={props.passkey2faEnabled}

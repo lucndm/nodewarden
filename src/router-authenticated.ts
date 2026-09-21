@@ -1,6 +1,7 @@
 import type { Env, User } from './types';
 import { errorResponse, jsonResponse, unsupportedResponse } from './utils/response';
 import { handleGetGeneratorSettings, handleUpdateGeneratorSettings } from './handlers/generator-settings';
+import { handleSsoLinkStart, handleSsoStatus, handleSsoUnlink } from './handlers/identity';
 import {
   handleGetProfile,
   handleUpdateProfile,
@@ -475,6 +476,16 @@ export async function handleAuthenticatedRoute(
     if (method === 'GET') return handleGetGeneratorSettings(env, userId);
     if (method === 'PUT' || method === 'POST') return handleUpdateGeneratorSettings(request, env, userId);
     return null;
+  }
+
+  if (path === '/api/settings/sso' || path === '/settings/sso') {
+    if (method === 'GET') return handleSsoStatus(env, userId);
+    if (method === 'DELETE') return handleSsoUnlink(request, env, userId);
+    return null;
+  }
+
+  if ((path === '/api/settings/sso/link' || path === '/settings/sso/link') && method === 'POST') {
+    return handleSsoLinkStart(request, env, userId);
   }
 
   const authenticatedDeviceResponse = await handleAuthenticatedDeviceRoute(request, env, userId, path, method);
