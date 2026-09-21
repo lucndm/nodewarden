@@ -1466,6 +1466,7 @@ Object.assign(es, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_history": "Historial del generador",
   "txt_generator_history_clear": "Borrar historial",
   "txt_generator_history_empty": "Todavía no se ha generado nada en esta sesión.",
+  "txt_sso_required": "Esta cuenta requiere inicio de sesión SSO. Usa «Continuar con SSO».",
   "txt_sso_continue": "Continuar con SSO",
   "txt_sso_error_no_account": "Ninguna cuenta coincide con esta identidad. Inicia sesión primero con tu contraseña maestra y luego vincula el SSO.",
   "txt_sso_error_disabled": "Esta cuenta está deshabilitada.",

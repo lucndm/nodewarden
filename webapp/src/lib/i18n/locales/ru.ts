@@ -1466,6 +1466,7 @@ Object.assign(ru, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_history": "История генератора",
   "txt_generator_history_clear": "Очистить историю",
   "txt_generator_history_empty": "В этом сеансе ещё ничего не сгенерировано.",
+  "txt_sso_required": "Эта учётная запись требует входа через SSO. Используйте «Продолжить с SSO».",
   "txt_sso_continue": "Продолжить с SSO",
   "txt_sso_error_no_account": "Ни одна учётная запись не соответствует этой личности. Сначала войдите с мастер-паролем, затем привяжите SSO.",
   "txt_sso_error_disabled": "Эта учётная запись отключена.",

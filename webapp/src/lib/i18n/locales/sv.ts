@@ -1466,6 +1466,7 @@ Object.assign(sv, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_history": "Generatorhistorik",
   "txt_generator_history_clear": "Rensa historik",
   "txt_generator_history_empty": "Inget har genererats än i den här sessionen.",
+  "txt_sso_required": "Detta konto kräver SSO-inloggning. Använd ”Fortsätt med SSO”.",
   "txt_sso_continue": "Fortsätt med SSO",
   "txt_sso_error_no_account": "Inget konto matchar denna identitet. Logga in med huvudlösenordet först och koppla sedan SSO.",
   "txt_sso_error_disabled": "Detta konto är inaktiverat.",

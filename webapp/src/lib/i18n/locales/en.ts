@@ -1545,6 +1545,7 @@ Object.assign(en, {
   "txt_generator_history": "Generator history",
   "txt_generator_history_clear": "Clear history",
   "txt_generator_history_empty": "Nothing generated yet in this session.",
+  "txt_sso_required": "This account requires SSO sign-in. Use “Continue with SSO”.",
   "txt_sso_continue": "Continue with SSO",
   "txt_sso_error_no_account": "No account matches this identity. Sign in with your master password first, then link SSO.",
   "txt_sso_error_disabled": "This account is disabled.",

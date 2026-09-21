@@ -131,6 +131,10 @@ export function translateServerError(message: string | null | undefined, fallbac
     return t('txt_rate_limit_try_again_seconds', { seconds: rateLimitMatch[1] });
   }
 
+  if (/sso_required/i.test(normalized) || /requires SSO sign-in/i.test(normalized)) {
+    return t('txt_sso_required');
+  }
+
   const backupDestinationLimitMatch = normalized.match(/^You can save up to (\d+) backup destinations$/i);
   if (backupDestinationLimitMatch) {
     return t('txt_backup_error_destination_limit', { count: backupDestinationLimitMatch[1] });

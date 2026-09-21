@@ -212,7 +212,8 @@ function buildPreloginResponse(
   kdfType: number,
   kdfIterations: number,
   kdfMemory: number | null,
-  kdfParallelism: number | null
+  kdfParallelism: number | null,
+  ssoRequired: boolean = false
 ): Record<string, unknown> {
   return {
     kdf: kdfType,
@@ -236,6 +237,10 @@ function buildPreloginResponse(
       Parallelism: kdfParallelism,
     },
     Salt: email.toLowerCase(),
+    // Clients use this to switch the email to the SSO button instead of the
+    // password form. Note: like KDF parameters, this reveals for a known email
+    // that the account is SSO-linked (accepted enumeration trade-off).
+    ssoRequired,
   };
 }
 
@@ -424,6 +429,22 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
         },
       });
       return identityErrorResponse('Account is disabled', 'invalid_grant', 400);
+    }
+    if (isSsoLoginRequired(env, user)) {
+      await safeWriteAuditEvent(env, {
+        actorUserId: user.id,
+        action: 'auth.login.failed.sso_required',
+        category: 'auth',
+        level: 'warn',
+        targetType: 'user',
+        targetId: user.id,
+        metadata: {
+          grantType,
+          deviceIdentifier: deviceInfo.deviceIdentifier,
+          ...auditRequestMetadata(request),
+        },
+      });
+      return identityErrorResponse('This account requires SSO sign-in', 'sso_required', 400);
     }
 
     let validatedAuthRequestId: string | null = null;
@@ -704,6 +725,18 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     if (user.status !== 'active') {
       await rateLimit.recordFailedLogin(loginIdentifier);
       return identityErrorResponse('Account is disabled', 'invalid_grant', 400);
+    }
+    if (isSsoLoginRequired(env, user)) {
+      await safeWriteAuditEvent(env, {
+        actorUserId: user.id,
+        action: 'auth.login.failed.sso_required',
+        category: 'auth',
+        level: 'warn',
+        targetType: 'user',
+        targetId: user.id,
+        metadata: { grantType, ...auditRequestMetadata(request) },
+      });
+      return identityErrorResponse('This account requires SSO sign-in', 'sso_required', 400);
     }
 
     const deviceInfo = readAuthRequestDeviceInfo(body, request);
@@ -1100,7 +1133,8 @@ export async function handlePrelogin(request: Request, env: Env): Promise<Respon
   const kdfMemory = user?.kdfMemory ?? null;
   const kdfParallelism = user?.kdfParallelism ?? null;
 
-  return identityJsonResponse(buildPreloginResponse(email, kdfType, kdfIterations, kdfMemory, kdfParallelism));
+  const ssoRequired = user != null && isSsoLoginRequired(env, user);
+  return identityJsonResponse(buildPreloginResponse(email, kdfType, kdfIterations, kdfMemory, kdfParallelism, ssoRequired));
 }
 
 // POST /identity/connect/revocation
@@ -1235,6 +1269,17 @@ function ssoRedirect(location: string, request: Request, refreshToken?: string |
 
 export function isSsoEnabled(env: Env): boolean {
   return getOidcConfig(env) !== null;
+}
+
+/**
+ * SSO enforcement: once an account is linked to an identity provider, the
+ * password and passkey login grants are closed for it — the IdP (with its MFA
+ * and policies) becomes the only way to obtain a session. Vault unlock stays
+ * local (master password / passkey PRF) and API keys keep working. Unsetting
+ * the OIDC configuration restores password login (natural break-glass).
+ */
+export function isSsoLoginRequired(env: Env, user: Pick<User, 'ssoSubject'>): boolean {
+  return getOidcConfig(env) !== null && Boolean(user.ssoSubject);
 }
 
 export async function handleSsoStart(request: Request, env: Env): Promise<Response> {
