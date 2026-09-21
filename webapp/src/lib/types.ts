@@ -416,6 +416,7 @@ export interface WebBootstrapResponse {
   registrationInviteRequired?: boolean;
   webAuthnAllowedOrigins?: string[];
   websiteIconsEnabled?: boolean;
+  ssoEnabled?: boolean;
 }
 
 export interface YubiKeyOtpSettings {

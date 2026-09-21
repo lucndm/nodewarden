@@ -7,6 +7,8 @@ const BACKEND_PATH_PREFIXES = [
   '/fill-assist',
   '/notifications',
   '/.well-known',
+  // Zitadel/OIDC SSO routes must reach the worker (not the SPA asset fallback).
+  '/auth/sso',
   // Compatibility aliases retained for older Bitwarden clients.
   '/devices',
   '/auth-requests',

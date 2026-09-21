@@ -13,6 +13,10 @@ export interface Env {
   // Optional fallback for attachment/send file storage (no credit card required).
   ATTACHMENTS_KV?: KVNamespace;
   JWT_SECRET: string;
+  // Zitadel / generic OIDC SSO for the web vault (all three enable the flow).
+  OIDC_ISSUER?: string;
+  OIDC_CLIENT_ID?: string;
+  OIDC_CLIENT_SECRET?: string;
   WEBAUTHN_RP_ID?: string;
   WEBAUTHN_RP_NAME?: string;
   WEBAUTHN_ALLOWED_ORIGINS?: string;
@@ -60,6 +64,8 @@ export interface User {
   yubikeyKey5: string | null;
   yubikeyNfc: boolean;
   apiKey: string | null;
+  // Zitadel/OIDC subject bound on first SSO login (link-only; never auto-provisioned).
+  ssoSubject?: string | null;
   createdAt: string;
   updatedAt: string;
 }

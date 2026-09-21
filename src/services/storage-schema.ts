@@ -28,6 +28,7 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'ALTER TABLE users ADD COLUMN yubikey_key5 TEXT',
   'ALTER TABLE users ADD COLUMN yubikey_nfc INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE users ADD COLUMN api_key TEXT',
+  'ALTER TABLE users ADD COLUMN sso_subject TEXT',
 
   'CREATE TABLE IF NOT EXISTS domain_settings (' +
   'user_id TEXT PRIMARY KEY, equivalent_domains TEXT NOT NULL DEFAULT \'[]\', custom_equivalent_domains TEXT NOT NULL DEFAULT \'[]\', excluded_global_equivalent_domains TEXT NOT NULL DEFAULT \'[]\', updated_at TEXT NOT NULL, ' +

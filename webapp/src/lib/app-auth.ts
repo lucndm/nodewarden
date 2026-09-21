@@ -1,17 +1,4 @@
-import {
-  createAuthedFetch,
-  deriveLoginHashLocally,
-  getAccountPasskeyAssertionOptions,
-  getProfile,
-  loadProfileSnapshot,
-  loadSession,
-  loginWithAccountPasskeyAssertion,
-  loginWithPassword,
-  refreshAccessToken,
-  recoverTwoFactor,
-  registerAccount,
-  unlockVaultKey,
-} from '@/lib/api/auth';
+import { createAuthedFetch, deriveLoginHashLocally, getAccountPasskeyAssertionOptions, getProfile, loadProfileSnapshot, loadSession, loginWithAccountPasskeyAssertion, loginWithPassword, recoverTwoFactor, refreshAccessToken, registerAccount, saveProfileSnapshot, saveSession, unlockVaultKey } from '@/lib/api/auth';
 import {
   assertAccountPasskey,
   unlockVaultKeyWithAccountPasskeyPrf,
@@ -58,6 +45,7 @@ export interface BootstrapAppResult {
   profile: Profile | null;
   phase: AppPhase;
   needsBackgroundHydration?: boolean;
+  ssoEnabled?: boolean;
 }
 
 export interface InitialAppBootstrapState {
@@ -67,6 +55,7 @@ export interface InitialAppBootstrapState {
   jwtWarning: { reason: JwtUnsafeReason; minLength: number } | null;
   session: SessionState | null;
   phase: AppPhase;
+  ssoEnabled?: boolean;
 }
 
 export interface CompletedLogin {
@@ -249,7 +238,7 @@ function readWindowBootstrap(): WebBootstrapResponse {
   return raw && typeof raw === 'object' ? raw : {};
 }
 
-function normalizeBootstrapResponse(boot: WebBootstrapResponse): Pick<InitialAppBootstrapState, 'defaultKdfIterations' | 'registrationInviteRequired' | 'websiteIconsEnabled' | 'jwtWarning'> {
+function normalizeBootstrapResponse(boot: WebBootstrapResponse): Pick<InitialAppBootstrapState, 'defaultKdfIterations' | 'registrationInviteRequired' | 'websiteIconsEnabled' | 'jwtWarning' | 'ssoEnabled'> {
   const defaultKdfIterations = Number(boot.defaultKdfIterations || 600000);
   const registrationInviteRequired =
     typeof boot.registrationInviteRequired === 'boolean' ? boot.registrationInviteRequired : undefined;
@@ -267,6 +256,7 @@ function normalizeBootstrapResponse(boot: WebBootstrapResponse): Pick<InitialApp
     registrationInviteRequired,
     websiteIconsEnabled,
     jwtWarning,
+    ssoEnabled: boot.ssoEnabled === true,
   };
 }
 
@@ -325,8 +315,46 @@ function resolveUnauthenticatedPhase(registrationInviteRequired: boolean | undef
   return registrationInviteRequired === false ? 'register' : fallback;
 }
 
+/**
+ * SSO landing helper: exchanges the HttpOnly web refresh cookie (set by the
+ * Zitadel callback) for an access token and a locked session. Returns null
+ * when there is no valid cookie (normal unauthenticated visit).
+ */
+async function trySilentSsoSession(): Promise<{ session: SessionState; profile: Profile } | null> {
+  let response: Response;
+  try {
+    response = await fetch('/identity/connect/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-NodeWarden-Web-Session': '1',
+        Accept: 'application/json',
+      },
+      credentials: 'include',
+      body: new URLSearchParams({ grant_type: 'refresh_token', client_id: 'web' }).toString(),
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  const token = (await response.json().catch(() => null)) as TokenSuccess | null;
+  if (!token?.access_token) return null;
+  const claims = decodeAccessTokenClaims(token.access_token);
+  const email = String(claims.email || '').trim().toLowerCase();
+  if (!email) return null;
+  const profile = buildTransientProfile(token, email, loadProfileSnapshot(email));
+  const session: SessionState = {
+    accessToken: token.access_token,
+    email,
+    authMode: 'web-cookie',
+  };
+  saveSession(session);
+  saveProfileSnapshot(profile);
+  return { session, profile };
+}
+
 export function readInitialAppBootstrapState(): InitialAppBootstrapState {
-  const { defaultKdfIterations, registrationInviteRequired, websiteIconsEnabled, jwtWarning } = normalizeBootstrapResponse(readWindowBootstrap());
+  const { defaultKdfIterations, registrationInviteRequired, websiteIconsEnabled, jwtWarning, ssoEnabled } = normalizeBootstrapResponse(readWindowBootstrap());
   setWebsiteIconsEnabled(websiteIconsEnabled);
   const session = loadSession();
   const hasInviteCode = !!readInviteCodeFromUrl();
@@ -338,6 +366,7 @@ export function readInitialAppBootstrapState(): InitialAppBootstrapState {
     websiteIconsEnabled,
     jwtWarning,
     session,
+    ssoEnabled,
     phase: jwtWarning ? 'login' : session ? 'locked' : resolveUnauthenticatedPhase(registrationInviteRequired, unauthenticatedPhase),
   };
 }
@@ -364,12 +393,32 @@ export async function bootstrapAppSession(initial: InitialAppBootstrapState = re
   }
 
   const loaded = initial.session;
+  const ssoEnabled = remoteBoot.ssoEnabled === true || initial.ssoEnabled === true;
   if (!loaded) {
+    // SSO landing: the Zitadel callback already set the web refresh cookie.
+    // Try a silent refresh before falling back to the login screen.
+    if (ssoEnabled) {
+      const silent = await trySilentSsoSession();
+      if (silent) {
+        return {
+          defaultKdfIterations,
+          registrationInviteRequired,
+          websiteIconsEnabled,
+          jwtWarning: null,
+          ssoEnabled,
+          session: silent.session,
+          profile: silent.profile,
+          phase: 'locked' as AppPhase,
+          needsBackgroundHydration: true,
+        };
+      }
+    }
     return {
       defaultKdfIterations,
       registrationInviteRequired,
       websiteIconsEnabled,
       jwtWarning: null,
+      ssoEnabled,
       session: null,
       profile: null,
       phase: resolveUnauthenticatedPhase(registrationInviteRequired, initial.phase),

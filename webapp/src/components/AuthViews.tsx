@@ -28,6 +28,9 @@ interface AuthViewsProps {
   unlockReady: boolean;
   unlockPreparing: boolean;
   sessionRefreshError?: string;
+  ssoEnabled?: boolean;
+  ssoErrorText?: string | null;
+  onSsoLogin?: () => void;
   loginValues: LoginValues;
   pendingPasskeyPasswordEmail?: string | null;
   passkeyPassword: string;
@@ -293,6 +296,18 @@ export default function AuthViews(props: AuthViewsProps) {
           }}
         >
           <OfflineModeNotice />
+          {!passkeyPasswordPending && props.ssoErrorText ? (
+            <p className="muted standalone-muted" role="alert">{props.ssoErrorText}</p>
+          ) : null}
+          {!passkeyPasswordPending && props.ssoEnabled ? (
+            <>
+              <button type="button" className="btn btn-secondary full" onClick={props.onSsoLogin} disabled={loginBusy}>
+                <LogIn size={16} className="btn-icon" />
+                {t('txt_sso_continue')}
+              </button>
+              <div className="or">{t('txt_or')}</div>
+            </>
+          ) : null}
           {passkeyPasswordPending ? (
             <>
               <p className="muted standalone-muted">{props.pendingPasskeyPasswordEmail}</p>
