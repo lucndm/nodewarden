@@ -26,7 +26,8 @@ export interface OidcIdTokenClaims {
 
 /** Returns the OIDC config when all three env values are present, else null. */
 export function getOidcConfig(env: Env): OidcConfig | null {
-  const issuer = String(env.OIDC_ISSUER || '').trim().replace(/\/+$/, '');
+  let issuer = String(env.OIDC_ISSUER || '').trim();
+  while (issuer.endsWith('/')) issuer = issuer.slice(0, -1);
   const clientId = String(env.OIDC_CLIENT_ID || '').trim();
   const clientSecret = String(env.OIDC_CLIENT_SECRET || '').trim();
   if (!issuer || !clientId || !clientSecret) return null;

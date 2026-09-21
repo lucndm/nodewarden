@@ -74,7 +74,6 @@ export default function PasswordGeneratorPage(props: PasswordGeneratorPageProps 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<readonly GeneratorHistoryEntry[]>(() => getGeneratorHistory());
   const forwardedMode = settings.mode === 'email' && settings.email.type === 'forwarded';
-  const serverSettingsReady = props.authedFetch && props.session?.symEncKey && props.session?.symMacKey;
 
   const generated = useMemo(() => {
     if (settings.mode === 'sshKey') return sshKey?.fingerprint || '';
