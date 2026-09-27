@@ -145,6 +145,16 @@ export default function VaultEditor(props: VaultEditorProps) {
   const [totpQrOpen, setTotpQrOpen] = useState(false);
   const [totpQrStatus, setTotpQrStatus] = useState('');
   const [totpQrBusy, setTotpQrBusy] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+
+  const commitTagInput = () => {
+    const tag = tagInput.trim().slice(0, 64);
+    setTagInput('');
+    if (!tag) return;
+    const exists = props.draft.tags.some((existing) => existing.toLowerCase() === tag.toLowerCase());
+    if (exists || props.draft.tags.length >= 24) return;
+    props.onUpdateDraft({ tags: [...props.draft.tags, tag] });
+  };
   useDialogLifecycle(totpQrOpen, () => setTotpQrOpen(false));
 
   const stopTotpQrScanner = () => {
@@ -385,6 +395,40 @@ export default function VaultEditor(props: VaultEditorProps) {
               ))}
             </select>
           </label>
+          <div className="field">
+            <span>{t('txt_tags')}</span>
+            <div className="tag-input-wrap">
+              {props.draft.tags.map((tag) => (
+                <span key={tag} className="tag-chip">
+                  {tag}
+                  <button
+                    type="button"
+                    className="tag-chip-remove"
+                    title={t('txt_delete')}
+                    aria-label={`${t('txt_delete')}: ${tag}`}
+                    onClick={() => props.onUpdateDraft({ tags: props.draft.tags.filter((existing) => existing !== tag) })}
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
+              <input
+                className="tag-input"
+                value={tagInput}
+                placeholder={t('txt_add_tag')}
+                onInput={(e) => setTagInput((e.currentTarget as HTMLInputElement).value)}
+                onKeyDown={(e) => {
+                  if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ',') {
+                    e.preventDefault();
+                    commitTagInput();
+                  } else if ((e as KeyboardEvent).key === 'Backspace' && !tagInput && props.draft.tags.length > 0) {
+                    props.onUpdateDraft({ tags: props.draft.tags.slice(0, -1) });
+                  }
+                }}
+                onBlur={commitTagInput}
+              />
+            </div>
+          </div>
         </div>
         <label className="field">
           <span>{t('txt_name')}</span>

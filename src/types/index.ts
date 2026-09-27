@@ -272,6 +272,8 @@ export interface Cipher {
   passwordHistory: PasswordHistory[] | null;
   reprompt: number;
   key: string | null;
+  /** Plaintext user-defined labels for vault organization (NodeWarden web vault feature). */
+  tags?: string[] | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;

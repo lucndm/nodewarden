@@ -805,6 +805,8 @@ const ru: Record<string, string> = {
   "txt_next": "Далее",
   "txt_no": "Нет",
   "txt_no_devices_found": "Устройства не найдены.",
+  "txt_tags": "Метки",
+  "txt_add_tag": "Добавить метку…",
   "txt_no_folder": "Нет папки",
   "txt_no_invites_found": "Приглашения не найдены.",
   "txt_no_items": "Нет товаров",

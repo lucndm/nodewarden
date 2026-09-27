@@ -27,7 +27,8 @@ export type SidebarFilter =
   | { kind: 'trash' }
   | { kind: 'duplicates' }
   | { kind: 'type'; value: TypeFilter }
-  | { kind: 'folder'; folderId: string | null };
+  | { kind: 'folder'; folderId: string | null }
+  | { kind: 'tag'; tag: string };
 
 interface TypeOption {
   type: number;
@@ -485,6 +486,7 @@ export function createEmptyDraft(type: number): VaultDraft {
     folderId: '',
     notes: '',
     reprompt: false,
+    tags: [],
     loginUsername: '',
     loginPassword: '',
     loginTotp: '',
@@ -563,6 +565,7 @@ export function draftFromCipher(cipher: Cipher): VaultDraft {
   draft.folderId = cipher.folderId || '';
   draft.notes = cipher.decNotes || '';
   draft.reprompt = Number(cipher.reprompt || 0) === 1;
+  draft.tags = Array.isArray(cipher.tags) ? cipher.tags.map((tag) => String(tag || '').trim()).filter(Boolean) : [];
 
   if (cipher.login) {
     draft.loginUsername = cipher.login.decUsername || '';

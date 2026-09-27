@@ -805,6 +805,8 @@ const de: Record<string, string> = {
   "txt_next": "Weiter",
   "txt_no": "Nein",
   "txt_no_devices_found": "Keine Geräte gefunden.",
+  "txt_tags": "Schlagwörter",
+  "txt_add_tag": "Tag hinzufügen…",
   "txt_no_folder": "Kein Ordner",
   "txt_no_invites_found": "Keine Einladungen gefunden.",
   "txt_no_items": "Keine Einträge",

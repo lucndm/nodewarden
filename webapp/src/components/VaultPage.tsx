@@ -417,6 +417,10 @@ export default function VaultPage(props: VaultPageProps) {
             return false;
           }
         }
+        if (sidebarFilter.kind === 'tag') {
+          const tags = Array.isArray(cipher.tags) ? cipher.tags : [];
+          if (!tags.includes(sidebarFilter.tag)) return false;
+        }
       }
       if (!searchQuery) return true;
       return !!meta?.searchText.includes(searchQuery);
@@ -477,10 +481,26 @@ export default function VaultPage(props: VaultPageProps) {
     return ids;
   }, [filteredCiphers]);
 
+  const tagSummary = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const cipher of props.ciphers) {
+      if (!isCipherVisibleInNormalVault(cipher)) continue;
+      for (const rawTag of Array.isArray(cipher.tags) ? cipher.tags : []) {
+        const tag = String(rawTag || '').trim();
+        if (!tag) continue;
+        counts.set(tag, (counts.get(tag) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => nameCollator.compare(a[0], b[0]))
+      .map(([tag, count]) => ({ tag, count }));
+  }, [props.ciphers, nameCollator]);
+
   const sidebarFilterKey = useMemo(() => {
     if (sidebarFilter.kind === 'folder') return `folder:${sidebarFilter.folderId ?? 'none'}`;
     if (sidebarFilter.kind === 'type') return `type:${sidebarFilter.value}`;
     if (sidebarFilter.kind === 'duplicates') return `duplicates:${duplicateMode}`;
+    if (sidebarFilter.kind === 'tag') return `tag:${sidebarFilter.tag}`;
     return sidebarFilter.kind;
   }, [sidebarFilter, duplicateMode]);
 
@@ -1208,6 +1228,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
         )}
         <VaultSidebar
           folders={props.folders}
+          tags={tagSummary}
           sidebarFilter={sidebarFilter}
           busy={busy}
           isMobileLayout={isMobileLayout}

@@ -121,6 +121,67 @@
   @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap;
 }
 
+.tree-count {
+  @apply ml-auto shrink-0;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--muted);
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.tag-input-wrap {
+  @apply flex w-full flex-wrap items-center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #dbe3ee);
+  border-radius: var(--radius-md);
+  background: var(--surface, #fff);
+  cursor: text;
+}
+
+.tag-chip {
+  @apply inline-flex shrink-0 items-center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--primary-strong, #1d4ed8);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.tag-chip-remove {
+  @apply inline-flex cursor-pointer items-center justify-center border-0 bg-transparent p-0;
+  color: inherit;
+  opacity: 0.65;
+}
+
+.tag-chip-remove:hover {
+  opacity: 1;
+}
+
+.tag-chip-static {
+  padding: 1px 7px;
+}
+
+.tag-input {
+  @apply min-w-0 flex-1 border-0 bg-transparent;
+  outline: none;
+  font-size: var(--font-sm);
+  color: var(--text);
+  padding: 2px 0;
+}
+
+.list-tags {
+  @apply inline-flex flex-wrap items-center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
 .folder-row {
   @apply flex items-center gap-1.5;
 }

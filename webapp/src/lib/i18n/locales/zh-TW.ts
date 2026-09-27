@@ -808,6 +808,8 @@ const zhTW: Record<string, string> = {
   "txt_next": "下一頁",
   "txt_no": "否",
   "txt_no_devices_found": "未找到設備",
+  "txt_tags": "標籤",
+  "txt_add_tag": "新增標籤…",
   "txt_no_folder": "無文件夾",
   "txt_no_invites_found": "暫無邀請碼",
   "txt_no_items": "沒有項目",
