@@ -118,12 +118,18 @@ const ICON_UPSTREAM_TIMEOUT_MS = 2500;
 const ICON_MAX_BUFFER_BYTES = 256 * 1024;
 const BITWARDEN_DEFAULT_GLOBE_ICON_BYTES = 500;
 const BITWARDEN_DEFAULT_GLOBE_ICON_SHA256 = 'aaa64871332ad5b7d28fe8874efb19c2d9cc2f1e6de75d52b080b438225a0783';
+// Google s2 answers unknown domains with a constant 341-byte placeholder at
+// sz=64 (bytes differ per request, so size is the only stable discriminator);
+// DuckDuckGo serves a byte-stable 1478-byte placeholder .ico.
+const GOOGLE_S2_DEFAULT_ICON_BYTES = 341;
+const DUCKDUCKGO_DEFAULT_ICON_BYTES = 1478;
+const DUCKDUCKGO_DEFAULT_ICON_SHA256 = 'e5db88ea2322863ca17817b99d60006c625a31cff0dad49cf05d3c6d16a75c17';
 
 type IconSource = {
   url: string;
   rejectImage?: {
     byteLength: number;
-    sha256: string;
+    sha256?: string;
   };
   headers?: HeadersInit;
 };
@@ -156,6 +162,15 @@ function getPositiveContentLength(headers: Headers): number | null {
   if (!raw) return null;
   const value = Number(raw);
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * True when the downloaded bytes are a known placeholder image: same size as
+ * the documented default and (when a reference hash is known) identical bytes.
+ */
+export async function matchesIconPlaceholder(bytes: ArrayBuffer, rejectImage?: { byteLength: number; sha256?: string }): Promise<boolean> {
+  if (!rejectImage || bytes.byteLength !== rejectImage.byteLength) return false;
+  return !rejectImage.sha256 || (await sha256Hex(bytes)) === rejectImage.sha256;
 }
 
 async function readIconBytes(response: Response, maxBytes: number): Promise<ArrayBuffer | null> {
@@ -234,6 +249,26 @@ async function handleWebsiteIcon(env: Env, host: string, fallbackMode: 'default'
       },
       headers: requestHeaders,
     },
+    {
+      url: `https://www.google.com/s2/favicons?domain=${encodedHost}&sz=64`,
+      rejectImage: {
+        byteLength: GOOGLE_S2_DEFAULT_ICON_BYTES,
+      },
+      headers: requestHeaders,
+    },
+    {
+      url: `https://icons.duckduckgo.com/ip3/${encodedHost}.ico`,
+      rejectImage: {
+        byteLength: DUCKDUCKGO_DEFAULT_ICON_BYTES,
+        sha256: DUCKDUCKGO_DEFAULT_ICON_SHA256,
+      },
+      headers: requestHeaders,
+    },
+    {
+      // Last resort for small/self-hosted sites none of the aggregators know.
+      url: `https://${normalizedHost}/favicon.ico`,
+      headers: requestHeaders,
+    },
   ];
 
   for (const source of upstreamSources) {
@@ -249,11 +284,7 @@ async function handleWebsiteIcon(env: Env, host: string, fallbackMode: 'default'
 
       const bytes = await readIconBytes(resp, ICON_MAX_BUFFER_BYTES);
       if (!bytes) continue;
-      if (
-        source.rejectImage &&
-        bytes.byteLength === source.rejectImage.byteLength &&
-        (await sha256Hex(bytes)) === source.rejectImage.sha256
-      ) {
+      if (await matchesIconPlaceholder(bytes, source.rejectImage)) {
         continue;
       }
 

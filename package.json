@@ -22,6 +22,7 @@
     "test:webauthn-connector": "node --test scripts/webauthn-connector.test.mjs && tsx --test scripts/webauthn-connector-headers.test.ts",
     "test:webauthn-connectors": "node --test scripts/webauthn-mobile-connector.test.mjs scripts/webauthn-connector.test.mjs && tsx --test scripts/webauthn-connector-headers.test.ts",
     "test:sso": "node --require ./scripts/register-sso-test-hooks.cjs --test scripts/sso-mobile-flow.test.ts",
+    "test:icons": "node --require ./scripts/register-sso-test-hooks.cjs --test scripts/website-icon.test.ts",
     "test:email-breach": "node --require ./scripts/register-sso-test-hooks.cjs --test scripts/email-breach-monitor.test.ts",
     "deploy": "wrangler deploy",
     "deploy:kv": "node scripts/ensure-kv.cjs && wrangler deploy -c wrangler.kv.toml",
