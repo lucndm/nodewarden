@@ -184,6 +184,11 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'created_at TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT, ' +
   'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',
   'CREATE INDEX IF NOT EXISTS idx_sso_codes_expires ON sso_authorization_codes(expires_at)',
+
+  // Per-account email breach monitoring results (Have I Been Pwned). Derived
+  // cache data, safe to rebuild — not part of the backup export contract.
+  'CREATE TABLE IF NOT EXISTS email_breach_cache (' +
+  'email_norm TEXT PRIMARY KEY, checked_at TEXT NOT NULL, status TEXT NOT NULL, breaches_json TEXT NOT NULL)',
 ];
 
 async function executeSchemaStatement(db: D1Database, statement: string): Promise<void> {

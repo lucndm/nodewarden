@@ -3,12 +3,15 @@ import { AlertTriangle, CheckCircle2, ExternalLink, Eye, EyeOff, RefreshCw, Scan
 import { Link } from 'wouter';
 import { maskSecret } from '@/components/vault/vault-page-helpers';
 import { getPasswordSecurityState, readPasswordSecurityState, startPasswordSecurityScan, subscribePasswordSecurityState } from '@/lib/password-security-cache';
+import { getEmailBreachStatus, type EmailBreachInfo, type EmailBreachStatusResponse } from '@/lib/api/auth';
+import type { AuthedFetch } from '@/lib/api/shared';
 import { t } from '@/lib/i18n';
 import type { Cipher } from '@/lib/types';
 
 interface PasswordSecurityPageProps {
   ciphers: Cipher[];
   loading: boolean;
+  authedFetch?: AuthedFetch | null;
 }
 
 type PasswordSecurityFilter = 'exposed' | 'reused' | 'weak' | 'all';
@@ -31,6 +34,9 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
   const [securityState, setSecurityState] = useState(() => getPasswordSecurityState(fingerprint));
   const [filter, setFilter] = useState<PasswordSecurityFilter>('all');
   const [revealedPasswordIds, setRevealedPasswordIds] = useState<Set<string>>(() => new Set());
+  const [emailBreach, setEmailBreach] = useState<EmailBreachStatusResponse | null>(null);
+  const [emailBreachLoading, setEmailBreachLoading] = useState(false);
+  const [emailBreachError, setEmailBreachError] = useState(false);
   useEffect(() => {
     setSecurityState(getPasswordSecurityState(fingerprint));
     setFilter('all');
@@ -40,6 +46,23 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
       if (next) setSecurityState(next);
     });
   }, [fingerprint]);
+
+  const loadEmailBreaches = async () => {
+    if (!props.authedFetch || emailBreachLoading) return;
+    setEmailBreachLoading(true);
+    setEmailBreachError(false);
+    try {
+      setEmailBreach(await getEmailBreachStatus(props.authedFetch));
+    } catch {
+      setEmailBreachError(true);
+    } finally {
+      setEmailBreachLoading(false);
+    }
+  };
+  useEffect(() => {
+    // Load once per page mount; the server throttles upstream checks itself.
+    void loadEmailBreaches();
+  }, []);
 
   const { report, scannedAt, scanning, progress, scanError } = securityState;
 
@@ -116,6 +139,40 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
 
       {scanError && <div className="password-security-notice warning card" role="alert"><Unplug size={16} />{t('txt_password_security_check_failed')}</div>}
 
+      {emailBreach?.enabled && (
+        <section className="password-security-results card" aria-label={t('txt_email_breach_title')}>
+          <div className="password-security-item-header">
+            <strong>{t('txt_email_breach_title')}</strong>
+            <button type="button" className="btn btn-secondary small" disabled={emailBreachLoading} onClick={() => void loadEmailBreaches()}>
+              {emailBreachLoading ? <RefreshCw size={14} className="btn-icon spin" /> : <RefreshCw size={14} className="btn-icon" />}
+              {t('txt_email_breach_refresh')}
+            </button>
+          </div>
+          <p className="password-security-email-breach-help">{t('txt_email_breach_description')}</p>
+          {emailBreachError && <div className="password-security-notice warning"><Unplug size={16} />{t('txt_email_breach_error')}</div>}
+          {!emailBreachError && emailBreach.status === 'invalid_key' && (
+            <div className="password-security-notice warning"><AlertTriangle size={16} />{t('txt_email_breach_invalid_key')}</div>
+          )}
+          {!emailBreachError && emailBreach.status === 'rate_limited' && (
+            <div className="password-security-notice warning"><Unplug size={16} />{t('txt_email_breach_rate_limited')}</div>
+          )}
+          {!emailBreachError && emailBreach.status === 'error' && (
+            <div className="password-security-notice warning"><Unplug size={16} />{t('txt_email_breach_error')}</div>
+          )}
+          {!emailBreachError && emailBreach.status === 'ok' && emailBreach.breaches.length === 0 && (
+            <div className="password-security-empty compact"><CheckCircle2 size={22} /><strong>{t('txt_email_breach_none')}</strong></div>
+          )}
+          {emailBreach.breaches.length > 0 && (
+            <div className="password-security-list">
+              {emailBreach.breaches.map((breach) => <EmailBreachRow key={breach.name} breach={breach} />)}
+            </div>
+          )}
+          {emailBreach.checkedAt && (
+            <p className="password-security-checked-at">{t('txt_email_breach_checked_at', { value: formatCheckedAt(Date.parse(emailBreach.checkedAt)) })}</p>
+          )}
+        </section>
+      )}
+
       {report && (
         <section className="password-security-results card">
           {report.unavailableCount > 0 && (
@@ -166,4 +223,29 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
 
 function SecurityMetric(props: { icon: preact.ComponentChildren; tone: 'danger' | 'warning' | 'primary'; label: string; value: string | number; active: boolean; disabled: boolean; onClick: () => void }) {
   return <button type="button" className={`password-security-metric ${props.tone}`} aria-pressed={props.active} disabled={props.disabled} onClick={props.onClick}><span>{props.icon}</span><div><strong>{props.value}</strong><small>{props.label}</small></div></button>;
+}
+
+function EmailBreachRow(props: { breach: EmailBreachInfo }) {
+  const breach = props.breach;
+  const detailUrl = breach.name ? `https://haveibeenpwned.com/PwnedWebsites#${encodeURIComponent(breach.name)}` : null;
+  return <article className="password-security-item">
+    <div className="password-security-item-main">
+      <div className="password-security-item-header">
+        <strong>{breach.title || breach.name}</strong>
+        <div className="password-security-badges">
+          <span className="risk-badge danger">{t('txt_email_breach_affected_accounts', { count: breach.pwnCount.toLocaleString() })}</span>
+          {!breach.verified && <span className="risk-badge muted">{t('txt_email_breach_unverified')}</span>}
+        </div>
+      </div>
+      <span className="password-security-password">
+        {t('txt_email_breach_date', { date: breach.breachDate })}
+        {breach.dataClasses.length > 0 && ` · ${t('txt_email_breach_data_classes', { classes: breach.dataClasses.join(', ') })}`}
+      </span>
+    </div>
+    <div className="password-security-item-actions">
+      {detailUrl && <a href={detailUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary small">
+        <ExternalLink size={14} className="btn-icon" />{t('txt_email_breach_details')}
+      </a>}
+    </div>
+  </article>;
 }

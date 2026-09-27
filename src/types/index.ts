@@ -17,6 +17,9 @@ export interface Env {
   OIDC_ISSUER?: string;
   OIDC_CLIENT_ID?: string;
   OIDC_CLIENT_SECRET?: string;
+  // Have I Been Pwned subscription key. Enables scheduled email-breach
+  // monitoring surfaced in the web vault password-health page.
+  HIBP_API_KEY?: string;
   WEBAUTHN_RP_ID?: string;
   WEBAUTHN_RP_NAME?: string;
   WEBAUTHN_ALLOWED_ORIGINS?: string;

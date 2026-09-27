@@ -222,7 +222,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             </div>
           )}
           <Suspense fallback={<RouteContentFallback />}>
-            <PasswordSecurityPage ciphers={props.decryptedCiphers} loading={props.ciphersLoading} />
+            <PasswordSecurityPage ciphers={props.decryptedCiphers} loading={props.ciphersLoading} authedFetch={props.authedFetch} />
           </Suspense>
         </div>
       </Route>

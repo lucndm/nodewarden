@@ -1457,7 +1457,20 @@ const fi: Record<string, string> = {
 };
 
 Object.assign(fi, {
-  "nav_password_security": "Salasanasuojaus", "txt_password_security": "Salasanojen turvatarkistus", "txt_password_security_privacy": "Salasanat tarkistetaan paikallisesti. Vain anonyymi hajautteen alku lähetetään vuototietokantaan tarkistuksen alkaessa.", "txt_check_password_security": "Aloita tarkistus", "txt_checking_password_security": "Tarkistetaan", "txt_recheck_password_security": "Tarkista uudelleen", "txt_password_security_ready": "Holvisi on valmis turvatarkistukseen.", "txt_password_security_no_login": "Tarkistettavia kirjautumissalasanoja ei ole.", "txt_password_security_manual": "Tarkistus käynnistyy vain valinnastasi. Tulokset säilyvät vain tällä sivulla.", "txt_password_security_no_login_help": "Lisää kirjautuminen salasanalla ja palaa sitten tarkistamaan se.", "txt_exposed_passwords": "Vuotaneet", "txt_reused_passwords": "Uudelleenkäytetyt", "txt_weak_passwords": "Heikot", "txt_passwords_checked": "Tarkistettu", "txt_password_security_unavailable": "{count} salasanatarkistusta ei tavoittanut vuototietokantaa. Niitä ei merkitä turvallisiksi.", "txt_password_security_not_checked": "Ei tarkistettu", "txt_password_exposed_count": "Löytyi {count} vuodosta", "txt_password_reused_count": "Käytetty {count} kertaa", "txt_weak_password": "Heikko salasana", "txt_no_password_risks": "Salasanariskejä ei löytynyt", "txt_open_vault": "Avaa holvi", "txt_check_password_breach": "Tarkista vuoto", "txt_password_not_found_in_breaches": "Ei löytynyt vuototietokannasta", "txt_password_security_check_failed": "Vuototarkistusta ei voitu suorittaa."
+  "nav_password_security": "Salasanasuojaus", "txt_password_security": "Salasanojen turvatarkistus", "txt_password_security_privacy": "Salasanat tarkistetaan paikallisesti. Vain anonyymi hajautteen alku lähetetään vuototietokantaan tarkistuksen alkaessa.", "txt_check_password_security": "Aloita tarkistus", "txt_checking_password_security": "Tarkistetaan", "txt_recheck_password_security": "Tarkista uudelleen", "txt_password_security_ready": "Holvisi on valmis turvatarkistukseen.", "txt_password_security_no_login": "Tarkistettavia kirjautumissalasanoja ei ole.", "txt_password_security_manual": "Tarkistus käynnistyy vain valinnastasi. Tulokset säilyvät vain tällä sivulla.", "txt_password_security_no_login_help": "Lisää kirjautuminen salasanalla ja palaa sitten tarkistamaan se.", "txt_exposed_passwords": "Vuotaneet", "txt_reused_passwords": "Uudelleenkäytetyt", "txt_weak_passwords": "Heikot", "txt_passwords_checked": "Tarkistettu", "txt_password_security_unavailable": "{count} salasanatarkistusta ei tavoittanut vuototietokantaa. Niitä ei merkitä turvallisiksi.", "txt_password_security_not_checked": "Ei tarkistettu", "txt_password_exposed_count": "Löytyi {count} vuodosta", "txt_password_reused_count": "Käytetty {count} kertaa", "txt_weak_password": "Heikko salasana", "txt_no_password_risks": "Salasanariskejä ei löytynyt", "txt_open_vault": "Avaa holvi", "txt_check_password_breach": "Tarkista vuoto", "txt_password_not_found_in_breaches": "Ei löytynyt vuototietokannasta", "txt_password_security_check_failed": "Vuototarkistusta ei voitu suorittaa.",
+  "txt_email_breach_title": "Sähköpostivuotojen valvonta",
+  "txt_email_breach_description": "Tarkistaa tilisi sähköpostiosoitteen tunnetuista tietovuodoista Have I Been Pwned -palvelun avulla. Salasanojasi ei lähetetä missään.",
+  "txt_email_breach_refresh": "Tarkista uudelleen",
+  "txt_email_breach_none": "Mitkään tunnetut vuodot eivät koske sähköpostiosoitettasi.",
+  "txt_email_breach_checked_at": "Tarkistettu: {value}",
+  "txt_email_breach_affected_accounts": "Vaikuttaa {count} tiliin",
+  "txt_email_breach_date": "Vuodon päivä: {date}",
+  "txt_email_breach_data_classes": "Vuotaneet tiedot: {classes}",
+  "txt_email_breach_details": "Lisätietoja",
+  "txt_email_breach_unverified": "Vahvistamaton",
+  "txt_email_breach_invalid_key": "Have I Been Pwned -API-avain on virheellinen tai vanhentunut. Ota yhteyttä ylläpitäjään.",
+  "txt_email_breach_rate_limited": "Vuotohaku on nopeusrajoitettu. Yritä myöhemmin uudelleen.",
+  "txt_email_breach_error": "Vuotohaku epäonnistui. Yritä myöhemmin uudelleen.",
 });
 
 Object.assign(fi, { "txt_password_security_last_checked": "Tarkistettu viimeksi: {value}" });

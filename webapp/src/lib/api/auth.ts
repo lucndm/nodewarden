@@ -1194,3 +1194,27 @@ export async function rotateApiKey(authedFetch: AuthedFetch, masterPasswordHash:
   const body = (await parseJson<{ apiKey?: string }>(resp)) || {};
   return String(body.apiKey || '');
 }
+
+export interface EmailBreachInfo {
+  name: string;
+  title: string;
+  domain: string;
+  breachDate: string;
+  pwnCount: number;
+  dataClasses: string[];
+  verified: boolean;
+}
+
+export interface EmailBreachStatusResponse {
+  object: 'emailBreaches';
+  enabled: boolean;
+  status: 'ok' | 'invalid_key' | 'rate_limited' | 'error' | null;
+  checkedAt: string | null;
+  breaches: EmailBreachInfo[];
+}
+
+export async function getEmailBreachStatus(authedFetch: AuthedFetch): Promise<EmailBreachStatusResponse> {
+  const resp = await authedFetch('/api/security/email-breaches');
+  if (!resp.ok) throw new Error(t('txt_email_breach_error'));
+  return (await parseJson<EmailBreachStatusResponse>(resp)) || { object: 'emailBreaches', enabled: false, status: null, checkedAt: null, breaches: [] };
+}
