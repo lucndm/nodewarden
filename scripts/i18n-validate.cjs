@@ -27,6 +27,8 @@ const intentionallyEnglishKeys = new Set([
   // "Provider" is a loanword in some locales; the other names brand products.
   'txt_generator_provider',
   'txt_generator_provider_simplelogin',
+  // "Details" is the same word in German (and several other locales).
+  'txt_email_breach_details',
 ]);
 const intentionallyEnglishPrefixes = [
   'txt_log_action_',

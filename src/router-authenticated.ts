@@ -2,6 +2,7 @@ import type { Env, User } from './types';
 import { errorResponse, jsonResponse, unsupportedResponse } from './utils/response';
 import { handleGetGeneratorSettings, handleUpdateGeneratorSettings } from './handlers/generator-settings';
 import { handleSsoLinkStart, handleSsoStatus, handleSsoUnlink } from './handlers/identity';
+import { handleGetEmailBreaches } from './handlers/email-breach';
 import {
   handleGetProfile,
   handleUpdateProfile,
@@ -482,6 +483,10 @@ export async function handleAuthenticatedRoute(
     if (method === 'GET') return handleSsoStatus(env, userId);
     if (method === 'DELETE') return handleSsoUnlink(request, env, userId);
     return null;
+  }
+
+  if (path === '/api/security/email-breaches' && method === 'GET') {
+    return handleGetEmailBreaches(request, env, userId);
   }
 
   if ((path === '/api/settings/sso/link' || path === '/settings/sso/link') && method === 'POST') {

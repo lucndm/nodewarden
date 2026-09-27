@@ -5,6 +5,7 @@ import { handleRequest } from './router';
 import { StorageService } from './services/storage';
 import { applyCors, jsonResponse } from './utils/response';
 import { runScheduledBackupIfDue } from './handlers/backup';
+import { sweepEmailBreachCaches } from './services/email-breach-monitor';
 import {
   isBackendRequestPath,
   isWebVaultHidden,
@@ -121,6 +122,9 @@ export default {
     }
     ctx.waitUntil(runScheduledBackupIfDue(env).catch((error) => {
       console.error('Scheduled backup failed:', error);
+    }));
+    ctx.waitUntil(sweepEmailBreachCaches(env).catch((error) => {
+      console.error('Scheduled email breach sweep failed:', error);
     }));
   },
 };
