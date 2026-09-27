@@ -117,6 +117,7 @@ function buildEmptyImportDraft(type: number): VaultDraft {
     folderId: '',
     notes: '',
     reprompt: false,
+    tags: [],
     loginUsername: '',
     loginPassword: '',
     loginTotp: '',

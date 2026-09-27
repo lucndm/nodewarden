@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Star,
   StickyNote,
+  Tag,
   Trash2,
   X,
 } from 'lucide-preact';
@@ -30,6 +31,7 @@ import { getFolderSortOptions, type SidebarFilter, type VaultSortMode } from '@/
 
 interface VaultSidebarProps {
   folders: Folder[];
+  tags: Array<{ tag: string; count: number }>;
   sidebarFilter: SidebarFilter;
   busy: boolean;
   isMobileLayout: boolean;
@@ -236,6 +238,24 @@ export default function VaultSidebar(props: VaultSidebarProps) {
           </div>
         ))}
       </div>
+
+      {props.tags.length > 0 && (
+        <div className="sidebar-block">
+          <div className="sidebar-title">{t('txt_tags')}</div>
+          {props.tags.map(({ tag, count }) => (
+            <button
+              key={tag}
+              type="button"
+              className={`tree-btn ${props.sidebarFilter.kind === 'tag' && props.sidebarFilter.tag === tag ? 'active' : ''}`}
+              onClick={() => props.onChangeFilter({ kind: 'tag', tag })}
+            >
+              <Tag size={14} className="tree-icon" />
+              <span className="tree-label" title={tag}>{tag}</span>
+              <span className="tree-count">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

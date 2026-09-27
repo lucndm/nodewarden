@@ -808,6 +808,8 @@ const zhCN: Record<string, string> = {
   "txt_next": "下一页",
   "txt_no": "否",
   "txt_no_devices_found": "未找到设备",
+  "txt_tags": "标签",
+  "txt_add_tag": "添加标签…",
   "txt_no_folder": "无文件夹",
   "txt_no_invites_found": "暂无邀请码",
   "txt_no_items": "没有项目",

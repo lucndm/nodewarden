@@ -805,6 +805,8 @@ const it: Record<string, string> = {
   "txt_next": "Avanti",
   "txt_no": "No",
   "txt_no_devices_found": "Nessun dispositivo trovato.",
+  "txt_tags": "Etichette",
+  "txt_add_tag": "Aggiungi etichetta…",
   "txt_no_folder": "Nessuna Cartella",
   "txt_no_invites_found": "Nessun invito trovato.",
   "txt_no_items": "Nessun elemento",

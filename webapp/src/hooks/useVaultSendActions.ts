@@ -110,6 +110,7 @@ function optimisticCipherFromDraft(draft: VaultDraft, current?: Cipher | null): 
     folderId: draft.folderId || null,
     favorite: !!draft.favorite,
     reprompt: draft.reprompt ? 1 : 0,
+    tags: Array.isArray(draft.tags) ? draft.tags.filter(Boolean) : [],
     name: draft.name || '',
     notes: draft.notes || '',
     decName: draft.name || '',

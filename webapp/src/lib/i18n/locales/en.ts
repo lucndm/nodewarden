@@ -858,6 +858,8 @@ const en: Record<string, string> = {
   "txt_next": "Next",
   "txt_no": "No",
   "txt_no_devices_found": "No devices found.",
+  "txt_tags": "Tags",
+  "txt_add_tag": "Add tag…",
   "txt_no_folder": "No Folder",
   "txt_no_invites_found": "No invites found.",
   "txt_no_items": "No items",

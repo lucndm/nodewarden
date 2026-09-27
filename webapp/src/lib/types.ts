@@ -243,6 +243,7 @@ export interface Cipher {
   folderId?: string | null;
   favorite?: boolean;
   reprompt?: number;
+  tags?: string[] | null;
   name?: string | null;
   notes?: string | null;
   key?: string | null;
@@ -330,6 +331,7 @@ export interface VaultDraft {
   folderId: string;
   notes: string;
   reprompt: boolean;
+  tags: string[];
   loginUsername: string;
   loginPassword: string;
   loginTotp: string;

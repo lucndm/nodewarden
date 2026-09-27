@@ -805,6 +805,8 @@ const fi: Record<string, string> = {
   "txt_next": "Seuraava",
   "txt_no": "Ei",
   "txt_no_devices_found": "Laitteita ei löytynyt.",
+  "txt_tags": "Tunnisteet",
+  "txt_add_tag": "Lisää tunniste…",
   "txt_no_folder": "Ei kansiota",
   "txt_no_invites_found": "Kutsuja ei löytynyt.",
   "txt_no_items": "Ei nimikkeitä",

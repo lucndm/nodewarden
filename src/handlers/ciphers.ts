@@ -301,6 +301,31 @@ const PASSPORT_ENCRYPTED_KEYS = [
   'expirationDate',
 ] as const;
 
+const CIPHER_TAG_MAX_COUNT = 24;
+const CIPHER_TAG_MAX_LENGTH = 64;
+
+/**
+ * Normalizes the user-defined tag list stored on a cipher: trims entries,
+ * drops empties, dedupes case-insensitively, caps the list. Plaintext by
+ * design (server-side metadata); official Bitwarden clients never send this
+ * field and ignore it in responses.
+ */
+export function normalizeCipherTags(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value) {
+    const tag = String(raw ?? '').trim().slice(0, CIPHER_TAG_MAX_LENGTH);
+    if (!tag) continue;
+    const dedupeKey = tag.toLocaleLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    out.push(tag);
+    if (out.length >= CIPHER_TAG_MAX_COUNT) break;
+  }
+  return out.length ? out : null;
+}
+
 function normalizeCipherForStorage(cipher: Cipher): Cipher {
   cipher.login = normalizeCipherLoginForStorage(cipher.login);
   cipher.sshKey = normalizeCipherSshKeyForCompatibility(cipher.sshKey);
@@ -995,6 +1020,7 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
   cipher.passwordHistory = createPasswordHistory.present ? (createPasswordHistory.value ?? null) : (cipher.passwordHistory ?? null);
   const createFields = getAliasedProp(cipherData, ['fields', 'Fields']);
   cipher.fields = createFields.present ? (createFields.value ?? null) : (cipher.fields ?? null);
+  cipher.tags = normalizeCipherTags(cipherData.tags ?? cipherData.Tags);
   normalizeCipherForStorage(cipher);
   const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
   if (compatibilityError) return errorResponse(compatibilityError, 400);
@@ -1105,6 +1131,16 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
   // Some clients omit cleared values, so merge fallback must not resurrect them.
   cipher.notes = readNullableFullUpdateField<string>(cipherData, ['notes', 'Notes']);
   cipher.fields = readNullableFullUpdateField<Cipher['fields']>(cipherData, ['fields', 'Fields']);
+  // Tags keep last-writer semantics only when the client actually sends the
+  // field; official Bitwarden clients omit it entirely, so their edits must
+  // never wipe web-vault tags.
+  const tagsPresent = Object.prototype.hasOwnProperty.call(cipherData, 'tags')
+    || Object.prototype.hasOwnProperty.call(cipherData, 'Tags');
+  cipher.tags = normalizeCipherTags(
+    tagsPresent
+      ? (cipherData.tags ?? cipherData.Tags)
+      : existingCipher.tags
+  );
   normalizeCipherForStorage(cipher);
   const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
   if (compatibilityError) return errorResponse(compatibilityError, 400);

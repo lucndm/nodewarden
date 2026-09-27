@@ -144,6 +144,14 @@ const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) 
             <span className="list-title-text">{props.cipher.decName || t('txt_no_name')}</span>
           </span>
           <span className="list-sub" title={props.subtitle}>{props.subtitle}</span>
+          {Array.isArray(props.cipher.tags) && props.cipher.tags.length > 0 && (
+            <span className="list-tags">
+              {props.cipher.tags.slice(0, 3).map((tag) => (
+                <span key={tag} className="tag-chip tag-chip-static">{tag}</span>
+              ))}
+              {props.cipher.tags.length > 3 && <span className="tag-chip tag-chip-static">+{props.cipher.tags.length - 3}</span>}
+            </span>
+          )}
         </div>
       </button>
     </div>

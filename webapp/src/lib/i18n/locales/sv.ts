@@ -805,6 +805,8 @@ const sv: Record<string, string> = {
   "txt_next": "Nästa",
   "txt_no": "Nej",
   "txt_no_devices_found": "Inga enheter hittades.",
+  "txt_tags": "Taggar",
+  "txt_add_tag": "Lägg till tagg…",
   "txt_no_folder": "Ingen mapp",
   "txt_no_invites_found": "Inga inbjudningar hittades.",
   "txt_no_items": "Inga objekt",
