@@ -25,6 +25,23 @@ if (!(globalThis as unknown as { crypto?: unknown }).crypto) {
   (globalThis as unknown as { crypto: Crypto }).crypto = webcrypto as unknown as Crypto;
 }
 
+// RateLimitService stores fixed-window counters in the Workers Cache API,
+// which has no Node equivalent; an in-memory stand-in keeps the semantics.
+const rateLimitCacheStore = new Map<string, string>();
+if (!(globalThis as unknown as { caches?: unknown }).caches) {
+  (globalThis as unknown as { caches: unknown }).caches = {
+    open: async () => ({
+      match: async (request: Request) => {
+        const value = rateLimitCacheStore.get(request.url);
+        return value === undefined ? undefined : new Response(value);
+      },
+      put: async (request: Request, response: Response) => {
+        rateLimitCacheStore.set(request.url, await response.text());
+      },
+    }),
+  };
+}
+
 import {
   handleSsoPrevalidate,
   handleSsoAuthorize,
@@ -699,6 +716,76 @@ test('authorize rejects invalid client requests but accepts the mobile loopback 
   const loopbackAuthorizeUrl = new URL(loopback.headers.get('Location')!);
   assert.equal(loopbackAuthorizeUrl.pathname, '/oauth2/v1/authorize');
   assert.equal(loopbackAuthorizeUrl.searchParams.get('code_challenge_method'), 'S256');
+});
+
+test('backslash redirect_uri variants are rejected (open-redirect regression)', async (t) => {
+  const ctx = await setup();
+  t.after(() => ctx.restoreFetch());
+  const pair = await createPkcePair();
+
+  // NW-SSO-REDIRECT-1: "/\evil.com" starts with a single slash so it used to
+  // pass the relative-shape check, then folded off-origin at the callback,
+  // leaking the freshly minted code to an attacker host.
+  for (const redirectUri of ['/%5Cevil.example.test/cb', '/%2Fevil.example.test', '\\\\evil.example.test']) {
+    const response = await startMobileAuthorize(ctx.env, pair, {
+      redirectUri: decodeURIComponent(redirectUri),
+    });
+    assert.equal(response.status, 400, `redirect_uri ${redirectUri} must be rejected`);
+  }
+
+  // Legitimate relative and same-origin redirects keep working.
+  const relative = await startMobileAuthorize(ctx.env, pair, { redirectUri: '/sso-connector.html' });
+  assert.equal(relative.status, 302);
+  const sameOrigin = await startMobileAuthorize(ctx.env, pair, {
+    redirectUri: 'https://vault.example.test/sso-connector.html',
+  });
+  assert.equal(sameOrigin.status, 302);
+});
+
+test('callback sink refuses off-origin redirect even for a sealed backslash URI', async (t) => {
+  const ctx = await setup();
+  t.after(() => ctx.restoreFetch());
+  const pair = await createPkcePair();
+
+  // Defense-in-depth: hand-craft a validly sealed client_sso state whose
+  // clientRedirectUri is the backslash variant, as if an older build had
+  // accepted it at authorize. The callback must refuse to redirect off-origin.
+  const nonce = 'sink-test-nonce';
+  const statePayload = {
+    state: 'sink-test-state',
+    verifier: pair.verifier,
+    nonce,
+    exp: Date.now() + 60_000,
+    purpose: 'client_sso' as const,
+    clientId: 'mobile',
+    clientState: 'client-state-123',
+    clientRedirectUri: '/\\evil.example.test/cb',
+    clientCodeChallenge: pair.challenge,
+    clientCodeChallengeMethod: 'S256',
+  };
+  const body = Buffer.from(JSON.stringify(statePayload), 'utf8')
+    .toString('base64')
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll('=', '');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
+  const sealed = `${body}.${Buffer.from(signature).toString('base64').replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')}`;
+
+  ctx.idp.visitAuthorize(new URL(`https://idp.example.test/authorize?nonce=${nonce}`));
+  const callback = await handleSsoCallback(
+    new Request(`${VAULT_ORIGIN}/auth/sso/callback?code=${FakeIdp.idpCode}&state=${statePayload.state}`, {
+      headers: { Cookie: `nw_sso_state=${encodeURIComponent(sealed)}` },
+    }),
+    ctx.env
+  );
+  assert.equal(callback.status, 302);
+  const location = callback.headers.get('Location')!;
+  assert.ok(!/evil\.example\.test/.test(location), `must not redirect off-origin: ${location}`);
+  assert.ok(
+    location.startsWith('/?sso_error='),
+    `must fall back to the relative web error redirect: ${location}`
+  );
 });
 
 test('full mobile SSO login: authorize → IdP callback → deeplink code → token exchange', async (t) => {

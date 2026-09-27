@@ -23,6 +23,7 @@ import {
   buildTwoFactorPasskeyAssertionOptions,
 } from './account-passkeys';
 import { isAuthRequestExpired } from '../services/storage-auth-request-repo';
+import { deleteExpiredSsoAuthorizationCodes } from '../services/storage-sso-code-repo';
 import { createPasskeyUserVerificationToken } from '../utils/user-verification-token';
 import { constantTimeEquals, verifyApiKey } from '../utils/api-key';
 import { isYubiKeyEnabled, userYubiKeyPublicIds, verifyYubicoOtp, yubiKeyPublicIdFromOtp } from '../utils/yubico-otp';
@@ -925,6 +926,16 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     // Official Bitwarden client SSO: exchange the short-lived authorization
     // code (with its PKCE verifier) for tokens. The client then unlocks the
     // vault with the master password — no key escrow involved.
+    // Per-IP budget: this is the only public token grant without internal
+    // throttling, and every miss costs a D1 read plus an audit write.
+    const ssoExchangeLimit = await rateLimit.consumeBudget(`${clientIdentifier}:public`, LIMITS.rateLimit.sensitivePublicRequestsPerMinute);
+    if (!ssoExchangeLimit.allowed) {
+      return identityErrorResponse(
+        `Rate limit exceeded. Try again in ${ssoExchangeLimit.retryAfterSeconds} seconds.`,
+        'TooManyRequests',
+        429
+      );
+    }
     const code = String(body.code || '').trim();
     const codeVerifier = String(body.code_verifier || body.codeVerifier || '').trim();
     const redirectUri = String(body.redirect_uri || body.redirectUri || '').trim();
@@ -1515,7 +1526,19 @@ const SSO_REDIRECT_SCHEME_RE = /^bitwarden[a-z-]*:\/\//i;
 const SSO_LOOPBACK_REDIRECT_RE = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?(?:\/[^\s]*)?$/i;
 
 function isAllowedClientRedirectUri(redirectUri: string, requestOrigin: string, clientId: string): boolean {
-  if (redirectUri.startsWith('/') && !redirectUri.startsWith('//')) return true;
+  // WHATWG URL parsers fold "\" into "/" for special schemes, so a value like
+  // "/\evil.com" (single slash, backslash) would pass the relative-shape check
+  // below yet resolve off-origin at the callback. Reject any backslash first.
+  if (redirectUri.includes('\\')) return false;
+  if (redirectUri.startsWith('/')) {
+    if (redirectUri.startsWith('//')) return false;
+    // Resolve-then-compare: a relative URI must stay on this origin.
+    try {
+      return new URL(redirectUri, requestOrigin).origin === requestOrigin;
+    } catch {
+      return false;
+    }
+  }
   if (SSO_REDIRECT_SCHEME_RE.test(redirectUri)) return true;
   // CLI (and the desktop AppImage fallback) receive the callback on a
   // loopback HTTP server, mirroring the official server's behaviour.
@@ -1534,6 +1557,16 @@ function isAllowedClientRedirectUri(redirectUri: string, requestOrigin: string, 
   }
 }
 
+async function auditAuthorizeRejected(env: Env, request: Request, reason: string): Promise<void> {
+  await safeWriteAuditEvent(env, {
+    action: 'auth.sso.client.authorize.rejected',
+    category: 'auth',
+    level: 'warn',
+    targetType: 'sso',
+    metadata: { reason, ...auditRequestMetadata(request) },
+  });
+}
+
 /**
  * GET /identity/connect/authorize — front-channel entry of the official
  * Bitwarden client SSO flow. Validates the client request, seals it into the
@@ -1549,12 +1582,17 @@ export async function handleSsoAuthorize(request: Request, env: Env): Promise<Re
   const email = String(url.searchParams.get('email') || '').trim().toLowerCase();
 
   if (!BITWARDEN_SSO_CLIENT_IDS.has(clientId)) {
+    await auditAuthorizeRejected(env, request, 'unknown_client_id');
     return errorResponse('Unknown client_id', 400);
   }
   if (!redirectUri || !isAllowedClientRedirectUri(redirectUri, url.origin, clientId)) {
+    // Audited: probing redirect_uri acceptance is the reconnaissance
+    // signature of redirect-bypass hunting (cf. backslash variant).
+    await auditAuthorizeRejected(env, request, 'invalid_redirect_uri');
     return errorResponse('Invalid redirect_uri', 400);
   }
   if (!state || !codeChallenge || codeChallengeMethod !== 'S256') {
+    await auditAuthorizeRejected(env, request, 'invalid_pkce_or_state');
     return errorResponse('PKCE code_challenge (S256) and state are required', 400);
   }
 
@@ -1738,7 +1776,15 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
         for (const [key, value] of Object.entries(params)) {
           if (value) target.searchParams.set(key, value);
         }
-        return target.toString().replace('https://placeholder.invalid', '') || target.toString();
+        const resolved = target.toString();
+        // Sink hardening: a relative redirect_uri must resolve on the
+        // placeholder origin. WHATWG parsers fold "\" into "/", so a value
+        // like "/\evil.com" resolves off-origin here — refuse to emit it
+        // rather than redirecting the freshly minted code to a foreign host.
+        if (redirectUri.startsWith('/') && !resolved.startsWith('https://placeholder.invalid')) {
+          return null;
+        }
+        return resolved.replace('https://placeholder.invalid', '') || resolved;
       } catch {
         return null;
       }
@@ -1782,6 +1828,9 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + 5 * 60 * 1000).toISOString(),
     });
+    // Opportunistic purge: expired/consumed codes have no other cleanup path
+    // and would accumulate indefinitely (user_id + redirect_uri retention).
+    await deleteExpiredSsoAuthorizationCodes(env.DB);
     await safeWriteAuditEvent(env, {
       action: 'auth.sso.client.code_issued',
       category: 'auth',
