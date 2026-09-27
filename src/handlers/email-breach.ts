@@ -3,7 +3,6 @@ import { StorageService } from '../services/storage';
 import { errorResponse, jsonResponse } from '../utils/response';
 import {
   checkEmailBreaches,
-  isEmailBreachMonitoringEnabled,
   shouldRefreshBreachCache,
   type EmailBreachInfo,
   type EmailBreachStatus,
@@ -28,11 +27,6 @@ interface EmailBreachesResponseBody {
  */
 export async function handleGetEmailBreaches(request: Request, env: Env, userId: string): Promise<Response> {
   void request;
-  if (!isEmailBreachMonitoringEnabled(env)) {
-    const disabled: EmailBreachesResponseBody = { object: 'emailBreaches', enabled: false, status: null, checkedAt: null, breaches: [] };
-    return jsonResponse(disabled);
-  }
-
   const storage = new StorageService(env.DB);
   const user = await storage.getUserById(userId);
   if (!user) return errorResponse('User not found', 404);

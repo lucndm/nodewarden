@@ -1464,7 +1464,7 @@ Object.assign(zhTW, {
   "txt_password_security": "密碼安全檢查",
   "txt_password_security_privacy": "密碼僅在本機前端檢查；只有匿名雜湊前綴會傳送到外洩密碼庫。",
   "txt_email_breach_title": "電子郵件外洩監控",
-  "txt_email_breach_description": "透過 Have I Been Pwned 檢查你的帳戶電子郵件是否出現在已知資料外洩中。絕不會傳送你的密碼。",
+  "txt_email_breach_description": "檢查你的帳戶電子郵件是否出現在已知公開資料外洩中。絕不會傳送你的密碼。",
   "txt_email_breach_refresh": "重新檢查",
   "txt_email_breach_none": "沒有已知的資料外洩影響你的電子郵件。",
   "txt_email_breach_checked_at": "檢查時間：{value}",
