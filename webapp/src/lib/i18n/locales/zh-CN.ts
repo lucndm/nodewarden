@@ -1464,7 +1464,7 @@ Object.assign(zhCN, {
   "txt_password_security": "安全检测",
   "txt_password_security_privacy": "密码仅在本地前端检查；只有匿名哈希前缀会发送到泄露密码库。",
   "txt_email_breach_title": "邮箱泄露监控",
-  "txt_email_breach_description": "通过 Have I Been Pwned 检查你的账户邮箱是否出现在已知数据泄露中。绝不会发送你的密码。",
+  "txt_email_breach_description": "检查你的账户邮箱是否出现在已知公开数据泄露中。绝不会发送你的密码。",
   "txt_email_breach_refresh": "重新检查",
   "txt_email_breach_none": "没有已知的数据泄露影响你的邮箱。",
   "txt_email_breach_checked_at": "检查时间：{value}",

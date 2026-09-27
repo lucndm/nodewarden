@@ -1514,7 +1514,7 @@ Object.assign(en, {
   "txt_password_security": "Password Security Check",
   "txt_password_security_privacy": "Passwords are checked locally in your browser. Only an anonymous hash prefix is sent to the breach database.",
   "txt_email_breach_title": "Email breach monitoring",
-  "txt_email_breach_description": "Checks your account email against known data breaches using Have I Been Pwned. Your passwords are never sent.",
+  "txt_email_breach_description": "Checks your account email against known public data breaches. Your passwords are never sent.",
   "txt_email_breach_refresh": "Check again",
   "txt_email_breach_none": "No known breaches affect your email.",
   "txt_email_breach_checked_at": "Checked {value}",

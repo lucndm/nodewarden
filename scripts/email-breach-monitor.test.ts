@@ -7,6 +7,7 @@ installTestGlobals();
 import { handleGetEmailBreaches } from '../src/handlers/email-breach';
 import {
   mapHibpResponse,
+  mapXonCheckResponse,
   sweepEmailBreachCaches,
   shouldRefreshBreachCache,
 } from '../src/services/email-breach-monitor';
@@ -15,6 +16,7 @@ import { MemoryD1 } from './memory-d1';
 import type { Env } from '../src/types';
 
 const HOUR = 60 * 60 * 1000;
+const originalFetch = globalThis.fetch;
 
 function envWithKey(key: string | undefined, db: unknown): Env {
   return {
@@ -110,18 +112,27 @@ test('endpoint checks on demand, caches, and reports disabled without a key', as
   assert.equal(hibp.calls(), 1);
 });
 
-test('endpoint reports disabled when no HIBP key is configured', async (t) => {
+test('without a HIBP key the free XposedOrNot provider serves the endpoint', async (t) => {
   const db = new MemoryD1();
   await seedUser(db, 'one@example.test');
   const env = envWithKey(undefined, db);
-  const hibp = installHibpFetch(() => new Response(null, { status: 404 }));
-  t.after(hibp.restore);
+
+  // Unknown email: XON answers 200 with an Error marker — clean verdict, no breaches.
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    assert.equal(url.hostname, 'api.xposedornot.com');
+    if (url.pathname.startsWith('/v1/check-email/')) {
+      return Response.json({ Error: 'Not found', email: null });
+    }
+    throw new Error(`unexpected request: ${String(input)}`);
+  }) as typeof fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
 
   const response = await handleGetEmailBreaches(new Request('https://vault.example.test/api/security/email-breaches'), env, 'u-one@example.test');
-  const body = (await response.json()) as { enabled: boolean; status: string | null };
-  assert.equal(body.enabled, false);
-  assert.equal(body.status, null);
-  assert.equal(hibp.calls(), 0);
+  const body = (await response.json()) as { enabled: boolean; status: string; breaches: unknown[] };
+  assert.equal(body.enabled, true);
+  assert.equal(body.status, 'ok');
+  assert.equal(body.breaches.length, 0);
 });
 
 test('cron sweep refreshes stale accounts and skips fresh ones', async (t) => {
@@ -169,4 +180,27 @@ test('cron sweep retries stale entries and does not cache transient failures', a
   await sweepEmailBreachCaches(env);
   const refreshed = await getEmailBreachCache(db, 'one@example.test');
   assert.ok(refreshed!.breachesJson.includes('NewLeak'));
+});
+
+
+test('mapXonCheckResponse flattens groups and enriches from the catalog', () => {
+  const catalog = new Map([
+    ['Adobe', { breachDate: '2013-10-04', domain: 'adobe.com', pwnCount: 152445165, dataClasses: ['Email addresses', 'Passwords'], verified: true }],
+  ]);
+
+  const clean = mapXonCheckResponse({ Error: 'Not found', email: null }, catalog);
+  assert.deepEqual(clean, { status: 'ok', breaches: [] });
+
+  const outcome = mapXonCheckResponse(
+    { breaches: [['LinkedIn', 'Adobe'], ['Unknown-Custom-Site'], 'junk', null] },
+    catalog
+  );
+  assert.equal(outcome.status, 'ok');
+  assert.equal(outcome.breaches.length, 3);
+  assert.equal(outcome.breaches[0].name, 'Adobe');
+  assert.equal(outcome.breaches[0].pwnCount, 152445165);
+  assert.deepEqual(outcome.breaches[0].dataClasses, ['Email addresses', 'Passwords']);
+  // Unknown names stay as name-only entries.
+  assert.equal(outcome.breaches[2].name, 'Unknown-Custom-Site');
+  assert.equal(outcome.breaches[2].pwnCount, 0);
 });
