@@ -311,7 +311,13 @@ export async function handlePublicRoute(
     return jsonResponse(await buildWebBootstrapResponse(env));
   }
 
-  if ((path === '/api/sso/prevalidate' || path === '/sso/prevalidate') && (method === 'GET' || method === 'POST')) {
+  // Official Bitwarden clients prevalidate SSO against the IdentityServer
+  // route (GET /identity/sso/prevalidate?domainHint=...); the /api and root
+  // aliases serve the web vault and legacy paths.
+  if (
+    (path === '/identity/sso/prevalidate' || path === '/api/sso/prevalidate' || path === '/sso/prevalidate') &&
+    (method === 'GET' || method === 'POST')
+  ) {
     const blocked = await enforcePublicRateLimit('public-read', LIMITS.rateLimit.publicReadRequestsPerMinute);
     if (blocked) return blocked;
     return handleSsoPrevalidate(request, env);
