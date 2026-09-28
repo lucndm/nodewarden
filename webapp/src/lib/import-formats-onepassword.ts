@@ -322,7 +322,7 @@ function parseOnePasswordPasswordHistory(cipher: Record<string, unknown>, histor
     .map((h) => ({ password: val(h?.value), lastUsedDate: parseEpochMaybe(h?.time) }))
     .filter((x) => !!x.password && !!x.lastUsedDate)
     .sort((a, b) => String(b.lastUsedDate).localeCompare(String(a.lastUsedDate)))
-    .slice(0, 5);
+    .slice(0, 50);
   cipher.passwordHistory = parsed.length ? parsed : null;
 }
 

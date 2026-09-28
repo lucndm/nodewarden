@@ -21,6 +21,8 @@ import { readResponseBytesWithProgress } from '../download';
 import { loadVaultCoreSyncSnapshot } from './vault-sync';
 
 type CipherLoginData = NonNullable<Cipher['login']>;
+const PASSWORD_HISTORY_MAX = 50;
+
 const NODEWARDEN_WEB_REPAIR_HEADER = 'X-NodeWarden-Web';
 
 export async function getFolders(authedFetch: AuthedFetch, cacheKey: string): Promise<Folder[]> {
@@ -790,7 +792,7 @@ async function buildUpdatedPasswordHistory(
     },
     ...(history || []),
   ];
-  return nextEntries.slice(0, 5);
+  return nextEntries.slice(0, PASSWORD_HISTORY_MAX);
 }
 
 async function encryptCustomFields(
