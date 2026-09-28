@@ -1,6 +1,6 @@
 import { createPortal } from 'preact/compat';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AlertTriangle, Archive, Clipboard, Download, Eye, EyeOff, ExternalLink, Folder, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Trash2, X } from 'lucide-preact';
+import { AlertTriangle, Archive, Clipboard, Download, Eye, EyeOff, ExternalLink, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Tag, Trash2, X } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
@@ -175,7 +175,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
               <div className="detail-title-main">
                 <h3 className="detail-title">{props.selectedCipher.decName || t('txt_no_name')}</h3>
                 <div className="detail-folder-line">
-                  <Folder size={13} aria-hidden="true" />
+                  <Tag size={13} aria-hidden="true" />
                   <span>{props.folderName(props.selectedCipher.folderId)}</span>
                 </div>
               </div>

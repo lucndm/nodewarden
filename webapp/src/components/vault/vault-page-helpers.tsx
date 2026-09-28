@@ -27,7 +27,7 @@ export type SidebarFilter =
   | { kind: 'trash' }
   | { kind: 'duplicates' }
   | { kind: 'type'; value: TypeFilter }
-  | { kind: 'folder'; folderId: string | null }
+  | { kind: 'untagged' }
   | { kind: 'tag'; tag: string };
 
 interface TypeOption {
@@ -158,7 +158,6 @@ export function getCreateTypeOptions(): TypeOption[] {
 }
 
 export const VAULT_SORT_STORAGE_KEY = 'nodewarden.vault.sort.v1';
-export const FOLDER_SORT_STORAGE_KEY = 'nodewarden.folder-sort.v1';
 export const MOBILE_LAYOUT_QUERY = '(max-width: 1180px)';
 export const VAULT_LIST_ROW_HEIGHT = 74;
 export const VAULT_LIST_OVERSCAN = 10;
@@ -483,7 +482,6 @@ export function createEmptyDraft(type: number): VaultDraft {
     type,
     favorite: false,
     name: '',
-    folderId: '',
     notes: '',
     reprompt: false,
     tags: [],
@@ -562,7 +560,6 @@ export function draftFromCipher(cipher: Cipher): VaultDraft {
   draft.id = cipher.id;
   draft.favorite = !!cipher.favorite;
   draft.name = cipher.decName || '';
-  draft.folderId = cipher.folderId || '';
   draft.notes = cipher.decNotes || '';
   draft.reprompt = Number(cipher.reprompt || 0) === 1;
   draft.tags = Array.isArray(cipher.tags) ? cipher.tags.map((tag) => String(tag || '').trim()).filter(Boolean) : [];

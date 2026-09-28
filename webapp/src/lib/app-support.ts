@@ -114,7 +114,6 @@ function buildEmptyImportDraft(type: number): VaultDraft {
     type,
     favorite: false,
     name: '',
-    folderId: '',
     notes: '',
     reprompt: false,
     tags: [],
@@ -195,7 +194,6 @@ export function importCipherToDraft(cipher: Record<string, unknown>, folderId: s
   draft.notes = asText(cipher.notes);
   draft.favorite = !!cipher.favorite;
   draft.reprompt = Number(cipher.reprompt || 0) === 1;
-  draft.folderId = folderId || '';
 
   const customFieldsRaw = Array.isArray(cipher.fields) ? cipher.fields : [];
   draft.customFields = customFieldsRaw

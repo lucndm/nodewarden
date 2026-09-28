@@ -962,7 +962,6 @@ function cipherFromDraft(draft: VaultDraft, current?: Cipher | null): Cipher {
     ...(current || {}),
     id: current?.id || createDemoId('cipher'),
     type,
-    folderId: draft.folderId || null,
     favorite: !!draft.favorite,
     reprompt: draft.reprompt ? 1 : 0,
     name: draft.name || '',

@@ -10,7 +10,6 @@ import {
   VAULT_LIST_OVERSCAN,
   VAULT_LIST_ROW_HEIGHT,
   cardListSubtitle,
-  FOLDER_SORT_STORAGE_KEY,
   VAULT_SORT_STORAGE_KEY,
   bankAccountListSubtitle,
   cipherTypeKey,
@@ -81,8 +80,6 @@ export default function VaultPage(props: VaultPageProps) {
   const [searchComposing, setSearchComposing] = useState(false);
   const [sortMode, setSortMode] = useState<VaultSortMode>('edited');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
-  const [folderSortMode, setFolderSortMode] = useState<VaultSortMode>('name');
-  const [folderSortMenuOpen, setFolderSortMenuOpen] = useState(false);
   const [duplicateMode, setDuplicateMode] = useState<DuplicateDetectionMode>('exact');
   const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>({ kind: 'all' });
   const [selectedCipherId, setSelectedCipherId] = useState('');
@@ -124,7 +121,6 @@ export default function VaultPage(props: VaultPageProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const createMenuRef = useRef<HTMLDivElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
-  const folderSortMenuRef = useRef<HTMLDivElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const listPanelRef = useRef<HTMLDivElement | null>(null);
   const mobileSidebarToggleKeyRef = useRef(props.mobileSidebarToggleKey);
@@ -182,25 +178,6 @@ export default function VaultPage(props: VaultPageProps) {
   }, [sortMode]);
 
   useEffect(() => {
-    try {
-      const saved = String(localStorage.getItem(FOLDER_SORT_STORAGE_KEY) || '').trim() as VaultSortMode;
-      if (saved === 'edited' || saved === 'created' || saved === 'name') {
-        setFolderSortMode(saved);
-      }
-    } catch {
-      // ignore storage read failures
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(FOLDER_SORT_STORAGE_KEY, folderSortMode);
-    } catch {
-      // ignore storage write failures
-    }
-  }, [folderSortMode]);
-
-  useEffect(() => {
     const node = listPanelRef.current;
     if (!node) return;
     const updateSize = () => setListViewportHeight(node.clientHeight || 0);
@@ -247,25 +224,6 @@ export default function VaultPage(props: VaultPageProps) {
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [sortMenuOpen]);
-
-  useEffect(() => {
-    const onPointerDown = (event: Event) => {
-      if (!folderSortMenuOpen) return;
-      const target = event.target as Node | null;
-      if (folderSortMenuRef.current && target && !folderSortMenuRef.current.contains(target)) {
-        setFolderSortMenuOpen(false);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFolderSortMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [folderSortMenuOpen]);
 
   useEffect(() => {
     setRepromptApprovedCipherId(null);
@@ -410,12 +368,9 @@ export default function VaultPage(props: VaultPageProps) {
         }
         if (sidebarFilter.kind === 'favorite' && !cipher.favorite) return false;
         if (sidebarFilter.kind === 'type' && meta?.typeKey !== sidebarFilter.value) return false;
-        if (sidebarFilter.kind === 'folder') {
-          if (sidebarFilter.folderId === null) {
-            if (cipher.folderId) return false;
-          } else if (cipher.folderId !== sidebarFilter.folderId) {
-            return false;
-          }
+        if (sidebarFilter.kind === 'untagged') {
+          const tags = Array.isArray(cipher.tags) ? cipher.tags : [];
+          if (tags.length) return false;
         }
         if (sidebarFilter.kind === 'tag') {
           const tags = Array.isArray(cipher.tags) ? cipher.tags : [];
@@ -491,13 +446,20 @@ export default function VaultPage(props: VaultPageProps) {
         counts.set(tag, (counts.get(tag) || 0) + 1);
       }
     }
+    // Registry-only tags (created on mobile, not used yet) surface at count 0.
+    const folderIdByTag = new Map<string, string>();
+    for (const folder of props.folders) {
+      const name = String(folder.decName || folder.name || '').trim();
+      if (!name) continue;
+      if (!counts.has(name)) counts.set(name, 0);
+      folderIdByTag.set(name, folder.id);
+    }
     return Array.from(counts.entries())
       .sort((a, b) => nameCollator.compare(a[0], b[0]))
-      .map(([tag, count]) => ({ tag, count }));
-  }, [props.ciphers, nameCollator]);
+      .map(([tag, count]) => ({ tag, count, folderId: folderIdByTag.get(tag) || '' }));
+  }, [props.ciphers, props.folders, nameCollator]);
 
   const sidebarFilterKey = useMemo(() => {
-    if (sidebarFilter.kind === 'folder') return `folder:${sidebarFilter.folderId ?? 'none'}`;
     if (sidebarFilter.kind === 'type') return `type:${sidebarFilter.value}`;
     if (sidebarFilter.kind === 'duplicates') return `duplicates:${duplicateMode}`;
     if (sidebarFilter.kind === 'tag') return `tag:${sidebarFilter.tag}`;
@@ -998,7 +960,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
     setBusy(true);
     try {
       await props.onDeleteFolder(pendingDeleteFolder.id);
-      if (sidebarFilter.kind === 'folder' && sidebarFilter.folderId === pendingDeleteFolder.id) {
+      if (sidebarFilter.kind === 'tag' && sidebarFilter.tag === (pendingDeleteFolder.decName || pendingDeleteFolder.name)) {
         setSidebarFilter({ kind: 'all' });
       }
       setPendingDeleteFolder(null);
@@ -1114,7 +1076,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
     setBusy(true);
     try {
       await props.onBulkDeleteFolders(props.folders.map((folder) => folder.id));
-      if (sidebarFilter.kind === 'folder') {
+      if (sidebarFilter.kind === 'tag' || sidebarFilter.kind === 'untagged') {
         setSidebarFilter({ kind: 'all' });
       }
       setDeleteAllFoldersOpen(false);
@@ -1207,11 +1169,6 @@ const folderName = useCallback((id: string | null | undefined): string => {
     setPendingRenameFolder(folder);
     setRenameFolderName(folder.decName || folder.name || '');
   }, []);
-  const handleToggleFolderSortMenu = useCallback(() => setFolderSortMenuOpen((open) => !open), []);
-  const handleSelectFolderSortMode = useCallback((value: VaultSortMode) => {
-    setFolderSortMode(value);
-    setFolderSortMenuOpen(false);
-  }, []);
   const handleMobileSidebarMaskClick = useCallback(() => {
     if (!mobileSidebarOpen) return;
     setMobileSidebarOpen(false);
@@ -1227,30 +1184,24 @@ const folderName = useCallback((id: string | null | undefined): string => {
           />
         )}
         <VaultSidebar
-          folders={props.folders}
           tags={tagSummary}
           sidebarFilter={sidebarFilter}
           busy={busy}
           isMobileLayout={isMobileLayout}
           mobileSidebarOpen={mobileSidebarOpen}
-          folderSortMode={folderSortMode}
-          folderSortMenuOpen={folderSortMenuOpen}
-          folderSortMenuRef={folderSortMenuRef}
           onCloseMobileSidebar={handleCloseMobileSidebar}
           onChangeFilter={setSidebarFilter}
-          onOpenDeleteAllFolders={handleOpenDeleteAllFolders}
-          onOpenCreateFolder={handleOpenCreateFolder}
-          onOpenRenameFolder={handleOpenRenameFolder}
-          onOpenDeleteFolder={setPendingDeleteFolder}
-          onToggleFolderSortMenu={handleToggleFolderSortMenu}
-          onSelectFolderSortMode={handleSelectFolderSortMode}
+          onOpenDeleteAllTags={handleOpenDeleteAllFolders}
+          onOpenCreateTag={handleOpenCreateFolder}
+          onOpenRenameTag={(entry) => handleOpenRenameFolder({ id: entry.folderId, name: entry.tag })}
+          onOpenDeleteTag={(entry) => setPendingDeleteFolder({ id: entry.folderId, name: entry.tag })}
         />
 
         <VaultListPanel
           busy={busy}
           loading={props.loading}
           error={props.error}
-          folders={props.folders}
+          tags={tagSummary}
           searchInput={searchInput}
           sortMode={sortMode}
           sortMenuOpen={sortMenuOpen}
@@ -1318,7 +1269,6 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 draft={draft}
                 isCreating={isCreating}
                 busy={busy}
-                folders={props.folders}
                 selectedCipher={selectedCipher}
                 editExistingAttachments={editExistingAttachments}
                 removedAttachmentIds={removedAttachmentIds}

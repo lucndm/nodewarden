@@ -59,6 +59,12 @@ export async function handleGetFolders(request: Request, env: Env, userId: strin
   const url = new URL(request.url);
   const pagination = parsePagination(url);
 
+  const migrated = await storage.migrateFolderCiphersToTags(userId);
+  if (migrated) {
+    // Backfilled tags changed cipher data; bump so clients resync.
+    await storage.updateRevisionDate(userId);
+  }
+
   let folders: Folder[];
   let continuationToken: string | null = null;
   if (pagination) {
@@ -143,11 +149,18 @@ export async function handleUpdateFolder(request: Request, env: Env, userId: str
   }
 
   if (body.name) {
+    const oldName = folder.name;
     folder.name = body.name;
+    folder.updatedAt = new Date().toISOString();
+    await storage.saveFolder(folder);
+    if (oldName !== folder.name) {
+      // The registry rename rewrites the tag on every cipher carrying it.
+      await storage.renameTagEverywhere(userId, oldName, folder.name);
+    }
+  } else {
+    folder.updatedAt = new Date().toISOString();
+    await storage.saveFolder(folder);
   }
-  folder.updatedAt = new Date().toISOString();
-
-  await storage.saveFolder(folder);
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyUserFolderUpdate(env, {
@@ -169,7 +182,8 @@ export async function handleDeleteFolder(request: Request, env: Env, userId: str
     return errorResponse('Folder not found', 404);
   }
 
-  await storage.clearFolderFromCiphers(userId, id);
+  // Deleting the registry entry removes the tag from every cipher carrying it.
+  await storage.removeTagEverywhere(userId, folder.name);
   await storage.deleteFolder(id, userId);
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
