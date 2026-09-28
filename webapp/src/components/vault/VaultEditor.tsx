@@ -5,7 +5,7 @@ import jsQR from 'jsqr';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import { normalizeTotpInput } from '@/lib/crypto';
-import type { Cipher, Folder, VaultDraft, VaultDraftField } from '@/lib/types';
+import type { Cipher, VaultDraft, VaultDraftField } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import { cardBrand } from '@/lib/import-format-shared';
 import {
@@ -25,7 +25,6 @@ interface VaultEditorProps {
   draft: VaultDraft;
   isCreating: boolean;
   busy: boolean;
-  folders: Folder[];
   selectedCipher: Cipher | null;
   editExistingAttachments: Array<any>;
   removedAttachmentIds: Record<string, boolean>;
@@ -380,17 +379,6 @@ export default function VaultEditor(props: VaultEditorProps) {
               {createTypeOptions.map((option) => (
                 <option key={option.type} value={option.type}>
                   {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>{t('txt_folder')}</span>
-            <select className="input" value={props.draft.folderId} onInput={(e) => props.onUpdateDraft({ folderId: (e.currentTarget as HTMLSelectElement).value })}>
-              <option value="">{t('txt_no_folder')}</option>
-              {props.folders.map((folder) => (
-                <option key={folder.id} value={folder.id}>
-                  {folder.decName || folder.name || folder.id}
                 </option>
               ))}
             </select>

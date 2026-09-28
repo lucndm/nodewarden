@@ -24,6 +24,7 @@ function topLevelSplit(input: string, separator: RegExp): string[] {
 export const PRIMARY_KEY_BUILDERS: Record<string, (row: Row) => string> = {
   users: (row) => String(row.id),
   ciphers: (row) => String(row.id),
+  folders: (row) => String(row.id),
   user_revisions: (row) => String(row.user_id),
   devices: (row) => `${row.user_id}|${row.device_identifier}`,
   sso_authorization_codes: (row) => String(row.code_hash),

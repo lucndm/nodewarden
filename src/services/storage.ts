@@ -37,13 +37,17 @@ import {
   revertInviteUsed as revertStoredInviteUsed,
 } from './storage-admin-repo';
 import {
+  applyTagToCiphers as applyStoredTagToCiphers,
   bulkDeleteFolders as deleteStoredFolders,
-  clearFolderFromCiphers as clearStoredFolderFromCiphers,
   deleteFolder as deleteStoredFolder,
+  ensureFoldersForTags as ensureStoredFoldersForTags,
   getAllFolders as listStoredFolders,
   getFolder as findStoredFolder,
   getFolderForUser as findStoredFolderForUser,
   getFoldersPage as listStoredFoldersPage,
+  migrateFolderCiphersToTags as migrateStoredFolderCiphersToTags,
+  removeTagFromCiphers as removeStoredTagFromCiphers,
+  renameTagOnCiphers as renameStoredTagOnCiphers,
   saveFolder as saveStoredFolder,
 } from './storage-folder-repo';
 import {
@@ -571,10 +575,15 @@ export class StorageService {
   }
 
   async bulkMoveCiphers(ids: string[], folderId: string | null, userId: string): Promise<string | null> {
-    return moveStoredCiphers(this.db, this.sqlChunkSize.bind(this), this.updateRevisionDate.bind(this), ids, folderId, userId);
+    // The handler pre-verifies folder ownership; a folder vanishing mid-flight
+    // makes this a no-op rather than a mass tag strip.
+    const folder = folderId ? await this.getFolderForUser(folderId, userId) : null;
+    if (folderId && !folder) return null;
+    await applyStoredTagToCiphers(this.db, userId, ids, folder?.name ?? null);
+    return this.updateRevisionDate(userId);
   }
 
-  // --- Folders ---
+  // --- Folders (tag registry for official clients) ---
 
   async getFolder(id: string): Promise<Folder | null> {
     return findStoredFolder(this.db, id);
@@ -592,20 +601,26 @@ export class StorageService {
     await deleteStoredFolder(this.db, id, userId);
   }
 
-  async bulkDeleteFolders(ids: string[], userId: string): Promise<string | null> {
-    return deleteStoredFolders(
-      this.db,
-      userId,
-      ids,
-      this.sqlChunkSize.bind(this),
-      this.updateRevisionDate.bind(this)
-    );
+  async renameTagEverywhere(userId: string, oldName: string, newName: string): Promise<void> {
+    await renameStoredTagOnCiphers(this.db, userId, oldName, newName);
   }
 
-  // Clear folder references from all ciphers owned by the user.
-  // Without this, deleting a folder leaves stale folderId values in cipher JSON.
-  async clearFolderFromCiphers(userId: string, folderId: string): Promise<void> {
-    await clearStoredFolderFromCiphers(this.db, userId, folderId);
+  async removeTagEverywhere(userId: string, tagName: string): Promise<void> {
+    await removeStoredTagFromCiphers(this.db, userId, tagName);
+  }
+
+  async ensureFoldersForTags(userId: string, tags: string[]): Promise<Map<string, string>> {
+    return ensureStoredFoldersForTags(this.db, userId, tags);
+  }
+
+  async migrateFolderCiphersToTags(userId: string): Promise<boolean> {
+    return migrateStoredFolderCiphersToTags(this.db, userId, new Date().toISOString());
+  }
+
+  async bulkDeleteFolders(ids: string[], userId: string): Promise<string | null> {
+    const hadFolders = (await this.getAllFolders(userId)).length > 0;
+    await deleteStoredFolders(this.db, userId, ids);
+    return hadFolders ? this.updateRevisionDate(userId) : null;
   }
 
   async getAllFolders(userId: string): Promise<Folder[]> {

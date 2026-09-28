@@ -107,7 +107,6 @@ function optimisticCipherFromDraft(draft: VaultDraft, current?: Cipher | null): 
     ...(current || {}),
     id: current?.id || createOptimisticCipherId(),
     type,
-    folderId: draft.folderId || null,
     favorite: !!draft.favorite,
     reprompt: draft.reprompt ? 1 : 0,
     tags: Array.isArray(draft.tags) ? draft.tags.filter(Boolean) : [],
@@ -778,7 +777,18 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         }
         try {
           await bulkMoveCiphers(authedFetch, ids, folderId);
-          patchCipherBatch(ids, (cipher) => ({ ...cipher, folderId }));
+          const folderName = folderId
+            ? String(
+                encryptedFolders?.find((folder) => folder.id === folderId)?.decName
+                  || encryptedFolders?.find((folder) => folder.id === folderId)?.name
+                  || ''
+              )
+            : '';
+          patchCipherBatch(ids, (cipher) => {
+            const currentTags = Array.isArray(cipher.tags) ? cipher.tags : [];
+            const nextTags = folderName ? [folderName, ...currentTags.slice(1)] : currentTags.slice(1);
+            return { ...cipher, tags: nextTags.length ? nextTags : null, folderId };
+          });
           void refreshVaultRevisionStamp();
           onNotify('success', t('txt_moved_selected_items'));
         } catch (error) {
@@ -835,9 +845,21 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         }
         try {
           await deleteFolder(authedFetch, id);
+          const folderName = String(
+            encryptedFolders?.find((folder) => folder.id === id)?.decName
+              || encryptedFolders?.find((folder) => folder.id === id)?.name
+              || ''
+          );
+          const stripTag = (cipher: Cipher): Cipher => {
+            const tags = Array.isArray(cipher.tags) ? cipher.tags.filter((tag) => tag !== folderName) : [];
+            const positionFolderId = tags.length
+              ? encryptedFolders?.find((folder) => (folder.decName || folder.name) === tags[0])?.id ?? null
+              : null;
+            return { ...cipher, tags: tags.length ? tags : null, folderId: positionFolderId };
+          };
           patchFolderBatch([id], () => null);
-          patchEncryptedCiphers((prev) => prev.map((cipher) => (cipher.folderId === id ? { ...cipher, folderId: null } : cipher)));
-          patchDecryptedCiphers((prev) => prev.map((cipher) => (cipher.folderId === id ? { ...cipher, folderId: null } : cipher)));
+          patchEncryptedCiphers((prev) => prev.map((cipher) => (cipher.folderId === id ? stripTag(cipher) : cipher)));
+          patchDecryptedCiphers((prev) => prev.map((cipher) => (cipher.folderId === id ? stripTag(cipher) : cipher)));
           void refreshVaultRevisionStamp();
           onNotify('success', t('txt_folder_deleted'));
         } catch (error) {
@@ -865,6 +887,11 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         }
         try {
           if (!session) throw new Error(t('txt_vault_key_unavailable'));
+          const previousName = String(
+            encryptedFolders?.find((folder) => folder.id === id)?.decName
+              || encryptedFolders?.find((folder) => folder.id === id)?.name
+              || ''
+          );
           const updated = await updateFolder(authedFetch, session, id, nextName);
           upsertEncryptedFolder(updated);
           patchDecryptedFolders((prev) => prev.map((folder) => (
@@ -872,6 +899,14 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
               ? { ...folder, name: updated.name || folder.name, decName: nextName, revisionDate: updated.revisionDate }
               : folder
           )));
+          const renameTag = (cipher: Cipher): Cipher => {
+            const tags = Array.isArray(cipher.tags) ? cipher.tags : [];
+            if (!previousName || !tags.includes(previousName)) return cipher;
+            const nextTags = tags.map((tag) => (tag === previousName ? nextName : tag));
+            return { ...cipher, tags: nextTags };
+          };
+          patchEncryptedCiphers((prev) => prev.map(renameTag));
+          patchDecryptedCiphers((prev) => prev.map(renameTag));
           void refreshVaultRevisionStamp();
           onNotify('success', t('txt_folder_updated'));
         } catch (error) {
@@ -928,10 +963,23 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         try {
           await bulkDeleteFolders(authedFetch, ids);
           const removedIds = new Set(ids);
+          const removedNames = new Set(
+            (encryptedFolders || [])
+              .filter((folder) => removedIds.has(folder.id))
+              .map((folder) => String(folder.decName || folder.name || ''))
+              .filter(Boolean)
+          );
+          const stripRemovedTags = (cipher: Cipher): Cipher => {
+            const tags = Array.isArray(cipher.tags) ? cipher.tags.filter((tag) => !removedNames.has(tag)) : [];
+            const positionFolderId = tags.length
+              ? encryptedFolders?.find((folder) => (folder.decName || folder.name) === tags[0])?.id ?? null
+              : null;
+            return { ...cipher, tags: tags.length ? tags : null, folderId: positionFolderId };
+          };
           patchEncryptedFolders((prev) => prev.filter((folder) => !removedIds.has(folder.id)));
-          patchEncryptedCiphers((prev) => prev.map((cipher) => (cipher.folderId && removedIds.has(cipher.folderId) ? { ...cipher, folderId: null } : cipher)));
+          patchEncryptedCiphers((prev) => prev.map(stripRemovedTags));
           patchDecryptedFolders((prev) => prev.filter((folder) => !removedIds.has(folder.id)));
-          patchDecryptedCiphers((prev) => prev.map((cipher) => (cipher.folderId && removedIds.has(cipher.folderId) ? { ...cipher, folderId: null } : cipher)));
+          patchDecryptedCiphers((prev) => prev.map(stripRemovedTags));
           void refreshVaultRevisionStamp();
           onNotify('success', t('txt_folders_deleted'));
         } catch (error) {

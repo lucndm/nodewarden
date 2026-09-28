@@ -59,6 +59,11 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     return errorResponse('User not found', 404);
   }
 
+  // Legacy/imported ciphers that only carry folder_id get their tag backfill
+  // here; the folders table keeps its rows and ids, so official clients see
+  // no folder churn. Idempotent and cheap once migrated.
+  await storage.migrateFolderCiphersToTags(userId);
+
   const [revisionDate, accountPasskeys] = await Promise.all([
     storage.getRevisionDate(userId),
     storage.getAccountPasskeyCredentialsByUserId(userId),

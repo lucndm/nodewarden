@@ -10,9 +10,9 @@ import {
   ChevronDown,
   Copy,
   CreditCard,
-  Folder as FolderIcon,
   FolderInput,
-  FolderX,
+  Tag,
+  TagX,
   Globe,
   KeyRound,
   LayoutGrid,
@@ -26,7 +26,7 @@ import {
   X,
 } from 'lucide-preact';
 import LoadingState from '@/components/LoadingState';
-import type { Cipher, Folder } from '@/lib/types';
+import type { Cipher } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import {
   CreateTypeIcon,
@@ -50,7 +50,7 @@ interface VaultListPanelProps {
   busy: boolean;
   loading: boolean;
   error: string;
-  folders: Folder[];
+  tags: Array<{ tag: string; count: number; folderId: string }>;
   searchInput: string;
   sortMode: VaultSortMode;
   sortMenuOpen: boolean;
@@ -106,7 +106,7 @@ interface CipherListItemProps {
   onSelectCipher: (cipherId: string) => void;
 }
 
-type MobileFilterMenuKey = 'duplicate' | 'menu' | 'type' | 'folder';
+type MobileFilterMenuKey = 'duplicate' | 'menu' | 'type' | 'tag';
 
 interface MobileFilterOption {
   value: string;
@@ -185,19 +185,19 @@ export default function VaultListPanel(props: VaultListPanelProps) {
     { value: 'note', label: t('txt_note'), icon: <StickyNote size={14} />, active: props.sidebarFilter.kind === 'type' && props.sidebarFilter.value === 'note', onSelect: () => props.onChangeFilter({ kind: 'type', value: 'note' }) },
     { value: 'ssh', label: t('txt_ssh_key'), icon: <KeyRound size={14} />, active: props.sidebarFilter.kind === 'type' && props.sidebarFilter.value === 'ssh', onSelect: () => props.onChangeFilter({ kind: 'type', value: 'ssh' }) },
   ];
-  const folderMobileFilterOptions: MobileFilterOption[] = [
-    { value: '__none__', label: t('txt_no_folder'), icon: <FolderX size={14} />, active: props.sidebarFilter.kind === 'folder' && props.sidebarFilter.folderId === null, onSelect: () => props.onChangeFilter({ kind: 'folder', folderId: null }) },
-    ...props.folders.map((folder) => ({
-      value: folder.id,
-      label: folder.decName || folder.name || folder.id,
-      icon: <FolderIcon size={14} />,
-      active: props.sidebarFilter.kind === 'folder' && props.sidebarFilter.folderId === folder.id,
-      onSelect: () => props.onChangeFilter({ kind: 'folder', folderId: folder.id }),
+  const tagMobileFilterOptions: MobileFilterOption[] = [
+    { value: '__untagged__', label: t('txt_untagged'), icon: <TagX size={14} />, active: props.sidebarFilter.kind === 'untagged', onSelect: () => props.onChangeFilter({ kind: 'untagged' }) },
+    ...props.tags.map(({ tag }) => ({
+      value: tag,
+      label: tag,
+      icon: <Tag size={14} />,
+      active: props.sidebarFilter.kind === 'tag' && props.sidebarFilter.tag === tag,
+      onSelect: () => props.onChangeFilter({ kind: 'tag', tag }),
     })),
   ];
   const menuFilterSelected = menuFilterOptions.find((option) => option.active);
   const typeFilterSelected = typeMobileFilterOptions.find((option) => option.active);
-  const folderFilterSelected = folderMobileFilterOptions.find((option) => option.active);
+  const tagFilterSelected = tagMobileFilterOptions.find((option) => option.active);
   const duplicateModeSelected = duplicateModeOptions.find((option) => option.active);
 
   useEffect(() => {
@@ -413,7 +413,7 @@ export default function VaultListPanel(props: VaultListPanelProps) {
           <div className="mobile-vault-filter-row" aria-label={t('txt_filter')}>
             {renderMobileFilterMenu('menu', t('txt_menu'), menuFilterSelected, <LayoutGrid size={14} />, menuFilterOptions)}
             {renderMobileFilterMenu('type', t('txt_type'), typeFilterSelected, <Globe size={14} />, typeMobileFilterOptions)}
-            {renderMobileFilterMenu('folder', t('txt_folder'), folderFilterSelected, <FolderIcon size={14} />, folderMobileFilterOptions)}
+            {renderMobileFilterMenu('tag', t('txt_tags'), tagFilterSelected, <Tag size={14} />, tagMobileFilterOptions)}
           </div>
         )}
       </div>

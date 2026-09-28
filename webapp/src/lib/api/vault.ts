@@ -579,7 +579,6 @@ function draftFromDecryptedCipher(cipher: Cipher): VaultDraft {
     favorite: !!cipher.favorite,
     reprompt: Number(cipher.reprompt || 0) === 1,
     tags: Array.isArray(cipher.tags) ? cipher.tags.filter(Boolean) : [],
-    folderId: cipher.folderId || '',
     loginUsername: '',
     loginPassword: '',
     loginTotp: '',
@@ -1282,7 +1281,6 @@ async function buildCipherPayload(
   const payload: Record<string, unknown> = {
     type,
     favorite: !!draft.favorite,
-    folderId: asNullable(draft.folderId),
     reprompt: draft.reprompt ? 1 : 0,
     tags: Array.isArray(draft.tags) ? draft.tags.map((tag) => String(tag || '').trim()).filter(Boolean) : [],
     name: await encryptTextValue(draft.name, keys.enc, keys.mac),

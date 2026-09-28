@@ -328,7 +328,6 @@ export interface VaultDraft {
   type: number;
   favorite: boolean;
   name: string;
-  folderId: string;
   notes: string;
   reprompt: boolean;
   tags: string[];

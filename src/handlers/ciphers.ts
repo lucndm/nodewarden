@@ -326,6 +326,66 @@ export function normalizeCipherTags(value: unknown): string[] | null {
   return out.length ? out : null;
 }
 
+interface CipherTagResolution {
+  kind: 'set' | 'keep';
+  tags: string[] | null;
+  folderIds: Map<string, string>;
+  folderError: Response | null;
+}
+
+/**
+ * Resolves the tags/folder pair for a cipher write.
+ *
+ * - Explicit `tags` in the payload (NodeWarden web vault) wins outright.
+ * - Otherwise a present `folderId` is official-client "move to folder"
+ *   semantics: the folder name becomes the first tag (or, for a null
+ *   folderId, the current folder-position tag is removed).
+ * - With neither field the existing tags are preserved untouched.
+ *
+ * When resolved, the cipher's folder_id mirrors the registry id of the first
+ * tag, which is what official clients render as the cipher's folder.
+ */
+async function resolveCipherTags(
+  storage: StorageService,
+  userId: string,
+  input: {
+    tagsPresent: boolean;
+    rawTags: unknown;
+    folderId: string | null;
+    folderIdPresent: boolean;
+    currentTags: string[] | null;
+  }
+): Promise<CipherTagResolution> {
+  let tags: string[] | null;
+  if (input.tagsPresent) {
+    tags = normalizeCipherTags(input.rawTags);
+  } else if (input.folderIdPresent) {
+    if (input.folderId) {
+      const folder = await storage.getFolderForUser(input.folderId, userId);
+      if (!folder) return { kind: 'set', tags: null, folderIds: new Map(), folderError: errorResponse('Folder not found', 404) };
+      // The first tag mirrors the folder position: moving replaces it and
+      // keeps the remaining (extra) tags in order.
+      tags = normalizeCipherTags([folder.name, ...(input.currentTags || []).slice(1)]);
+    } else {
+      tags = normalizeCipherTags((input.currentTags || []).slice(1));
+    }
+  } else {
+    return { kind: 'keep', tags: null, folderIds: new Map(), folderError: null };
+  }
+
+  if (tags && tags.length) {
+    const folderIds = await storage.ensureFoldersForTags(userId, tags);
+    return { kind: 'set', tags, folderIds, folderError: null };
+  }
+  return { kind: 'set', tags: null, folderIds: new Map(), folderError: null };
+}
+
+function applyResolvedTagsFolder(cipher: Cipher, resolution: CipherTagResolution): void {
+  cipher.tags = resolution.tags;
+  const firstTag = resolution.tags && resolution.tags.length ? resolution.tags[0] : null;
+  cipher.folderId = firstTag ? resolution.folderIds.get(firstTag) ?? null : null;
+}
+
 function normalizeCipherForStorage(cipher: Cipher): Cipher {
   cipher.login = normalizeCipherLoginForStorage(cipher.login);
   cipher.sshKey = normalizeCipherSshKeyForCompatibility(cipher.sshKey);
@@ -1020,16 +1080,21 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
   cipher.passwordHistory = createPasswordHistory.present ? (createPasswordHistory.value ?? null) : (cipher.passwordHistory ?? null);
   const createFields = getAliasedProp(cipherData, ['fields', 'Fields']);
   cipher.fields = createFields.present ? (createFields.value ?? null) : (cipher.fields ?? null);
-  cipher.tags = normalizeCipherTags(cipherData.tags ?? cipherData.Tags);
+  const createResolution = await resolveCipherTags(storage, userId, {
+    tagsPresent: Object.prototype.hasOwnProperty.call(cipherData, 'tags')
+      || Object.prototype.hasOwnProperty.call(cipherData, 'Tags'),
+    rawTags: cipherData.tags ?? cipherData.Tags,
+    folderId: normalizeOptionalId(createFolderId.present ? createFolderId.value : cipher.folderId),
+    folderIdPresent: true,
+    currentTags: null,
+  });
+  if (createResolution.folderError) return createResolution.folderError;
+  if (createResolution.kind === 'set') {
+    applyResolvedTagsFolder(cipher, createResolution);
+  }
   normalizeCipherForStorage(cipher);
   const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
   if (compatibilityError) return errorResponse(compatibilityError, 400);
-
-  // Prevent referencing a folder owned by another user.
-  if (cipher.folderId) {
-    const folderOk = await verifyFolderOwnership(storage, cipher.folderId, userId);
-    if (!folderOk) return errorResponse('Folder not found', 404);
-  }
 
   await storage.saveCipher(cipher);
   const revisionDate = await storage.updateRevisionDate(userId);
@@ -1131,25 +1196,31 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
   // Some clients omit cleared values, so merge fallback must not resurrect them.
   cipher.notes = readNullableFullUpdateField<string>(cipherData, ['notes', 'Notes']);
   cipher.fields = readNullableFullUpdateField<Cipher['fields']>(cipherData, ['fields', 'Fields']);
-  // Tags keep last-writer semantics only when the client actually sends the
-  // field; official Bitwarden clients omit it entirely, so their edits must
-  // never wipe web-vault tags.
-  const tagsPresent = Object.prototype.hasOwnProperty.call(cipherData, 'tags')
+  // Tags/folder resolution: explicit tags (web vault) win; otherwise folderId
+  // is official-client move-to-folder semantics on the first tag; with
+  // neither field the stored tags and folder survive untouched.
+  const updateTagsPresent = Object.prototype.hasOwnProperty.call(cipherData, 'tags')
     || Object.prototype.hasOwnProperty.call(cipherData, 'Tags');
-  cipher.tags = normalizeCipherTags(
-    tagsPresent
-      ? (cipherData.tags ?? cipherData.Tags)
-      : existingCipher.tags
-  );
+  const updateFolderIdPresent = incomingFolderId.present
+    || Object.prototype.hasOwnProperty.call(cipherData, 'folderId')
+    || Object.prototype.hasOwnProperty.call(cipherData, 'FolderId');
+  const updateFolderId = incomingFolderId.present
+    ? normalizeOptionalId(incomingFolderId.value)
+    : normalizeOptionalId(cipher.folderId);
+  const updateResolution = await resolveCipherTags(storage, userId, {
+    tagsPresent: updateTagsPresent,
+    rawTags: cipherData.tags ?? cipherData.Tags,
+    folderId: updateFolderId,
+    folderIdPresent: updateFolderIdPresent,
+    currentTags: Array.isArray(existingCipher.tags) ? existingCipher.tags : null,
+  });
+  if (updateResolution.folderError) return updateResolution.folderError;
+  if (updateResolution.kind === 'set') {
+    applyResolvedTagsFolder(cipher, updateResolution);
+  }
   normalizeCipherForStorage(cipher);
   const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
   if (compatibilityError) return errorResponse(compatibilityError, 400);
-
-  // Prevent referencing a folder owned by another user.
-  if (cipher.folderId) {
-    const folderOk = await verifyFolderOwnership(storage, cipher.folderId, userId);
-    if (!folderOk) return errorResponse('Folder not found', 404);
-  }
 
   await syncIncomingAttachmentMetadata(storage, cipher.id, cipherData);
   await storage.saveCipher(cipher);
