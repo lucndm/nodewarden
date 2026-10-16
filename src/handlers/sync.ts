@@ -95,7 +95,14 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
   const userDecryptionOptions = buildUserDecryptionOptions(user, webAuthnPrfOptions[0] || null);
   const validFolderIds = new Set(folders.map((folder) => folder.id));
 
-  const profile: ProfileResponse = buildProfileResponse(user, env);
+  const profile: ProfileResponse = buildProfileResponse(user, env, {
+    // The official Bitwarden SDK parses profile.masterPasswordHint from the
+    // /api/sync payload as an EncString; stored plaintext hints ("myhint12")
+    // make it throw "EncString error, Invalid length". Suppress here; the
+    // dedicated /api/accounts/profile endpoint still returns the stored value
+    // so the bundled web vault can prefill the Settings form.
+    suppressNonEncStringHint: true,
+  });
 
   const cipherResponses: CipherResponse[] = [];
   for (const cipher of ciphers) {

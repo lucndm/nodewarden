@@ -2,14 +2,27 @@ import type { Env, ProfileResponse, User } from '../types';
 import { buildAccountKeys } from './user-decryption';
 import { isYubiKeyEnabled } from './yubico-otp';
 
-// Official Bitwarden clients treat profile.masterPasswordHint as an EncString
-// (encrypted with the user's key). NodeWarden historically stored plaintext
-// hints written by the bundled web vault, which makes the official Rust SDK
-// throw "EncString error, Invalid length" when parsing the /api/sync payload.
-// We accept any value on write (web vault UX stays intact) but suppress
-// anything that is not EncString-shaped on read so the SDK never sees garbage.
-// ponytail: swallows pre-existing plaintext hints; upgrade path is to encrypt
-// hints client-side in the web vault and switch storage to EncString.
+// Master password hint storage is plaintext (the bundled web vault writes
+// user-typed text and has no client-side encryption for it). The official
+// Bitwarden clients parse profile.masterPasswordHint as an EncString and the
+// Rust SDK throws "EncString error, Invalid length" when it sees raw text in
+// the /api/sync payload.
+//
+// Suppression is therefore opt-in per caller:
+//   - /api/sync (handleSync) sets suppressNonEncStringHint: true so the SDK
+//     never sees a non-EncString value.
+//   - /api/accounts/profile (handleGetProfile / handleUpdateProfile) does NOT
+//     suppress: the bundled web vault reads profile.masterPasswordHint back to
+//     prefill the Settings form, and that prefill path expects the stored
+//     plaintext as-is. The official client also reads /api/accounts/profile,
+//     but the Rust SDK only feeds masterPasswordHint through the EncString
+//     parser when it arrives inside /api/sync, not when it is the dedicated
+//     profile response.
+//
+// ponytail: only /api/sync is sanitized. Upgrade path is to encrypt hints
+// client-side in the web vault (using the user's symmetric key) and switch
+// storage to EncString; once that lands the suppression can be removed
+// entirely.
 export function looksLikeMasterPasswordHint(value: string | null | undefined): boolean {
   if (!value) return false;
   const firstDot = value.indexOf('.');
@@ -18,14 +31,31 @@ export function looksLikeMasterPasswordHint(value: string | null | undefined): b
   return parts.length >= 2;
 }
 
-export function buildProfileResponse(user: User, env?: Env): ProfileResponse {
+export interface BuildProfileResponseOptions {
+  // When true, a stored masterPasswordHint that is not EncString-shaped is
+  // replaced with null in the response. When false (default) the stored value
+  // is returned as-is.
+  suppressNonEncStringHint?: boolean;
+}
+
+export function buildProfileResponse(
+  user: User,
+  env?: Env,
+  options: BuildProfileResponseOptions = {}
+): ProfileResponse {
   void env;
   const organizations: any[] = [];
   const accountKeys = buildAccountKeys(user);
 
   const storedHint = user.masterPasswordHint;
+  // Suppress only when the caller asked for it AND the stored value is not a
+  // valid EncString (which includes null/empty). When the caller did not ask,
+  // return the stored value verbatim so the bundled web vault can prefill
+  // its Settings form.
   const masterPasswordHint =
-    storedHint && looksLikeMasterPasswordHint(storedHint) ? storedHint : null;
+    options.suppressNonEncStringHint && !looksLikeMasterPasswordHint(storedHint)
+      ? null
+      : storedHint;
 
   return {
     id: user.id,
