@@ -22,6 +22,7 @@
     "test:vault-compatibility": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/vault-compatibility.test.ts",
     "test:web-crypto": "tsx --test scripts/web-crypto-availability.test.ts",
     "test:master-password-hint": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/master-password-hint.test.ts",
+    "test:sync-cipher-filter": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/sync-cipher-filter.test.ts",
     "test:password-hint-endpoint-removed": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/password-hint-endpoint-removed.test.ts",
     "test:billing-subscription": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/billing-subscription.test.ts",
     "test:notifications-security": "tsx --test scripts/notifications-security.test.ts",
