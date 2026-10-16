@@ -490,20 +490,6 @@ export async function registerAccount(args: {
   }
 }
 
-export async function getPasswordHint(email: string): Promise<{ masterPasswordHint: string | null }> {
-  const resp = await fetch('/api/accounts/password-hint', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim().toLowerCase() }),
-  });
-  if (!resp.ok) {
-    const body = await parseJson<TokenError>(resp);
-    throw new Error(translateServerError(body?.error_description || body?.error, t('txt_password_hint_load_failed')));
-  }
-  const body = (await parseJson<{ masterPasswordHint?: string | null }>(resp)) || {};
-  return { masterPasswordHint: body.masterPasswordHint ?? null };
-}
-
 export function createAuthedFetch(getSession: () => SessionState | null, setSession: SessionSetter) {
   return async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
     const retryableRequest = async (headers: Headers): Promise<Response> => {

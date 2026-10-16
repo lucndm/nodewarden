@@ -16,7 +16,6 @@ import {
   getAuthorizedDevices,
   clearProfileSnapshot,
   getCurrentDeviceIdentifier,
-  getPasswordHint,
   getProfile,
   loadProfileSnapshot,
   saveProfileSnapshot,
@@ -232,15 +231,6 @@ export default function App() {
     passwordHint: '',
     inviteCode: initialInviteCode,
   });
-  const [loginHintState, setLoginHintState] = useState<{
-    email: string;
-    loading: boolean;
-    hint: string | null;
-  }>({
-    email: '',
-    loading: false,
-    hint: null,
-  });
   const [inviteCodeFromUrl, setInviteCodeFromUrl] = useState(initialInviteCode);
   const [hashPathRaw, setHashPathRaw] = useState(() => (typeof window !== 'undefined' ? window.location.hash || '' : ''));
   const [unlockPassword, setUnlockPassword] = useState('');
@@ -297,8 +287,6 @@ export default function App() {
   const pendingVaultCoreRefreshRef = useRef<Promise<unknown> | null>(null);
   const notificationRefreshTimerRef = useRef<number | null>(null);
   const domainRulesSaveSeqRef = useRef(0);
-  const loginEmailRef = useRef(loginValues.email);
-  const loginHintRequestSeqRef = useRef(0);
   const { toasts, pushToast, removeToast } = useToastManager();
 
   useEffect(() => {
@@ -330,16 +318,6 @@ export default function App() {
     if (!inviteCodeFromUrl) return;
     setRegisterValues((prev) => (prev.inviteCode === inviteCodeFromUrl ? prev : { ...prev, inviteCode: inviteCodeFromUrl }));
   }, [inviteCodeFromUrl]);
-
-  useEffect(() => {
-    loginEmailRef.current = loginValues.email;
-    const normalizedEmail = loginValues.email.trim().toLowerCase();
-    setLoginHintState((prev) => (
-      prev.email && prev.email !== normalizedEmail
-        ? { email: '', loading: false, hint: null }
-        : prev
-    ));
-  }, [loginValues.email]);
 
   useEffect(() => {
     if (!inviteCodeFromUrl) return;
@@ -871,47 +849,6 @@ export default function App() {
       hideCancel: true,
       onConfirm: () => setConfirm(null),
     });
-  }
-
-  async function handleTogglePasswordHint() {
-    if (pendingAuthAction) return;
-    if (IS_DEMO_MODE) {
-      openPasswordHintDialog(t('txt_demo_master_password_hint'));
-      return;
-    }
-    const email = loginValues.email.trim().toLowerCase();
-    if (!email) return;
-
-    if (loginHintState.email === email && !loginHintState.loading) {
-      openPasswordHintDialog(loginHintState.hint);
-      return;
-    }
-
-    const requestSeq = ++loginHintRequestSeqRef.current;
-    setLoginHintState({
-      email,
-      loading: true,
-      hint: null,
-    });
-
-    try {
-      const result = await getPasswordHint(email);
-      if (loginHintRequestSeqRef.current !== requestSeq || loginEmailRef.current.trim().toLowerCase() !== email) return;
-      openPasswordHintDialog(result.masterPasswordHint);
-      setLoginHintState({
-        email,
-        loading: false,
-        hint: result.masterPasswordHint,
-      });
-    } catch (error) {
-      if (loginHintRequestSeqRef.current !== requestSeq || loginEmailRef.current.trim().toLowerCase() !== email) return;
-      setLoginHintState({
-        email: '',
-        loading: false,
-        hint: null,
-      });
-      pushToast('error', error instanceof Error ? error.message : t('txt_password_hint_load_failed'));
-    }
   }
 
   function handleShowLockedPasswordHint() {
@@ -2338,7 +2275,6 @@ export default function App() {
           registrationInviteRequired={registrationInviteRequired}
           unlockPassword={unlockPassword}
           emailForLock={profile?.email || session?.email || ''}
-          loginHintLoading={loginHintState.loading}
           onChangeLogin={setLoginValues}
           onChangePasskeyPassword={setPasskeyPassword}
           onChangeRegister={setRegisterValues}
@@ -2369,7 +2305,6 @@ export default function App() {
             navigate('/register');
           }}
           onLogout={logoutNow}
-          onTogglePasswordHint={() => void handleTogglePasswordHint()}
           onShowLockedPasswordHint={handleShowLockedPasswordHint}
           onRetrySessionRefresh={() => {
             lockedSessionRetryAttemptRef.current = 0;

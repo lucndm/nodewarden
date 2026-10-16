@@ -16,7 +16,6 @@ import { handleToken, handlePrelogin, handleRevocation } from './handlers/identi
 import { handleGetAccountPasskeyAssertionOptions } from './handlers/account-passkeys';
 import {
   handleRegister,
-  handleGetPasswordHint,
   handleRecoverTwoFactor,
 } from './handlers/accounts';
 import {
@@ -521,18 +520,6 @@ export async function handlePublicRoute(
     const blocked = await enforcePublicRateLimit('public-sensitive', LIMITS.rateLimit.sensitivePublicRequestsPerMinute);
     if (blocked) return blocked;
     return unsupportedResponse('Email delivery is not supported by this server.');
-  }
-
-  if (path === '/api/accounts/password-hint' && method === 'POST') {
-    const blocked = await enforcePublicRateLimit('public-sensitive', LIMITS.rateLimit.sensitivePublicRequestsPerMinute);
-    if (blocked) return blocked;
-    if (!isSameOriginWriteRequest(request)) {
-      return new Response(JSON.stringify({ error: 'Forbidden origin' }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    return handleGetPasswordHint(request, env);
   }
 
   if ((path === '/config' || path === '/api/config') && method === 'GET') {
