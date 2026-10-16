@@ -1,11 +1,17 @@
-// The official Bitwarden Rust SDK parses profile.masterPasswordHint as an
-// EncString (type.iv|ciphertext|mac). NodeWarden's bundled web vault writes
-// plaintext ("myhint12"), which the SDK throws "EncString error, Invalid
-// length: expected 32, got 9" on after every /api/sync — recorded 12 times
-// in a single flight recorder.
+// Master password hints are stored as plaintext (the bundled web vault writes
+// user-typed text). Two callers build a profile response, with different
+// needs:
 //
-// Strategy: keep accepting any string on write (web vault UX preserved) but
-// suppress non-EncString values on read so the SDK never sees them.
+//   - /api/sync (handleSync) feeds the response to the official Bitwarden
+//     SDK, which parses masterPasswordHint as an EncString and throws
+//     "Invalid length" on plaintext. Suppression is opt-in via
+//     { suppressNonEncStringHint: true }.
+//
+//   - /api/accounts/profile (handleGetProfile / handleUpdateProfile) is also
+//     read by the bundled web vault to prefill the Settings form. That path
+//     must return the stored plaintext as-is. Default = no suppression.
+//
+// These tests cover both routes independently.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -49,13 +55,17 @@ function makeUser(overrides: Partial<User> = {}): User {
 const ENC = (value: string) =>
   `2.${Buffer.from('iv-' + value).toString('base64')}|${Buffer.from('ct-' + value).toString('base64')}|${Buffer.from('mac-' + value).toString('base64')}`;
 
-test('plaintext 9-char hint is suppressed to null in profile response', () => {
-  // Mirrors the exact failing case from the flight recorder.
-  const profile = buildProfileResponse(makeUser({ masterPasswordHint: 'myhint12' }));
+// ── /api/sync path (official clients; SDK must never see plaintext) ────────
+
+test('/api/sync suppresses the plaintext 9-char hint to null', () => {
+  // Mirrors the exact failing case from the Android 2026.9.1 flight recorder.
+  const profile = buildProfileResponse(makeUser({ masterPasswordHint: 'myhint12' }), undefined, {
+    suppressNonEncStringHint: true,
+  });
   assert.equal(profile.masterPasswordHint, null);
 });
 
-test('any non-EncString-shaped hint is suppressed to null', () => {
+test('/api/sync suppresses every non-EncString-shaped hint to null', () => {
   for (const value of [
     'plain',
     '',
@@ -66,18 +76,45 @@ test('any non-EncString-shaped hint is suppressed to null', () => {
     '.iv|ct|mac',
     'has.dot.but.no.pipes',
   ]) {
-    const profile = buildProfileResponse(makeUser({ masterPasswordHint: value }));
+    const profile = buildProfileResponse(makeUser({ masterPasswordHint: value }), undefined, {
+      suppressNonEncStringHint: true,
+    });
     assert.equal(profile.masterPasswordHint, null, `hint ${JSON.stringify(value)} should be null`);
   }
 });
 
-test('legitimate EncString hint is passed through verbatim', () => {
+// ── /api/accounts/profile path (bundled web vault prefill) ─────────────────
+
+test('/api/accounts/profile returns the stored 9-char plaintext hint unchanged', () => {
+  // The webapp SettingsPage reads profile.masterPasswordHint back to prefill
+  // the hint input. A null here would look like "the hint disappeared" to
+  // the user — it must round-trip verbatim.
+  const profile = buildProfileResponse(makeUser({ masterPasswordHint: 'myhint12' }));
+  assert.equal(profile.masterPasswordHint, 'myhint12');
+});
+
+test('/api/accounts/profile returns any stored plaintext hint unchanged', () => {
+  for (const value of ['plain', 'no-dot-or-pipes', '2.noPipeParts', 'has.dot.but.no.pipes']) {
+    const profile = buildProfileResponse(makeUser({ masterPasswordHint: value }));
+    assert.equal(profile.masterPasswordHint, value, `hint ${JSON.stringify(value)} must round-trip`);
+  }
+});
+
+test('/api/accounts/profile returns a legitimate EncString hint unchanged', () => {
   const realHint = ENC('real encrypted hint payload');
   const profile = buildProfileResponse(makeUser({ masterPasswordHint: realHint }));
   assert.equal(profile.masterPasswordHint, realHint);
 });
 
-test('null hint stays null', () => {
-  const profile = buildProfileResponse(makeUser({ masterPasswordHint: null }));
-  assert.equal(profile.masterPasswordHint, null);
+test('null hint stays null on both paths', () => {
+  assert.equal(
+    buildProfileResponse(makeUser({ masterPasswordHint: null })).masterPasswordHint,
+    null
+  );
+  assert.equal(
+    buildProfileResponse(makeUser({ masterPasswordHint: null }), undefined, {
+      suppressNonEncStringHint: true,
+    }).masterPasswordHint,
+    null
+  );
 });
