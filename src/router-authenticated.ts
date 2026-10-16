@@ -28,6 +28,7 @@ import {
   handleGetApiKey,
   handleRotateApiKey,
 } from './handlers/accounts';
+import { handleGetBillingSubscription } from './handlers/billing';
 import {
   handleGetCiphers,
   handleGetCipher,
@@ -158,6 +159,12 @@ export async function handleAuthenticatedRoute(
     if (method === 'GET') return handleGetProfile(request, env, userId);
     if (method === 'PUT') return handleUpdateProfile(request, env, userId);
     return errorResponse('Method not allowed', 405);
+  }
+
+  // Self-hosted clients (official Android 2026.9.1, others) hit this after
+  // every vault unlock; returning 404 left a 4xx in the user's flight recorder.
+  if (path === '/api/account/billing/vnext/subscription' && method === 'GET') {
+    return handleGetBillingSubscription(request, env);
   }
 
   if ((path === '/api/accounts/password' || path === '/api/accounts/change-password') && (method === 'POST' || method === 'PUT')) {
