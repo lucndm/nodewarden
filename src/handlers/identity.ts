@@ -410,28 +410,13 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     }
 
     const user = await storage.getUser(email);
-    if (!user) {
-      await rateLimit.recordFailedLogin(loginIdentifier);
-      return identityErrorResponse('Username or password is incorrect. Try again', 'invalid_grant', 400);
-    }
-    if (user.status !== 'active') {
-      await rateLimit.recordFailedLogin(loginIdentifier);
-      await safeWriteAuditEvent(env, {
-        actorUserId: user.id,
-        action: 'auth.login.failed.user_inactive',
-        category: 'auth',
-        level: 'warn',
-        targetType: 'user',
-        targetId: user.id,
-        metadata: {
-          grantType,
-          deviceIdentifier: deviceInfo.deviceIdentifier,
-          ...auditRequestMetadata(request),
-        },
-      });
-      return identityErrorResponse('Account is disabled', 'invalid_grant', 400);
-    }
-    if (isSsoLoginRequired(env, user) && !(await hasActiveWebSessionFor(request, env, user.id))) {
+    // Fork: SSO-linked accounts never authenticate through the password grant.
+    // This gate stays ahead of the verifier so a linked account's master password
+    // is never checked at all. Dummy password work keeps the response time in
+    // line with the credential path upstream added, so the short-circuit does
+    // not become a timing oracle for "this account exists and uses SSO".
+    if (user && isSsoLoginRequired(env, user) && !(await hasActiveWebSessionFor(request, env, user.id))) {
+      await auth.performDummyPasswordWork(passwordHash);
       await safeWriteAuditEvent(env, {
         actorUserId: user.id,
         action: 'auth.login.failed.sso_required',
@@ -445,6 +430,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
           ...auditRequestMetadata(request),
         },
       });
+      await rateLimit.recordFailedLogin(loginIdentifier);
       return identityErrorResponse('This account requires SSO sign-in', 'sso_required', 400);
     }
 
@@ -453,8 +439,13 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     let valid = false;
     const normalizedAuthRequestId = String(authRequestId || '').trim();
     if (normalizedAuthRequestId) {
-      const authRequest = await storage.getAuthRequestByIdForUser(normalizedAuthRequestId, user.id);
+      // Auth-request grants carry an access code, not a password hash. Pay the
+      // same KDF cost and perform the lookup even when the account is missing.
+      await auth.performDummyPasswordWork(passwordHash);
+      const authRequest = await storage.getAuthRequestByIdForUser(normalizedAuthRequestId, user?.id ?? '');
       valid = !!(
+        user &&
+        user.status === 'active' &&
         authRequest &&
         authRequest.userId === user.id &&
         authRequest.type === 0 &&
@@ -470,16 +461,19 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
         authRequestLoginKey = authRequest!.key;
       }
     } else {
-      valid = await auth.verifyPassword(passwordHash, user.masterPasswordHash, user.email);
+      const passwordValid = await auth.verifyPassword(passwordHash, user?.masterPasswordHash ?? null, user?.email ?? email);
+      valid = !!user && user.status === 'active' && passwordValid;
     }
-    if (!valid) {
+    if (!valid || !user) {
       await safeWriteAuditEvent(env, {
-        actorUserId: user.id,
-        action: normalizedAuthRequestId ? 'auth.login.failed.bad_auth_request' : 'auth.login.failed.bad_password',
+        actorUserId: user?.id,
+        action: user && user.status !== 'active'
+          ? 'auth.login.failed.user_inactive'
+          : normalizedAuthRequestId ? 'auth.login.failed.bad_auth_request' : 'auth.login.failed.bad_password',
         category: 'auth',
         level: 'warn',
         targetType: 'user',
-        targetId: user.id,
+        targetId: user?.id,
         metadata: {
           grantType,
           deviceIdentifier: deviceInfo.deviceIdentifier,
@@ -610,6 +604,10 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
           Date.now() + TWO_FACTOR_REMEMBER_TTL_MS
         );
       }
+    }
+
+    if (!normalizedAuthRequestId) {
+      await auth.upgradePasswordVerifier(user, passwordHash);
     }
 
     // Persist device only after successful password + (optional) 2FA verification.

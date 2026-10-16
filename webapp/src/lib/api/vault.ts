@@ -19,6 +19,8 @@ import {
 } from './shared';
 import { readResponseBytesWithProgress } from '../download';
 import { loadVaultCoreSyncSnapshot } from './vault-sync';
+import { cipherFieldMetadata } from '../cipher-fields';
+import { t } from '../i18n';
 
 type CipherLoginData = NonNullable<Cipher['login']>;
 const PASSWORD_HISTORY_MAX = 50;
@@ -575,6 +577,8 @@ function plainCipherValue(decrypted: unknown, raw: unknown = ''): string {
 function draftFromDecryptedCipher(cipher: Cipher): VaultDraft {
   const type = Number(cipher.type || 1) || 1;
   const draft: VaultDraft = {
+    id: cipher.id,
+    revisionDate: cipher.revisionDate,
     type,
     name: plainCipherValue(cipher.decName, cipher.name).trim() || 'Untitled',
     notes: plainCipherValue(cipher.decNotes, cipher.notes),
@@ -652,6 +656,7 @@ function draftFromDecryptedCipher(cipher: Cipher): VaultDraft {
 
   draft.customFields = (cipher.fields || [])
     .map((field) => ({
+      ...cipherFieldMetadata(field),
       type: parseFieldType(field.type ?? 0),
       label: plainCipherValue(field.decName, field.name).trim(),
       value: plainCipherValue(field.decValue, field.value),
@@ -799,15 +804,17 @@ async function encryptCustomFields(
   fields: VaultDraftField[],
   enc: Uint8Array,
   mac: Uint8Array
-): Promise<Array<{ type: number; name: string | null; value: string | null }>> {
-  const out: Array<{ type: number; name: string | null; value: string | null }> = [];
+): Promise<Array<Record<string, unknown>>> {
+  const out: Array<Record<string, unknown>> = [];
   for (const field of fields || []) {
     const label = String(field.label || '').trim();
     if (!label) continue;
     out.push({
+      ...cipherFieldMetadata(field.extra || {}).extra,
       type: parseFieldType(field.type),
       name: await encryptTextValue(label, enc, mac),
       value: await encryptTextValue(String(field.value || ''), enc, mac),
+      ...(parseFieldType(field.type) === 3 ? { linkedId: field.linkedId ?? null } : {}),
     });
   }
   return out;
@@ -1302,6 +1309,8 @@ async function buildCipherPayload(
   if (cipher?.id) {
     payload.id = cipher.id;
     payload.key = keys.key;
+    // Use the version captured when editing began, even if sync refreshed cipher.
+    payload.lastKnownRevisionDate = draft.revisionDate ?? cipher.revisionDate;
   }
 
   if (type === 1) {
@@ -1329,6 +1338,7 @@ async function buildCipherPayload(
     payload.passwordHistory = await buildUpdatedPasswordHistory(cipher, draft, keys.enc, keys.mac);
   } else if (type === 3) {
     payload.card = {
+      ...stripDecodedObjectFields(cipher?.card),
       cardholderName: await encryptTextValue(draft.cardholderName, keys.enc, keys.mac),
       number: await encryptTextValue(draft.cardNumber, keys.enc, keys.mac),
       brand: await encryptTextValue(draft.cardBrand, keys.enc, keys.mac),
@@ -1338,6 +1348,7 @@ async function buildCipherPayload(
     };
   } else if (type === 4) {
     payload.identity = {
+      ...stripDecodedObjectFields(cipher?.identity),
       title: await encryptTextValue(draft.identTitle, keys.enc, keys.mac),
       firstName: await encryptTextValue(draft.identFirstName, keys.enc, keys.mac),
       middleName: await encryptTextValue(draft.identMiddleName, keys.enc, keys.mac),
@@ -1428,7 +1439,7 @@ async function buildCipherPayload(
       keys.mac
     );
   } else if (type === 2) {
-    payload.secureNote = { type: 0 };
+    payload.secureNote = { ...stripDecodedObjectFields(cipher?.secureNote), type: 0 };
   }
 
   return payload;
@@ -1464,6 +1475,9 @@ export async function updateCipher(
   extraPayload?: Record<string, unknown>,
   options?: { webRepair?: boolean }
 ): Promise<Cipher> {
+  if (draft.id && draft.id !== cipher.id) {
+    throw createApiError(t('txt_item_changed_elsewhere'), 400);
+  }
   const payload = await buildCipherPayload(session, draft, cipher);
   if (extraPayload) {
     Object.assign(payload, extraPayload);
@@ -1477,7 +1491,7 @@ export async function updateCipher(
     },
     body: JSON.stringify(payload),
   });
-  if (!resp.ok) throw new Error('Update item failed');
+  if (!resp.ok) throw createApiError(await parseErrorMessage(resp, t('txt_update_item_failed')), resp.status);
   return (await parseJson<Cipher>(resp))!;
 }
 
