@@ -55,6 +55,12 @@
 
 ---
 
+## Web Vault usage metrics
+
+Select **Sort → Most used** to rank items by successful copies of their current login password in the NodeWarden Web Vault. Login details show the copy count and last-copied time. Username, TOTP, password-history copies, views and reveals do not count; official extension/app autofill and successful website logins are not measured.
+
+Counters start at zero when this feature is enabled and are stored per item in this instance’s D1 database, not sent to a third-party analytics service. Failed tracking shows a warning without undoing the copy; offline or failed requests are not queued. The schema upgrades automatically, cloud backups retain the counters, and older backups restore with zero counts. Permanent item deletion removes its metrics.
+
 ## Tested clients
 
 - ✅ Windows desktop

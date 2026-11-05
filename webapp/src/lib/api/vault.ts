@@ -130,6 +130,63 @@ export async function getCipherById(authedFetch: AuthedFetch, cipherId: string):
   return body;
 }
 
+export interface CipherUsageEntry {
+  useCount: number;
+  lastUsedAt: string | null;
+}
+
+export type CipherUsageMap = Record<string, CipherUsageEntry>;
+
+function normalizeCipherUsageEntry(raw: unknown): CipherUsageEntry {
+  const value = (raw && typeof raw === 'object' ? raw : {}) as { useCount?: unknown; lastUsedAt?: unknown };
+  const count = Number(value.useCount);
+  const lastUsedAt = typeof value.lastUsedAt === 'string' && value.lastUsedAt.trim() ? value.lastUsedAt : null;
+  return { useCount: Number.isFinite(count) && count > 0 ? Math.floor(count) : 0, lastUsedAt };
+}
+
+// GET /api/ciphers/usage
+// Per-cipher password copy counters for the owner. Ciphers that were never
+// copied may be missing from the map.
+export async function getCipherUsage(authedFetch: AuthedFetch): Promise<CipherUsageMap> {
+  const resp = await authedFetch('/api/ciphers/usage');
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Load cipher usage failed'));
+  const body = await parseJson<Record<string, unknown>>(resp);
+  if (!body || typeof body !== 'object') return {};
+  const usage: CipherUsageMap = {};
+  for (const [cipherId, entry] of Object.entries(body)) {
+    const id = String(cipherId || '').trim();
+    if (!id) continue;
+    usage[id] = normalizeCipherUsageEntry(entry);
+  }
+  return usage;
+}
+
+// POST /api/ciphers/:id/usage
+// Counts one successful login password copy. The server increments atomically
+// and answers with the new counters. The request carries no secret: only the
+// cipher id travels, the password itself never leaves the browser.
+export async function recordCipherUsage(authedFetch: AuthedFetch, cipherId: string): Promise<CipherUsageEntry> {
+  const id = String(cipherId || '').trim();
+  if (!id) throw new Error('Cipher id is required');
+  const resp = await authedFetch(`/api/ciphers/${encodeURIComponent(id)}/usage`, { method: 'POST' });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Record cipher usage failed'));
+  return normalizeCipherUsageEntry(await parseJson<unknown>(resp));
+}
+
+// A copy updates the count of one cipher. A map that was never loaded stays
+// missing: inventing zero counts for every other item would be a lie.
+export function mergeCipherUsageEntry(
+  usage: CipherUsageMap | null,
+  cipherId: string,
+  entry: CipherUsageEntry
+): CipherUsageMap | null {
+  const id = String(cipherId || '').trim();
+  if (!usage || !id) return usage;
+  // A slow answer must never lower a count that a newer answer already set.
+  if (usage[id] && usage[id].useCount > entry.useCount) return usage;
+  return { ...usage, [id]: entry };
+}
+
 export interface CiphersImportPayload {
   ciphers: Array<Record<string, unknown>>;
   folders: Array<{ name: string }>;

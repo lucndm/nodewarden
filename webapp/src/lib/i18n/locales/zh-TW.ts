@@ -1598,7 +1598,13 @@ Object.assign(zhTW, {
   "txt_generator_forwarded_error_network": "無法連線別名服務。請檢查伺服器位址和網路連線。",
   "txt_generator_forwarded_error_auth": "別名服務拒絕了 API 金鑰。",
   "txt_generator_forwarded_error_quota": "別名服務無法建立別名（已達配額或沒有可用網域）。",
-  "txt_generator_forwarded_error_generic": "別名服務回傳錯誤，請重試。"
+  "txt_generator_forwarded_error_generic": "別名服務回傳錯誤，請重試。",
+  "txt_sort_most_used": "最常用",
+  "txt_password_copies": "密碼複製次數",
+  "txt_password_copied_count": "已複製 {count} 次",
+  "txt_last_copied": "最近複製",
+  "txt_usage_metrics_unavailable": "使用統計暫不可用",
+  "txt_usage_tracking_failed": "密碼已複製，但未能記錄本次複製"
 });
 
 export default zhTW;

@@ -1520,6 +1520,12 @@ Object.assign(it, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_forwarded_error_auth": "Il provider di alias ha rifiutato la chiave API.",
   "txt_generator_forwarded_error_quota": "Il provider di alias non ha potuto creare l’alias (quota raggiunta o nessun dominio disponibile).",
   "txt_generator_forwarded_error_generic": "Il provider di alias ha restituito un errore. Riprova.",
+  "txt_sort_most_used": "Più usati",
+  "txt_password_copies": "Copie della password",
+  "txt_password_copied_count": "Copiata {count} volte",
+  "txt_last_copied": "Ultima copia",
+  "txt_usage_metrics_unavailable": "Metriche di utilizzo non disponibili",
+  "txt_usage_tracking_failed": "Password copiata, ma non è stato possibile registrare la copia",
 });
 
 export default it;

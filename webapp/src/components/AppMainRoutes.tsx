@@ -6,7 +6,7 @@ import type { ImportAttachmentFile, ImportResultSummary } from '@/components/Imp
 import LoadingState from '@/components/LoadingState';
 import type { AdminBackupImportResponse, AdminBackupRunResponse, AdminBackupSettings, RemoteBackupBrowserResponse } from '@/lib/api/backup';
 import type { AuditLogFilters } from '@/lib/api/admin';
-import type { CiphersImportPayload } from '@/lib/api/vault';
+import type { CiphersImportPayload, CipherUsageMap } from '@/lib/api/vault';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { t } from '@/lib/i18n';
 import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
@@ -54,6 +54,9 @@ export interface AppMainRoutesProps {
   ciphersLoading: boolean;
   foldersLoading: boolean;
   sendsLoading: boolean;
+  cipherUsage: CipherUsageMap | null;
+  cipherUsageError: boolean;
+  onTrackPasswordCopy: (cipherId: string) => void;
   users: AdminUser[];
   invites: AdminInvite[];
   adminLoading: boolean;
@@ -261,6 +264,9 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             loading={props.ciphersLoading || props.foldersLoading}
             error={props.vaultError}
             emailForReprompt={props.profile?.email || props.session?.email || ''}
+            cipherUsage={props.cipherUsage}
+            cipherUsageError={props.cipherUsageError}
+            onTrackPasswordCopy={props.onTrackPasswordCopy}
             onRefresh={props.onRefreshVault}
             onCreate={props.onCreateVaultItem}
             onUpdate={props.onUpdateVaultItem}

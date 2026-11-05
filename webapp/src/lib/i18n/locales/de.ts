@@ -1520,6 +1520,12 @@ Object.assign(de, { "txt_password_security_show_all": "Alle anzeigen", "txt_pass
   "txt_generator_forwarded_error_auth": "Der Alias-Anbieter hat den API-Schlüssel abgelehnt.",
   "txt_generator_forwarded_error_quota": "Der Alias-Anbieter konnte das Alias nicht erstellen (Kontingent erreicht oder keine Domain verfügbar).",
   "txt_generator_forwarded_error_generic": "Der Alias-Anbieter hat einen Fehler gemeldet. Bitte versuchen Sie es erneut.",
+  "txt_sort_most_used": "Am häufigsten verwendet",
+  "txt_password_copies": "Passwort-Kopien",
+  "txt_password_copied_count": "{count}-mal kopiert",
+  "txt_last_copied": "Zuletzt kopiert",
+  "txt_usage_metrics_unavailable": "Nutzungsstatistiken sind nicht verfügbar",
+  "txt_usage_tracking_failed": "Passwort kopiert, aber die Kopie konnte nicht erfasst werden",
 });
 
 export default de;

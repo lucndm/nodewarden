@@ -1520,6 +1520,12 @@ Object.assign(sv, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_forwarded_error_auth": "Aliastjänsten avvisade API-nyckeln.",
   "txt_generator_forwarded_error_quota": "Aliastjänsten kunde inte skapa aliaset (kvoten är nådd eller ingen domän tillgänglig).",
   "txt_generator_forwarded_error_generic": "Aliastjänsten returnerade ett fel. Försök igen.",
+  "txt_sort_most_used": "Mest använda",
+  "txt_password_copies": "Kopioringar av lösenord",
+  "txt_password_copied_count": "Kopierat {count} gånger",
+  "txt_last_copied": "Senast kopierat",
+  "txt_usage_metrics_unavailable": "Användningsstatistiken är inte tillgänglig",
+  "txt_usage_tracking_failed": "Lösenordet kopierades, men kopieringen kunde inte registreras",
 });
 
 export default sv;

@@ -34,7 +34,7 @@ import {
 import { clearAuditLogs, getAuditLogSettings, listAdminInvites, listAdminUsers, listAuditLogs, saveAuditLogSettings, type AuditLogFilters } from '@/lib/api/admin';
 import { getDomainRules, saveDomainRules } from '@/lib/api/domains';
 import { getSendById, getSends } from '@/lib/api/send';
-import { getCipherById, getFolderById, repairCipherKeyMismatches, repairCipherUriChecksums } from '@/lib/api/vault';
+import { getCipherById, getCipherUsage, getFolderById, mergeCipherUsageEntry, recordCipherUsage, repairCipherKeyMismatches, repairCipherUriChecksums, type CipherUsageMap } from '@/lib/api/vault';
 import { getCachedVaultCoreSnapshot, invalidateVaultCoreSyncSnapshot, loadVaultCoreSyncSnapshot, saveVaultCoreSyncSnapshot } from '@/lib/api/vault-sync';
 import { silentlyRepairBackupSettingsIfNeeded } from '@/lib/backup-settings-repair';
 import {
@@ -1122,6 +1122,41 @@ export default function App() {
     if (!Array.isArray(encryptedSendsFromSync)) return;
     queryClient.setQueryData(sendsQueryKey, encryptedSendsFromSync);
   }, [queryClient, sendsQueryKey, encryptedSendsFromSync]);
+  // Password copy counters. The key carries the account, so one account never
+  // sees the counters of another, and the query only runs for an unlocked
+  // session - never in the demo, which has no server behind it.
+  const cipherUsageQueryKey = useMemo(() => ['cipher-usage', vaultCacheKey || session?.email] as const, [vaultCacheKey, session?.email]);
+  const cipherUsageQuery = useQuery({
+    queryKey: cipherUsageQueryKey,
+    queryFn: () => getCipherUsage(authedFetch),
+    enabled: !IS_DEMO_MODE && phase === 'app' && !!session?.accessToken && !!session?.symEncKey && !!session?.symMacKey && !!vaultCacheKey,
+    staleTime: 30_000,
+  });
+  // A successful login password copy bumps the counter of that cipher. The
+  // copy has already happened by then, so a failed request only warns about
+  // the missing count - it never takes the copied password back.
+  async function trackPasswordCopy(cipherId: string) {
+    if (IS_DEMO_MODE) return;
+    const id = String(cipherId || '').trim();
+    if (!id) return;
+    // An in-flight read would land with the count from before this copy and
+    // overwrite the new one, so it is stopped first.
+    await queryClient.cancelQueries({ queryKey: cipherUsageQueryKey });
+    try {
+      const entry = await recordCipherUsage(authedFetch, id);
+      // Counters that failed to load are read again instead of being merged
+      // with the stale ones that are still in the cache.
+      const usage = cipherUsageQuery.isError ? null : (queryClient.getQueryData<CipherUsageMap>(cipherUsageQueryKey) ?? null);
+      const merged = mergeCipherUsageEntry(usage, id, entry);
+      if (merged) {
+        queryClient.setQueryData<CipherUsageMap>(cipherUsageQueryKey, merged);
+      } else {
+        void cipherUsageQuery.refetch();
+      }
+    } catch {
+      pushToast('warning', t('txt_usage_tracking_failed'));
+    }
+  }
   const profileQuery = useQuery({
     queryKey: ['profile', vaultCacheKey || session?.email],
     queryFn: () => getProfile(authedFetch),
@@ -2028,6 +2063,9 @@ export default function App() {
     ciphersLoading: !(vaultCoreQuery.isError && !encryptedVaultCore) && !vaultDecryptError && !vaultInitialDecryptDone,
     foldersLoading: !(vaultCoreQuery.isError && !encryptedVaultCore) && !vaultDecryptError && !vaultInitialDecryptDone,
     sendsLoading: (sendsQuery.isFetching && !encryptedSends) || (!!encryptedSends && !sendsDecryptDone),
+    cipherUsage: cipherUsageQuery.isError ? null : (cipherUsageQuery.data ?? null),
+    cipherUsageError: cipherUsageQuery.isError,
+    onTrackPasswordCopy: (cipherId: string) => { void trackPasswordCopy(cipherId); },
     users: usersQuery.data || [],
     invites: invitesQuery.data || [],
     adminLoading: (usersQuery.isFetching && !usersQuery.data) || (invitesQuery.isFetching && !invitesQuery.data),

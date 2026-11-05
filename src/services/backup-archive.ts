@@ -442,6 +442,19 @@ export function validateBackupPayloadContents(
     }
     if (cipherIds.has(id)) throw new Error(`Backup archive contains duplicate cipher id: ${id}`);
     cipherIds.add(id);
+    // Usage counters are optional: archives from before the feature simply
+    // have no counter and restore as zero. A present value must be a real
+    // counter, never a fraction, a boolean or a string.
+    if (row.usage_count != null && row.usage_count !== '') {
+      if (typeof row.usage_count !== 'number' || !Number.isSafeInteger(row.usage_count) || row.usage_count < 0) {
+        throw new Error(`Backup archive contains an invalid cipher usage count: ${id}`);
+      }
+    }
+    if (row.last_used_at != null && row.last_used_at !== '') {
+      if (typeof row.last_used_at !== 'string' || Number.isNaN(Date.parse(row.last_used_at))) {
+        throw new Error(`Backup archive contains an invalid cipher usage timestamp: ${id}`);
+      }
+    }
   }
 
   for (const row of attachmentRows) {
@@ -497,7 +510,7 @@ export async function buildBackupArchive(
     queryRows(env.DB, 'SELECT user_id, equivalent_domains, custom_equivalent_domains, excluded_global_equivalent_domains, updated_at FROM domain_settings ORDER BY user_id ASC'),
     queryRows(env.DB, 'SELECT user_id, revision_date FROM user_revisions ORDER BY user_id ASC'),
     queryRows(env.DB, 'SELECT id, user_id, name, created_at, updated_at FROM folders ORDER BY created_at ASC'),
-    queryRows(env.DB, 'SELECT id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at FROM ciphers ORDER BY created_at ASC'),
+    queryRows(env.DB, 'SELECT id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at, usage_count, last_used_at FROM ciphers ORDER BY created_at ASC'),
     queryRows(env.DB, 'SELECT id, cipher_id, file_name, size, size_name, key FROM attachments ORDER BY cipher_id ASC, id ASC'),
     queryRows(env.DB, 'SELECT id, user_id, purpose, name, public_key, credential_id, counter, type, aa_guid, transports, encrypted_user_key, encrypted_public_key, encrypted_private_key, supports_prf, created_at, updated_at FROM webauthn_credentials ORDER BY created_at ASC'),
   ]);

@@ -19,7 +19,7 @@ import { normalizeEquivalentDomain } from '@shared/domain-normalize';
 import WebsiteIcon from './WebsiteIcon';
 
 export type TypeFilter = 'login' | 'card' | 'identity' | 'note' | 'ssh' | 'bank' | 'license' | 'passport';
-export type VaultSortMode = 'edited' | 'created' | 'name';
+export type VaultSortMode = 'edited' | 'created' | 'name' | 'usage';
 export type DuplicateDetectionMode = 'exact' | 'login-site' | 'login-credentials' | 'password';
 export type SidebarFilter =
   | { kind: 'all' }
@@ -177,9 +177,27 @@ export function getVaultSortOptions(): Array<{ value: VaultSortMode; label: stri
     { value: 'edited', label: t('txt_sort_last_edited') },
     { value: 'created', label: t('txt_sort_created') },
     { value: 'name', label: t('txt_sort_name') },
+    { value: 'usage', label: t('txt_sort_most_used') },
   ];
 }
 
+// Most used: the item with the most successful login password copies first.
+// Ties fall back to the name and then the id, so the order never depends on
+// the order the items happened to arrive in.
+export function compareCipherUsage(
+  a: { id: string; name: string },
+  b: { id: string; name: string },
+  counts: Map<string, number>,
+  nameCollator: Intl.Collator
+): number {
+  const diff = (counts.get(b.id) || 0) - (counts.get(a.id) || 0);
+  if (diff !== 0) return diff;
+  const nameDiff = nameCollator.compare(a.name || '', b.name || '');
+  if (nameDiff !== 0) return nameDiff;
+  return String(a.id || '').localeCompare(String(b.id || ''));
+}
+
+// Folders have no usage metric of their own, so the list is not sortable by it.
 export function getFolderSortOptions(): Array<{ value: VaultSortMode; label: string }> {
   return [
     { value: 'edited', label: t('txt_sort_last_edited') },
@@ -736,9 +754,11 @@ export function VaultListIcon({ cipher }: { cipher: Cipher }) {
   return <WebsiteIcon cipher={cipher} fallback={<TypeIcon type={Number(cipher.type || 1)} />} />;
 }
 
-export function copyToClipboard(value: string): void {
-  if (!value.trim()) return;
-  void copyTextToClipboard(value);
+// Resolves to true only when the text really reached the clipboard, so a
+// caller can act on a successful copy and ignore a failed one.
+export function copyToClipboard(value: string): Promise<boolean> {
+  if (!value.trim()) return Promise.resolve(false);
+  return copyTextToClipboard(value);
 }
 
 export function openUri(raw: string): void {
