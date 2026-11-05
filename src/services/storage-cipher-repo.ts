@@ -167,6 +167,28 @@ export async function updateCipherIfUnchanged(
   return result.meta.changes === 1;
 }
 
+// Compares exactly the values the conditional UPDATE above would write, so a
+// save that carries no real change can skip the cipher write, the user
+// revision bump and the notification to the other clients. The updated-at
+// timestamp is deliberately left out: it is always fresh for a write that
+// happens.
+export function isCipherWriteUnchanged(next: Cipher, current: Cipher): boolean {
+  const nextFolderId = normalizeOptionalId(next.folderId);
+  const currentFolderId = normalizeOptionalId(current.folderId);
+  return (
+    (Number(next.type) || 1) === (Number(current.type) || 1) &&
+    nextFolderId === currentFolderId &&
+    (next.name ?? null) === (current.name ?? null) &&
+    (next.notes ?? null) === (current.notes ?? null) &&
+    !!next.favorite === !!current.favorite &&
+    (next.reprompt ?? 0) === (current.reprompt ?? 0) &&
+    (next.key ?? null) === (current.key ?? null) &&
+    (next.archivedAt ?? null) === (current.archivedAt ?? null) &&
+    (next.deletedAt ?? null) === (current.deletedAt ?? null) &&
+    buildCipherData(next, nextFolderId) === buildCipherData(current, currentFolderId)
+  );
+}
+
 function sanitizeIds(ids: string[]): string[] {
   return Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean)));
 }

@@ -14,6 +14,7 @@ import {
   PasswordHistory,
 } from '../types';
 import { StorageService } from '../services/storage';
+import { isCipherWriteUnchanged } from '../services/storage-cipher-repo';
 import {
   notifyUserCipherCreate,
   notifyUserCipherDelete,
@@ -1241,6 +1242,19 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
   if (cipher.folderId) {
     const folderOk = await verifyFolderOwnership(storage, cipher.folderId, userId);
     if (!folderOk) return errorResponse('Folder not found', 404);
+  }
+
+  // A save that changes nothing must not bump the revision and must not notify
+  // the other clients. Attachment metadata lives outside the cipher row, so a
+  // payload that touches it always takes the write path.
+  const changesAttachmentMetadata = readIncomingAttachmentMetadata(cipherData).some(
+    (item) => item.hasFileName || item.hasKey || item.hasFileSize
+  );
+  if (!changesAttachmentMetadata && isCipherWriteUnchanged(cipher, existingCipher)) {
+    const attachments = await storage.getAttachmentsByCipher(existingCipher.id);
+    return jsonResponse(
+      cipherToResponse(existingCipher, attachments, cipherResponseOptionsForRequest(request))
+    );
   }
 
   // Optimistic concurrency: reject a stale client copy instead of overwriting a
