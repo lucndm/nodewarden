@@ -57,7 +57,7 @@
 .search-input {
   @apply h-12 w-full rounded-xl border px-3.5 py-2.5 text-base text-ink outline-hidden transition;
   background: var(--panel);
-  border-color: rgba(74, 103, 150, 0.34);
+  border-color: rgba(95, 91, 120, 0.34);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
@@ -66,9 +66,9 @@
 }
 
 .search-input:focus {
-  border-color: rgba(43, 102, 217, 0.6);
+  border-color: rgba(91, 60, 224, 0.6);
   background-color: #fbfdff;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 4px rgba(109, 74, 255, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
 .search-input-wrap .search-input {
@@ -85,14 +85,14 @@
 }
 
 .search-clear-btn:hover {
-  background: rgba(59, 130, 246, 0.18);
+  background: rgba(139, 92, 246, 0.18);
   color: var(--brand);
   transform: translateY(-50%) scale(1.04);
 }
 
 .search-clear-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+  box-shadow: 0 0 0 3px rgba(109, 74, 255, 0.16);
 }
 
 .tree-btn {
@@ -107,12 +107,12 @@
 }
 
 .tree-btn:hover {
-  background: rgba(37, 99, 235, 0.05);
+  background: rgba(109, 74, 255, 0.05);
   color: var(--text);
 }
 
 .tree-btn.active {
-  background: rgba(37, 99, 235, 0.09);
+  background: rgba(109, 74, 255, 0.09);
   color: var(--primary-strong);
   font-weight: 600;
 }
@@ -130,7 +130,7 @@
   font-size: var(--font-xs);
   font-weight: 600;
   color: var(--muted);
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(109, 74, 255, 0.08);
   border-radius: 999px;
   padding: 1px 7px;
 }
@@ -151,8 +151,8 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.1);
-  color: var(--primary-strong, #1d4ed8);
+  background: rgba(109, 74, 255, 0.1);
+  color: var(--primary-strong, #5b3ce0);
   font-size: var(--font-xs);
   font-weight: 600;
   line-height: 1.4;
@@ -211,8 +211,8 @@
 }
 
 .folder-edit-btn:hover {
-  color: #1d4ed8;
-  background: #dbeafe;
+  color: #5b3ce0;
+  background: #ede9fe;
 }
 
 .folder-sort-btn {
@@ -227,13 +227,13 @@
 
 .folder-sort-btn:hover {
   color: var(--primary-hover);
-  background: #dbeafe;
+  background: #ede9fe;
   transform: scale(1.06);
 }
 
 .folder-sort-btn.active {
-  color: #175ddc;
-  background: #e9f1ff;
+  color: #5b3ce0;
+  background: #ede9fe;
 }
 
 .list-col {
@@ -259,7 +259,7 @@
 
 .duplicate-mode-select {
   @apply h-8 min-w-[150px] rounded-full py-0 pl-3 pr-6 text-xs;
-  border-color: rgba(74, 103, 150, 0.26);
+  border-color: rgba(95, 91, 120, 0.26);
   box-shadow: none;
   line-height: 32px;
   background-position:
@@ -346,7 +346,7 @@ select.input.duplicate-mode-toolbar-select {
 .mobile-vault-filter-trigger {
   @apply flex h-[34px] w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] border px-2.5 py-0 text-left text-[13px] font-semibold;
   background: var(--panel);
-  border-color: rgba(74, 103, 150, 0.28);
+  border-color: rgba(95, 91, 120, 0.28);
   color: var(--muted-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
   transition:
@@ -358,14 +358,14 @@ select.input.duplicate-mode-toolbar-select {
 
 .mobile-vault-filter-trigger:hover,
 .mobile-vault-filter-trigger.active {
-  border-color: rgba(43, 102, 217, 0.46);
-  background: #f8fbff;
+  border-color: rgba(91, 60, 224, 0.46);
+  background: #faf8ff;
   color: var(--primary-strong);
 }
 
 .mobile-vault-filter-trigger:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  box-shadow: 0 0 0 3px rgba(109, 74, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 .mobile-vault-filter-trigger-icon,
@@ -432,9 +432,9 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .sort-trigger.active {
-  background: #e9f1ff;
-  border-color: #a9c2ee;
-  color: #175ddc;
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #5b3ce0;
 }
 
 .sort-menu {
@@ -464,7 +464,7 @@ select.input.duplicate-mode-toolbar-select {
 
 .sort-menu-item.active {
   @apply font-bold;
-  background: rgba(37, 99, 235, 0.1);
+  background: rgba(109, 74, 255, 0.1);
   color: var(--primary-strong);
 }
 
@@ -477,11 +477,15 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .desktop-create-trigger {
-  @apply h-[34px] w-[34px] min-w-[34px] gap-0 rounded-[10px] p-0 text-[0px];
+  @apply h-[34px] min-w-[34px] gap-1.5 rounded-[10px] px-3 py-0;
 }
 
 .desktop-create-trigger .btn-icon {
   @apply m-0;
+}
+
+.create-trigger-label {
+  @apply whitespace-nowrap;
 }
 
 .duplicates-helper-toolbar {
@@ -520,7 +524,7 @@ select.input.duplicate-mode-toolbar-select {
   content: '';
   @apply absolute inset-0 opacity-0;
   background:
-    linear-gradient(90deg, rgba(43, 102, 217, 0.06), transparent 24%, transparent 76%, rgba(14, 165, 233, 0.05)),
+    linear-gradient(90deg, rgba(91, 60, 224, 0.06), transparent 24%, transparent 76%, rgba(139, 92, 246, 0.05)),
     radial-gradient(circle at 18px 50%, rgba(255, 255, 255, 0.28), transparent 44%);
   transition:
     opacity var(--dur-fast) var(--ease-smooth),
@@ -592,8 +596,8 @@ select.input.duplicate-mode-toolbar-select {
 
 .list-item:hover {
   background: #fcfdff;
-  border-color: rgba(37, 99, 235, 0.18);
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(37, 99, 235, 0.04);
+  border-color: rgba(109, 74, 255, 0.18);
+  box-shadow: 0 10px 22px rgba(18, 16, 32, 0.06), 0 0 0 1px rgba(109, 74, 255, 0.04);
 }
 
 .list-item.duplicate-group-item:hover {
@@ -607,8 +611,8 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .list-item.active {
-  background: rgba(37, 99, 235, 0.1);
-  border-color: rgba(43, 102, 217, 0.26);
+  background: rgba(109, 74, 255, 0.1);
+  border-color: rgba(91, 60, 224, 0.26);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
@@ -649,10 +653,10 @@ select.input.duplicate-mode-toolbar-select {
 .card-brand-icon {
   @apply inline-grid h-6 w-9 shrink-0 place-items-center rounded-sm border text-[7px] font-black uppercase leading-none;
   letter-spacing: 0;
-  color: #1e3a8a;
+  color: #3c228f;
   background: linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%);
   border-color: rgba(96, 125, 169, 0.34);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 2px rgba(18, 16, 32, 0.08);
 }
 
 .card-brand-icon span {
@@ -706,7 +710,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .card-brand-maestro {
-  color: #1e40af;
+  color: #4b2fb8;
   background:
     radial-gradient(circle at 38% 50%, rgba(0, 85, 164, 0.86) 0 24%, transparent 25%),
     radial-gradient(circle at 62% 50%, rgba(237, 28, 36, 0.82) 0 24%, transparent 25%),
@@ -718,7 +722,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .card-brand-rupay {
-  color: #1e3a8a;
+  color: #3c228f;
 }
 
 .card-brand-select-row {
@@ -1041,7 +1045,7 @@ select.input.duplicate-mode-toolbar-select {
 
 .dialog-mask.totp-scan-mask {
   @apply grid place-items-center p-5;
-  background: rgba(15, 23, 42, 0.78);
+  background: rgba(18, 16, 32, 0.78);
 }
 
 .dialog-card.totp-scan-dialog {
@@ -1085,13 +1089,13 @@ select.input.duplicate-mode-toolbar-select {
   @apply pointer-events-none absolute rounded-[18px];
   inset: max(34px, 10vmin);
   border: 2px solid rgba(255, 255, 255, 0.88);
-  box-shadow: 0 0 0 999px rgba(15, 23, 42, 0.28);
+  box-shadow: 0 0 0 999px rgba(18, 16, 32, 0.28);
 }
 
 .totp-scan-footer {
   @apply shrink-0 px-4 py-3;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.74), #0f172a);
+  background: linear-gradient(180deg, rgba(18, 16, 32, 0.74), #0f172a);
 }
 
 .totp-scan-status {

@@ -21,7 +21,7 @@
 .input {
   @apply h-12 w-full rounded-xl border px-3.5 py-2.5 outline-hidden;
   background: var(--panel);
-  border-color: rgba(74, 103, 150, 0.34);
+  border-color: rgba(95, 91, 120, 0.34);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
   transition: all var(--dur-fast) var(--ease-smooth);
   font-size: var(--font-base);
@@ -45,14 +45,14 @@ input[type='file'].input {
 
 input[type='file'].input::file-selector-button {
   @apply mr-2.5 h-8 cursor-pointer rounded-full border px-3 font-bold;
-  background: #eef4ff;
-  border-color: #9db8ea;
-  color: #1f4ea0;
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+  color: #4b2fb8;
 }
 
 input[type='file'].input::file-selector-button:hover {
-  background: #dfeaff;
-  border-color: #2f5fd8;
+  background: #e9e2ff;
+  border-color: #5b3ce0;
 }
 
 .textarea {
@@ -62,7 +62,7 @@ input[type='file'].input::file-selector-button:hover {
 .input:focus {
   border-color: var(--primary);
   background-color: #fbfdff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12), 0 8px 20px rgba(37, 99, 235, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(109, 74, 255, 0.12), 0 8px 20px rgba(109, 74, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
   transform: translateY(-1px);
 }
 
@@ -97,7 +97,7 @@ input[type='file'].input::file-selector-button:hover {
 
 .input-icon-btn:hover:not(:disabled) {
   color: var(--primary);
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(109, 74, 255, 0.08);
   transform: translateY(-50%) scale(1.04);
 }
 
@@ -184,9 +184,9 @@ input[type='file'].input::file-selector-button:hover {
 
 .btn-primary {
   @apply text-white;
-  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-  border: 1px solid rgba(37, 99, 235, 0.4);
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #6d4aff 0%, #4b2fb8 100%);
+  border: 1px solid rgba(109, 74, 255, 0.4);
+  box-shadow: 0 4px 14px rgba(109, 74, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   position: relative;
   overflow: hidden;
 }
@@ -201,8 +201,8 @@ input[type='file'].input::file-selector-button:hover {
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, #5b3ce0 0%, #3c228f 100%);
+  box-shadow: 0 6px 20px rgba(109, 74, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transform: translateY(-2px);
 }
 
@@ -216,14 +216,14 @@ input[type='file'].input::file-selector-button:hover {
 
 .btn-secondary {
   @apply bg-panel text-brand-strong;
-  border: 1px solid rgba(37, 99, 235, 0.22);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(109, 74, 255, 0.22);
+  box-shadow: 0 2px 8px rgba(18, 16, 32, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .btn-secondary:hover {
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  border-color: rgba(37, 99, 235, 0.40);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15), inset 0 1px 0 rgba(255, 255, 255, 1);
+  border-color: rgba(109, 74, 255, 0.40);
+  box-shadow: 0 4px 12px rgba(109, 74, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 1);
 }
 
 .btn-danger {

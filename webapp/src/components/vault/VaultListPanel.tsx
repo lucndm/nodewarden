@@ -269,11 +269,12 @@ export default function VaultListPanel(props: VaultListPanelProps) {
       <button
         type="button"
         className={`btn btn-primary small ${props.isMobileLayout ? 'mobile-fab-trigger' : 'desktop-create-trigger'}`}
-        aria-label={t('txt_add')}
-        title={t('txt_add')}
+        aria-label={props.isMobileLayout ? t('txt_add') : undefined}
+        title={props.isMobileLayout ? t('txt_add') : undefined}
         onClick={props.onToggleCreateMenu}
       >
         <Plus size={14} className="btn-icon" />
+        {!props.isMobileLayout && <span className="create-trigger-label">{t('txt_create_item')}</span>}
       </button>
       {props.createMenuOpen && (
         <div className="create-menu">

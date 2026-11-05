@@ -354,21 +354,21 @@
 
 .not-found-logo {
   @apply h-14 w-14 shrink-0 object-contain;
-  filter: drop-shadow(0 8px 18px rgba(43, 102, 217, 0.22));
+  filter: drop-shadow(0 8px 18px rgba(91, 60, 224, 0.22));
 }
 
 .not-found-wordmark {
   @apply block max-w-full;
   width: clamp(200px, 38vw, 330px);
   aspect-ratio: 862 / 102;
-  background: #116ff9;
+  background: #6d4aff;
   mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
   -webkit-mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
 }
 
 .not-found-code {
   @apply rounded-full px-3 py-1 text-sm font-extrabold;
-  background: #eef4ff;
+  background: #f5f3ff;
   color: var(--primary-hover);
 }
 
@@ -466,14 +466,14 @@
 
 .standalone-brand-logo {
   @apply h-14 w-[70px] shrink-0 object-contain;
-  filter: drop-shadow(0 8px 18px rgba(43, 102, 217, 0.22));
+  filter: drop-shadow(0 8px 18px rgba(91, 60, 224, 0.22));
 }
 
 .standalone-brand-wordmark {
   @apply block max-w-full;
   width: clamp(200px, 30vw, 340px);
   aspect-ratio: 862 / 102;
-  background: #116ff9;
+  background: #6d4aff;
   mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
   -webkit-mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
 }

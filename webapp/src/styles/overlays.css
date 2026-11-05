@@ -1,6 +1,6 @@
 .dialog-mask {
   @apply fixed inset-0 grid h-dvh w-screen place-items-center p-5 opacity-0;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(18, 16, 32, 0.5);
   z-index: 1200;
   animation: fade-in var(--dur-medium) var(--ease-smooth) both;
   backdrop-filter: blur(6px);
@@ -11,7 +11,7 @@
   @apply rounded-[20px] border bg-white p-5 text-center;
   width: min(500px, 100%);
   border: 1px solid var(--line);
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+  box-shadow: 0 20px 50px rgba(18, 16, 32, 0.2);
   transform-origin: 50% 30%;
   animation: dialog-in 240ms var(--ease-out-strong) both;
 }
@@ -19,7 +19,7 @@
 .dialog-mask.warning {
   background:
     radial-gradient(circle at top, rgba(255, 237, 213, 0.32), transparent 34%),
-    linear-gradient(180deg, rgba(127, 29, 29, 0.36), rgba(15, 23, 42, 0.72));
+    linear-gradient(180deg, rgba(127, 29, 29, 0.36), rgba(18, 16, 32, 0.72));
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -211,7 +211,7 @@
   border: 1px solid #bbdfc6;
   background: #dff4e5;
   color: #0f5132;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 10px 24px rgba(18, 16, 32, 0.12);
   animation: toast-in 240ms var(--ease-out-strong) both;
 }
 
@@ -259,6 +259,6 @@
 
 .toast-progress {
   @apply absolute bottom-0 left-0 h-[3px] w-full;
-  background: rgba(15, 23, 42, 0.2);
+  background: rgba(18, 16, 32, 0.2);
   animation: toast-life 4.5s linear forwards;
 }

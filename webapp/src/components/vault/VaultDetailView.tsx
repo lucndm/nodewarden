@@ -1,6 +1,6 @@
 import { createPortal } from 'preact/compat';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AlertTriangle, Archive, Clipboard, Download, Eye, EyeOff, ExternalLink, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Tag, Trash2, X } from 'lucide-preact';
+import { AlertTriangle, Archive, CalendarPlus, Clipboard, Download, Eye, EyeOff, ExternalLink, KeyRound, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, Tag, Trash2, X } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
@@ -105,6 +105,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
   const breachControllerRef = useRef<AbortController | null>(null);
   const isArchived = !!(props.selectedCipher.archivedDate || (props.selectedCipher as { archivedAt?: string | null }).archivedAt);
   const isDeleted = isCipherDeleted(props.selectedCipher);
+  const deleteLabel = isDeleted ? t('txt_delete_permanently') : t('txt_delete');
   const passwordHistoryEntries = useMemo(
     () =>
       (props.selectedCipher.passwordHistory || [])
@@ -191,6 +192,55 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   <span>{props.folderName(props.selectedCipher.folderId)}</span>
                 </div>
               </div>
+              <div className="detail-title-actions">
+                {isDeleted ? (
+                  <button
+                    type="button"
+                    className="detail-icon-action"
+                    title={t('txt_restore')}
+                    aria-label={t('txt_restore')}
+                    onClick={() => void props.onRestore(props.selectedCipher)}
+                  >
+                    <RotateCcw size={16} />
+                  </button>
+                ) : (
+                  <>
+                    <button type="button" className="btn btn-secondary small" onClick={props.onStartEdit}>
+                      <Pencil size={14} className="btn-icon" /> {t('txt_edit')}
+                    </button>
+                    {isArchived ? (
+                      <button
+                        type="button"
+                        className="detail-icon-action"
+                        title={t('txt_unarchive')}
+                        aria-label={t('txt_unarchive')}
+                        onClick={() => void props.onUnarchive(props.selectedCipher)}
+                      >
+                        <RotateCcw size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="detail-icon-action"
+                        title={t('txt_archive')}
+                        aria-label={t('txt_archive')}
+                        onClick={() => void props.onArchive(props.selectedCipher)}
+                      >
+                        <Archive size={16} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="detail-icon-action danger"
+                      title={deleteLabel}
+                      aria-label={deleteLabel}
+                      onClick={() => props.onDelete(props.selectedCipher)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             {isArchived && <div className="list-badge archive-badge">{t('txt_archived')}</div>}
           </div>
@@ -229,10 +279,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                 </div>
               </div>
               {props.usageAvailable && (
-                <>
-                  <div className="detail-sub">{t('txt_password_copies')}: {t('txt_password_copied_count', { count: props.usage?.useCount || 0 })}</div>
-                  <div className="detail-sub">{t('txt_last_copied')}: {formatHistoryTime(props.usage?.lastUsedAt)}</div>
-                </>
+                <div className="detail-sub">{t('txt_password_copies')}: {t('txt_password_copied_count', { count: props.usage?.useCount || 0 })}</div>
               )}
               {props.usageError && (
                 <div className="detail-sub" role="status">{t('txt_usage_metrics_unavailable')}</div>
@@ -554,13 +601,42 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           )}
 
           {(props.selectedCipher.creationDate || props.selectedCipher.revisionDate) && (
-            <div className="card">
+            <div className="card detail-meta-card">
               <h4>{t('txt_item_history')}</h4>
-              <div className="detail-sub">{t('txt_last_edited_value', { value: formatHistoryTime(props.selectedCipher.revisionDate) })}</div>
-              <div className="detail-sub">{t('txt_created_value', { value: formatHistoryTime(props.selectedCipher.creationDate) })}</div>
-              {!!props.selectedCipher.login?.passwordRevisionDate && (
-                <div className="detail-sub">{t('txt_password_updated_value', { value: formatHistoryTime(props.selectedCipher.login.passwordRevisionDate) })}</div>
-              )}
+              <div className="detail-meta-group">
+                {props.usageAvailable && (
+                  <div className="detail-meta-row">
+                    <span className="detail-meta-icon" aria-hidden="true"><Sparkles size={15} /></span>
+                    <span className="detail-meta-text">
+                      <span className="detail-meta-label">{t('txt_last_copied')}</span>
+                      <span className="detail-meta-value">{formatHistoryTime(props.usage?.lastUsedAt)}</span>
+                    </span>
+                  </div>
+                )}
+                <div className="detail-meta-row">
+                  <span className="detail-meta-icon" aria-hidden="true"><Pencil size={15} /></span>
+                  <span className="detail-meta-text">
+                    <span className="detail-meta-label">{t('txt_last_edited')}</span>
+                    <span className="detail-meta-value">{formatHistoryTime(props.selectedCipher.revisionDate)}</span>
+                  </span>
+                </div>
+                <div className="detail-meta-row">
+                  <span className="detail-meta-icon" aria-hidden="true"><CalendarPlus size={15} /></span>
+                  <span className="detail-meta-text">
+                    <span className="detail-meta-label">{t('txt_created')}</span>
+                    <span className="detail-meta-value">{formatHistoryTime(props.selectedCipher.creationDate)}</span>
+                  </span>
+                </div>
+                {!!props.selectedCipher.login?.passwordRevisionDate && (
+                  <div className="detail-meta-row">
+                    <span className="detail-meta-icon" aria-hidden="true"><KeyRound size={15} /></span>
+                    <span className="detail-meta-text">
+                      <span className="detail-meta-label">{t('txt_password_updated')}</span>
+                      <span className="detail-meta-value">{formatHistoryTime(props.selectedCipher.login.passwordRevisionDate)}</span>
+                    </span>
+                  </div>
+                )}
+              </div>
               {passwordHistoryEntries.length > 0 && (
                 <button type="button" className="password-history-link" onClick={() => setPasswordHistoryOpen(true)}>
                   {t('txt_password_history')}
@@ -569,33 +645,13 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
             </div>
           )}
 
-          <div className="detail-actions">
-            <div className="actions">
-              {isDeleted ? (
-                <button type="button" className="btn btn-secondary" onClick={() => void props.onRestore(props.selectedCipher)}>
-                  <RotateCcw size={14} className="btn-icon" /> {t('txt_restore')}
-                </button>
-              ) : (
-                <>
-                  <button type="button" className="btn btn-secondary" onClick={props.onStartEdit}>
-                    <Pencil size={14} className="btn-icon" /> {t('txt_edit')}
-                  </button>
-                  {isArchived ? (
-                    <button type="button" className="btn btn-secondary" onClick={() => void props.onUnarchive(props.selectedCipher)}>
-                      <RotateCcw size={14} className="btn-icon" /> {t('txt_unarchive')}
-                    </button>
-                  ) : (
-                    <button type="button" className="btn btn-secondary" onClick={() => void props.onArchive(props.selectedCipher)}>
-                      <Archive size={14} className="btn-icon" /> {t('txt_archive')}
-                    </button>
-                  )}
-                </>
-              )}
+          {isDeleted && (
+            <div className="detail-actions">
+              <button type="button" className="btn btn-danger" onClick={() => props.onDelete(props.selectedCipher)}>
+                <Trash2 size={14} className="btn-icon" /> {deleteLabel}
+              </button>
             </div>
-            <button type="button" className="btn btn-danger" onClick={() => props.onDelete(props.selectedCipher)}>
-              <Trash2 size={14} className="btn-icon" /> {isDeleted ? t('txt_delete_permanently') : t('txt_delete')}
-            </button>
-          </div>
+          )}
         </>
       )}
       <PasswordHistoryDialog
