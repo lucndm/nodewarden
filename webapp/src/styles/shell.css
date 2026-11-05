@@ -24,7 +24,7 @@
   @apply block max-w-full;
   width: clamp(168px, 17vw, 224px);
   aspect-ratio: 862 / 102;
-  background: #116ff9;
+  background: #6d4aff;
   mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
   -webkit-mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
 }
@@ -36,7 +36,7 @@
 
 .brand-logo {
   @apply h-[42px] w-[53px] object-contain;
-  filter: drop-shadow(0 10px 22px rgba(43, 102, 217, 0.22));
+  filter: drop-shadow(0 10px 22px rgba(91, 60, 224, 0.22));
 }
 
 .topbar-actions {
@@ -98,8 +98,8 @@
 
 .theme-switch-slider {
   @apply absolute inset-0 cursor-pointer rounded-full border transition;
-  background: #dbeafe;
-  border-color: #9dbbec;
+  background: #ede9fe;
+  border-color: #c4b5fd;
 }
 
 .theme-switch-slider::before {
@@ -109,7 +109,7 @@
   bottom: 2px;
   z-index: 2;
   background: linear-gradient(180deg, #ffffff, #edf4ff);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 2px 8px rgba(18, 16, 32, 0.14);
   transition:
     transform var(--dur-medium) var(--ease-out-strong),
     box-shadow var(--dur-fast) var(--ease-out-soft),
@@ -126,7 +126,7 @@
 }
 
 .theme-switch .moon svg {
-  fill: #5b86d6;
+  fill: #8b73ff;
   @apply absolute h-4 w-4;
   top: 7px;
   left: 7px;
@@ -141,7 +141,7 @@
 }
 
 .theme-switch-input:focus + .theme-switch-slider {
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 0 0 2px rgba(109, 74, 255, 0.22);
 }
 
 .theme-switch-input:checked + .theme-switch-slider::before {
@@ -174,7 +174,7 @@
 }
 
 .user-chip:hover {
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 22px rgba(18, 16, 32, 0.06);
 }
 
 .app-main {
@@ -233,18 +233,18 @@
   background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
   border-color: rgba(128, 152, 192, 0.20);
   color: var(--text);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 1);
+  box-shadow: 0 2px 8px rgba(18, 16, 32, 0.06), inset 0 1px 0 rgba(255, 255, 255, 1);
   transform: translateX(2px);
 }
 
 .side-link.active,
 .side-group-trigger.active {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0.08) 100%);
-  border-color: rgba(37, 99, 235, 0.32);
+  background: linear-gradient(135deg, rgba(109, 74, 255, 0.12) 0%, rgba(109, 74, 255, 0.08) 100%);
+  border-color: rgba(109, 74, 255, 0.32);
   color: var(--primary-strong);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 2px 8px rgba(37, 99, 235, 0.15);
+    0 2px 8px rgba(109, 74, 255, 0.15);
 }
 
 .side-group-chevron {
@@ -293,8 +293,8 @@
 }
 
 .side-sub-link.active {
-  background: rgba(37, 99, 235, 0.10);
-  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(109, 74, 255, 0.10);
+  border-color: rgba(109, 74, 255, 0.18);
   color: var(--primary-strong);
 }
 
@@ -311,7 +311,7 @@
 
 .nav-layout-trigger:hover,
 .nav-layout-trigger.active {
-  border-color: rgba(37, 99, 235, 0.20);
+  border-color: rgba(109, 74, 255, 0.20);
   background: #fff;
   color: var(--primary-strong);
 }
@@ -369,7 +369,7 @@
 
 .mobile-sidebar-mask {
   @apply pointer-events-none invisible fixed inset-0 opacity-0;
-  background: rgba(15, 23, 42, 0.36);
+  background: rgba(18, 16, 32, 0.36);
   z-index: 54;
   transition:
     opacity 220ms var(--ease-smooth),

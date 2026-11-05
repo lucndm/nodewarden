@@ -1,32 +1,46 @@
+/*
+ * Design tokens.
+ *
+ * Palette provenance: the semantic roles below follow Proton's Carbon theme
+ * (ProtonMail/design-system, ISC licensed): a cool neutral surface ramp, a
+ * blue-violet interaction colour, and the signal colours for info, success,
+ * warning and danger. The interaction colour is the violet Proton Pass uses on
+ * its own screens, and the dark ramp is a navy-violet rather than a flat grey.
+ * Light and dark carry the same role names, so every surface below is written
+ * once and only the values differ per theme.
+ */
 :root {
-  --bg-accent: #f3f6f9;
+  --bg-accent: #f4f3f8;
   --panel: #ffffff;
-  --panel-soft: #f8fafc;
-  --panel-muted: #edf2f7;
-  --panel-subtle: #fbfcfe;
+  --panel-soft: #faf9fd;
+  --panel-muted: #eceaf3;
+  --panel-subtle: #f6f4fb;
   --surface: #ffffff;
-  --line: rgba(100, 116, 139, 0.24);
-  --line-soft: rgba(100, 116, 139, 0.14);
-  --text: #0f172a;
-  --text-muted: #64748b;
-  --muted: #64748b;
-  --muted-strong: #334155;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-strong: #1e40af;
+  --line: rgba(30, 26, 56, 0.16);
+  --line-soft: rgba(30, 26, 56, 0.09);
+  --text: #1c1a26;
+  --text-muted: #63607a;
+  --muted: #63607a;
+  --muted-strong: #45425a;
+  --primary: #6d4aff;
+  --primary-hover: #5b3ce0;
+  --primary-strong: #4b2fb8;
   --brand: var(--primary);
   --brand-strong: var(--primary-strong);
-  --accent: #0d9488;
-  --accent-soft: #e6f6f3;
-  --danger: #dc2626;
-  --success: #059669;
-  --warning: #d97706;
-  --overlay-strong: rgba(15, 23, 42, 0.62);
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -1px rgba(15, 23, 42, 0.05);
-  --shadow-lg: 0 20px 25px -5px rgba(15, 23, 42, 0.10), 0 10px 10px -5px rgba(15, 23, 42, 0.04);
-  --shadow-xl: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
-  --shadow-glow: 0 0 20px rgba(37, 99, 235, 0.15), 0 8px 24px rgba(37, 99, 235, 0.12);
+  --accent: var(--primary);
+  --accent-hover: var(--primary-hover);
+  --accent-strong: var(--primary-strong);
+  --accent-soft: rgba(109, 74, 255, 0.1);
+  --info: #1578cf;
+  --danger: #d42f34;
+  --success: #1b8561;
+  --warning: #f5830a;
+  --overlay-strong: rgba(20, 24, 38, 0.55);
+  --shadow-sm: 0 1px 2px rgba(20, 24, 38, 0.05);
+  --shadow-md: 0 4px 12px rgba(20, 24, 38, 0.08);
+  --shadow-lg: 0 18px 32px -12px rgba(20, 24, 38, 0.18);
+  --shadow-xl: 0 24px 48px -16px rgba(20, 24, 38, 0.28);
+  --shadow-glow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
@@ -89,32 +103,37 @@
 }
 
 :root[data-theme='dark'] {
-  --bg-accent: #0a0e13;
-  --panel: #151b24;
-  --panel-soft: #111720;
-  --panel-muted: #0d1219;
-  --panel-subtle: #1a2230;
-  --surface: #151b24;
-  --line: rgba(148, 163, 184, 0.16);
-  --line-soft: rgba(148, 163, 184, 0.09);
-  --text: #f1f5f9;
-  --text-muted: #94a3b8;
-  --muted: #94a3b8;
-  --muted-strong: #cbd5e1;
-  --primary: #60a5fa;
-  --primary-hover: #93c5fd;
-  --primary-strong: #bfdbfe;
+  --bg-accent: #0f0d1a;
+  --panel: #1a1726;
+  --panel-soft: #151320;
+  --panel-muted: #100e1b;
+  --panel-subtle: #221e33;
+  --surface: #1a1726;
+  --line: rgba(163, 148, 232, 0.17);
+  --line-soft: rgba(163, 148, 232, 0.1);
+  --text: #f0eef8;
+  --text-muted: #9a95b3;
+  --muted: #9a95b3;
+  --muted-strong: #c6c1da;
+  /* The interaction hue stays constant across themes, as in Proton's Carbon
+     theme; only its hover and its on-surface text tone shift for dark. */
+  --primary: #6d4aff;
+  --primary-hover: #8566ff;
+  --primary-strong: #b9a4ff;
   --brand: var(--primary);
   --brand-strong: var(--primary-strong);
-  --accent: #2dd4bf;
-  --accent-soft: rgba(45, 212, 191, 0.12);
-  --danger: #f87171;
-  --success: #34d399;
-  --warning: #fbbf24;
-  --overlay-strong: rgba(0, 0, 0, 0.75);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -1px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.50), 0 10px 10px -5px rgba(0, 0, 0, 0.40);
-  --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.60);
-  --shadow-glow: 0 0 20px rgba(96, 165, 250, 0.20), 0 8px 24px rgba(96, 165, 250, 0.15);
+  --accent: var(--primary);
+  --accent-hover: var(--primary-hover);
+  --accent-strong: var(--primary-strong);
+  --accent-soft: rgba(127, 92, 255, 0.16);
+  --info: #2c89db;
+  --danger: #ed4c51;
+  --success: #349172;
+  --warning: #f5930a;
+  --overlay-strong: rgba(6, 5, 12, 0.72);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 32px -12px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 24px 48px -16px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
 }

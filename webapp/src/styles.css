@@ -143,7 +143,7 @@
 :root[data-theme='dark'] .btn-primary {
   background: var(--primary);
   border-color: transparent;
-  color: #08111f;
+  color: #fff;
 }
 
 :root[data-theme='dark'] .btn-danger {
@@ -990,10 +990,6 @@ textarea {
   background: var(--panel-subtle);
 }
 
-:root[data-theme='dark'] .btn-primary {
-  color: #08111f;
-}
-
 @media (max-width: 1180px) {
   .app-page {
     padding: 0;
@@ -1341,18 +1337,14 @@ input[type='file'].input::file-selector-button {
 }
 
 :root[data-theme='dark'] .list-item.active {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--primary) 22%, var(--panel)) 0%, var(--panel) 72%);
-  border-color: color-mix(in srgb, var(--primary) 62%, var(--line));
-  box-shadow:
-    inset 3px 0 0 var(--primary),
-    0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent),
-    0 10px 24px rgba(0, 0, 0, 0.18);
+  background: color-mix(in srgb, var(--primary) 18%, var(--panel));
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--line));
+  box-shadow: none;
 }
 
 :root[data-theme='dark'] .list-item.active:hover {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--primary) 26%, var(--panel)) 0%, var(--panel-subtle) 72%);
+  background: color-mix(in srgb, var(--primary) 24%, var(--panel));
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--line));
 }
 
 :root[data-theme='dark'] .list-item.active .list-title,
@@ -1490,4 +1482,296 @@ input[type='file'].input::file-selector-button {
     font-size: 12px;
     font-weight: 800;
   }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Proton Pass layout pass.
+
+   The vault follows Proton Pass's three-pane reading order: a fixed filter
+   rail, an item list, and a detail pane whose title carries its own actions.
+   Surfaces stay flat with hairline borders; selection is signalled by a
+   tinted fill plus a left edge marker instead of a drop shadow.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── vault frame ── */
+@media (min-width: 1181px) {
+  .vault-grid {
+    gap: 8px;
+    grid-template-columns: 244px minmax(0, 340px) minmax(0, 1fr);
+  }
+}
+
+.sidebar,
+.list-panel,
+.detail-col {
+  border-radius: var(--radius-lg);
+  border-color: var(--line-soft);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.sidebar {
+  border: 1px solid var(--line-soft);
+}
+
+.list-panel,
+.detail-col {
+  padding: 6px;
+}
+
+.sidebar {
+  padding: 10px;
+}
+
+/* ── filter rail ── */
+.sidebar-block {
+  margin-bottom: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sidebar-title {
+  margin-bottom: 6px;
+  padding-inline: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tree-btn {
+  position: relative;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  color: var(--muted-strong);
+}
+
+.tree-btn:hover {
+  background: var(--panel-subtle);
+  color: var(--text);
+}
+
+.tree-btn.active {
+  background: color-mix(in srgb, var(--primary) 12%, var(--panel));
+  color: var(--primary-strong);
+  font-weight: 600;
+}
+
+.tree-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+}
+
+/* ── list header ── */
+.list-head {
+  margin-bottom: 6px;
+  gap: 6px;
+}
+
+/* The search field owns the first row; the row actions sit on the second,
+   with the primary create action pushed to the far edge. */
+.list-head .search-input-wrap {
+  flex-basis: 100%;
+}
+
+.list-head .desktop-create-menu-wrap {
+  margin-left: auto;
+}
+
+.list-head .search-input {
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.list-head .search-input:focus {
+  border-color: color-mix(in srgb, var(--primary) 58%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: none;
+}
+
+/* ── item rows ── */
+.list-item {
+  min-height: 56px;
+  margin-bottom: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The dark surface reset above paints every row as a card; the flat row needs
+   the same treatment in dark mode. */
+:root[data-theme='dark'] .list-item {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.list-item:hover {
+  background: var(--panel-subtle);
+  border-color: var(--line-soft);
+  box-shadow: none;
+}
+
+.list-item.active {
+  background: color-mix(in srgb, var(--primary) 11%, var(--panel));
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--line));
+  box-shadow: none;
+}
+
+.list-item.active:hover {
+  background: color-mix(in srgb, var(--primary) 15%, var(--panel));
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--line));
+}
+
+.list-item.active .list-title,
+.list-item.active .list-icon-fallback {
+  color: var(--primary-strong);
+}
+
+/* ── detail pane ── */
+.card {
+  margin-bottom: 8px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border-color: var(--line-soft);
+  box-shadow: none;
+}
+
+.detail-title-row {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.detail-title-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.detail-title-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-icon-action {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--muted-strong);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-quick) var(--ease-smooth),
+    color var(--dur-quick) var(--ease-smooth),
+    border-color var(--dur-quick) var(--ease-smooth);
+}
+
+.detail-icon-action:hover:not(:disabled) {
+  background: var(--panel-subtle);
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--line));
+  color: var(--primary-strong);
+}
+
+.detail-icon-action.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  color: var(--danger);
+}
+
+/* ── metadata group ── */
+.detail-meta-group {
+  display: grid;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.detail-meta-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.detail-meta-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+.detail-meta-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.detail-meta-label {
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.detail-meta-value {
+  color: var(--text);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* When the destructive action is the only one left in the row it keeps the
+   right-hand position it had when the row also held the other actions. */
+.detail-actions > .btn-danger:only-child {
+  margin-left: auto;
+}
+
+/* The item-history entry point sits below the metadata, full width, the way
+   Proton surfaces "View item history". */
+.detail-meta-card .password-history-link {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--primary) 14%, var(--panel));
+  color: var(--primary-strong);
+  font-size: var(--font-sm);
+  text-align: center;
+  text-decoration: none;
+}
+
+.detail-meta-card .password-history-link:hover {
+  background: color-mix(in srgb, var(--primary) 22%, var(--panel));
+  border-color: color-mix(in srgb, var(--primary) 58%, var(--line));
+  color: var(--primary-strong);
+  text-decoration: none;
 }

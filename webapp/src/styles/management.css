@@ -72,8 +72,8 @@
 
 .backup-recommendations-summary-icon {
   @apply h-2.5 w-2.5 shrink-0;
-  border-right: 2px solid #365fa8;
-  border-bottom: 2px solid #365fa8;
+  border-right: 2px solid #5b3ce0;
+  border-bottom: 2px solid #5b3ce0;
   transform: rotate(45deg) translateY(-2px);
   transition: transform var(--dur-fast) var(--ease-out-soft);
 }
@@ -105,15 +105,15 @@
 
 .backup-help-trigger {
   @apply inline-flex h-[22px] w-[22px] shrink-0 cursor-pointer items-center justify-center rounded-full p-0 text-[13px] font-extrabold leading-none;
-  border: 1px solid #bfd1f3;
-  background: #eef4ff;
+  border: 1px solid #ddd6fe;
+  background: #f5f3ff;
   color: var(--primary-hover);
 }
 
 .backup-help-trigger:hover,
 .backup-help-trigger:focus-visible {
-  border-color: #7ea4ef;
-  background: #e1ecff;
+  border-color: #a78bfa;
+  background: #ede9fe;
   outline: none;
 }
 
@@ -126,7 +126,7 @@
   border: 1px solid #d5dce7;
   @apply rounded-xl;
   background: #ffffff;
-  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 16px 38px rgba(18, 16, 32, 0.14);
   color: #475467;
   transform: translate(-50%, -4px);
   transition: opacity 140ms ease, transform 140ms ease, visibility 140ms ease;
@@ -181,7 +181,7 @@
 .backup-recommendation-card {
   @apply grid gap-3 rounded-xl p-3.5;
   border: 1px solid var(--line);
-  background: #f8fbff;
+  background: #faf8ff;
 }
 
 .backup-recommendation-header {
@@ -210,7 +210,7 @@
 
 .backup-recommendation-step a:hover,
 .backup-recommendation-step a:focus-visible {
-  color: #1742b0;
+  color: #4b2fb8;
 }
 
 .backup-recommendation-inline-note {
@@ -242,14 +242,14 @@
 }
 
 .backup-destination-item:hover {
-  border-color: #93c5fd;
-  background: #f8fbff;
+  border-color: #c4b5fd;
+  background: #faf8ff;
 }
 
 .backup-destination-item.active {
   border-color: var(--primary);
-  background: #eff6ff;
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
+  background: #f5f3ff;
+  box-shadow: 0 0 0 1px rgba(109, 74, 255, 0.08);
 }
 
 .backup-destination-top {
@@ -326,7 +326,7 @@
 .backup-interval-preset:hover:not(:disabled) {
   border-color: var(--primary);
   color: var(--primary);
-  background: #eff6ff;
+  background: #f5f3ff;
 }
 
 .backup-interval-preset.active {
@@ -938,7 +938,7 @@
   width: min(390px, calc(100vw - 32px));
   border-color: var(--line);
   background: #ffffff;
-  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 18px 44px rgba(18, 16, 32, 0.16);
 }
 
 .log-settings-popover-head {
@@ -965,8 +965,8 @@
 
 .log-mode-option.active {
   background: #ffffff;
-  color: #1d4ed8;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+  color: #5b3ce0;
+  box-shadow: 0 1px 4px rgba(18, 16, 32, 0.12);
 }
 
 .log-mode-option:disabled {
@@ -1082,9 +1082,9 @@
 
 .log-row:hover,
 .log-row.active {
-  border-color: #93c5fd;
-  background: #f8fbff;
-  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
+  border-color: #c4b5fd;
+  background: #faf8ff;
+  box-shadow: 0 10px 22px rgba(109, 74, 255, 0.08);
 }
 
 .log-row-icon {
@@ -1092,8 +1092,8 @@
 }
 
 .log-category-auth {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #f5f3ff;
+  color: #5b3ce0;
 }
 
 .log-category-security {
@@ -1135,8 +1135,8 @@
 }
 
 .log-level-info {
-  background: #eef4ff;
-  color: #1d4ed8;
+  background: #f5f3ff;
+  color: #5b3ce0;
 }
 
 .log-level-warn {
@@ -1639,7 +1639,7 @@
   top: calc(100% + 6px);
   background: #fff;
   border-color: var(--line);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 12px 28px rgba(18, 16, 32, 0.18);
   transform-origin: bottom left;
   animation: menu-in 190ms var(--ease-out-strong) both;
 }
@@ -1735,7 +1735,7 @@
 }
 
 .star-on {
-  background: #eef4ff;
+  background: #f5f3ff;
 }
 
 .detail-actions {
@@ -1769,12 +1769,12 @@
   @apply mb-3 mt-2 rounded-xl border px-4 py-3.5;
   border-color: #d7e2f1;
   background: #ffffff;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.10);
+  box-shadow: 0 8px 20px rgba(18, 16, 32, 0.10);
 }
 
 .restore-progress-overlay {
   @apply fixed inset-0 z-[1250] grid place-items-center p-5;
-  background: rgba(15, 23, 42, 0.30);
+  background: rgba(18, 16, 32, 0.30);
 }
 
 .restore-progress-modal {
@@ -1816,7 +1816,7 @@
 
 .restore-progress-meter-bar {
   @apply block h-full rounded-[inherit];
-  background: #3a71d8;
+  background: #6d4aff;
   transition: width 280ms ease;
 }
 
