@@ -65,6 +65,8 @@ Counters start at zero when this feature is enabled and are stored per item in t
 
 The Web Vault follows Proton Pass’s layout and visual language. The desktop vault is a three-pane layout: a filter rail (all items, favorites, archive, trash, duplicates, item types and tags), an item list, and a detail pane. Item actions sit next to the item title, and the detail pane ends with a metadata group showing last copied, last edited, created and password-updated times above the password history entry point.
 
+Login and autofill fields remain in separate cards without visible group headings; screen readers retain the group names.
+
 The colour system uses a violet interaction colour across both light and dark themes, with a navy-violet dark background, hairline borders and flat surfaces instead of heavy shadows. The filter rail marks the selected entry with a left edge marker, and the selected item in the list keeps a tinted fill.
 
 ## Tested clients

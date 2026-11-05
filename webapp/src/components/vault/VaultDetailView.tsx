@@ -246,8 +246,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           </div>
 
           {props.selectedCipher.login && (
-            <div className="card">
-              <h4>{t('txt_login_credentials')}</h4>
+            <div className="card" role="group" aria-label={t('txt_login_credentials')}>
               <div className="kv-field">
                 <span className="kv-field-icon" aria-hidden="true">
                   <User size={15} />
@@ -361,8 +360,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           )}
 
           {(props.selectedCipher.login?.uris || []).length > 0 && (
-            <div className="card">
-              <h4>{t('txt_autofill_options')}</h4>
+            <div className="card" role="group" aria-label={t('txt_autofill_options')}>
               {(props.selectedCipher.login?.uris || []).map((uri, index) => {
                 const value = uri.decUri || uri.uri || '';
                 if (!value.trim()) return null;
