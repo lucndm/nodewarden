@@ -2,11 +2,13 @@ import { Env, TokenResponse, User } from '../types';
 import { StorageService } from '../services/storage';
 import { AuthService } from '../services/auth';
 import { RateLimitService, getClientIdentifier } from '../services/ratelimit';
+import { sendSecurityAlert } from '../services/security-alerts';
 import { jsonResponse, errorResponse, identityErrorResponse } from '../utils/response';
 import { getRefreshTokenSlidingTtlMs, LIMITS } from '../config/limits';
 import { findMatchingTotpCounter, isTotpEnabled } from '../utils/totp';
 import { createRefreshToken } from '../utils/jwt';
 import { readAuthRequestDeviceInfo } from '../utils/device';
+import type { AuthRequestDeviceInfo } from '../utils/device';
 import { createRecoveryCode, recoveryCodeEquals } from '../utils/recovery-code';
 import { generateUUID } from '../utils/uuid';
 import { issueSendAccessToken } from './sends';
@@ -64,12 +66,14 @@ function resolveTotpSecret(userSecret: string | null): string | null {
 async function resolveDeviceSession(
   storage: StorageService,
   userId: string,
-  deviceInfo: ReturnType<typeof readAuthRequestDeviceInfo>
-): Promise<{ identifier: string; sessionStamp: string } | null> {
+  deviceInfo: AuthRequestDeviceInfo
+): Promise<{ identifier: string; sessionStamp: string; isKnown: boolean } | null> {
   if (!deviceInfo.deviceIdentifier) return null;
   const existingDevice = await storage.getDevice(userId, deviceInfo.deviceIdentifier);
   const sessionStamp = String(existingDevice?.sessionStamp || '').trim() || generateUUID();
-  return { identifier: deviceInfo.deviceIdentifier, sessionStamp };
+  // The row lookup above is the one every login already pays for (it carries the
+  // session stamp), so the "unseen client" verdict costs no extra query.
+  return { identifier: deviceInfo.deviceIdentifier, sessionStamp, isKnown: !!existingDevice };
 }
 
 function resolveRefreshClientType(request: Request, body: Record<string, string>): string {
@@ -81,9 +85,12 @@ function resolveRefreshClientType(request: Request, body: Record<string, string>
 }
 
 async function persistAndResolveDeviceSession(
+  env: Env,
+  request: Request,
   storage: StorageService,
   userId: string,
-  deviceInfo: ReturnType<typeof readAuthRequestDeviceInfo>
+  deviceInfo: AuthRequestDeviceInfo,
+  method: string
 ): Promise<{ identifier: string; sessionStamp: string } | null> {
   const candidate = await resolveDeviceSession(storage, userId, deviceInfo);
   if (!candidate) return null;
@@ -96,6 +103,12 @@ async function persistAndResolveDeviceSession(
   );
   const persisted = await storage.getDevice(userId, candidate.identifier);
   if (!persisted?.sessionStamp) throw new Error('Failed to persist device session');
+  if (!candidate.isKnown) {
+    // Unseen client identifier that just completed a successful login. The row
+    // lookup happened before the upsert, so this only fires for genuinely new
+    // clients — never for a known one that re-authenticated.
+    await sendSecurityAlert(env, request, { kind: 'new_device', accountId: userId, method });
+  }
   return { identifier: persisted.deviceIdentifier, sessionStamp: persisted.sessionStamp };
 }
 
@@ -315,12 +328,46 @@ async function twoFactorRequiredResponse(
   );
 }
 
-async function recordFailedLoginAndBuildResponse(
+/**
+ * Grant segment of a login rate-limit key ("<client>:login:<grant>:<hash>"),
+ * used to label lockout alerts. Unknown shapes stay undefined.
+ */
+function loginGrantFromIdentifier(loginIdentifier: string): string | undefined {
+  const grant = String(loginIdentifier || '').split(':login:')[1]?.split(':')[0]?.trim();
+  return grant || undefined;
+}
+
+/**
+ * Single entry point for every failed-login increment in this handler: it
+ * delegates to the rate limiter and reports the lockout transition once.
+ */
+async function recordFailedLogin(
   rateLimit: RateLimitService,
   loginIdentifier: string,
-  message: string
-): Promise<Response> {
+  env: Env,
+  request: Request,
+  accountId?: string
+): Promise<{ locked: boolean; retryAfterSeconds?: number }> {
   const result = await rateLimit.recordFailedLogin(loginIdentifier);
+  if (result.locked) {
+    await sendSecurityAlert(env, request, {
+      kind: 'login_lockout',
+      accountId,
+      method: loginGrantFromIdentifier(loginIdentifier),
+    });
+  }
+  return result;
+}
+
+async function recordFailedLoginAndBuildResponse(
+  env: Env,
+  request: Request,
+  rateLimit: RateLimitService,
+  loginIdentifier: string,
+  message: string,
+  accountId?: string
+): Promise<Response> {
+  const result = await recordFailedLogin(rateLimit, loginIdentifier, env, request, accountId);
   if (result.locked) {
     return identityErrorResponse(
       `Too many failed login attempts. Account locked for ${Math.ceil(result.retryAfterSeconds! / 60)} minutes.`,
@@ -332,10 +379,13 @@ async function recordFailedLoginAndBuildResponse(
 }
 
 async function recordFailedTwoFactorAndBuildResponse(
+  env: Env,
+  request: Request,
   rateLimit: RateLimitService,
-  loginIdentifier: string
+  loginIdentifier: string,
+  accountId?: string
 ): Promise<Response> {
-  const failed = await rateLimit.recordFailedLogin(loginIdentifier);
+  const failed = await recordFailedLogin(rateLimit, loginIdentifier, env, request, accountId);
   if (failed.locked) {
     return identityErrorResponse(
       `Too many failed login attempts. Account locked for ${Math.ceil(failed.retryAfterSeconds! / 60)} minutes.`,
@@ -430,7 +480,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
           ...auditRequestMetadata(request),
         },
       });
-      await rateLimit.recordFailedLogin(loginIdentifier);
+      await recordFailedLogin(rateLimit, loginIdentifier, env, request, user.id);
       return identityErrorResponse('This account requires SSO sign-in', 'sso_required', 400);
     }
 
@@ -481,9 +531,12 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
         },
       });
       return recordFailedLoginAndBuildResponse(
+        env,
+        request,
         rateLimit,
         loginIdentifier,
-        'Username or password is incorrect. Try again'
+        'Username or password is incorrect. Try again',
+        user?.id
       );
     }
 
@@ -521,48 +574,48 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
         }
       } else if (normalizedTwoFactorProvider === String(TWO_FACTOR_PROVIDER_AUTHENTICATOR)) {
         if (!effectiveTotpSecret) {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
         const matchedCounter = await findMatchingTotpCounter(effectiveTotpSecret, normalizedTwoFactorToken);
         if (matchedCounter == null) {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
         const consumed = await storage.consumeTotpLoginCounter(user.id, matchedCounter);
         if (!consumed) {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
       } else if (normalizedTwoFactorProvider === String(TWO_FACTOR_PROVIDER_YUBIKEY)) {
         const publicId = yubiKeyPublicIdFromOtp(normalizedTwoFactorToken);
         if (!publicId || !effectiveYubiKeyPublicIds.includes(publicId)) {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
         let credentials = await getYubicoCredentials(env.DB);
         let initializedWithCurrentOtp = false;
         if (!credentials) {
           const initialized = await initializeYubicoCredentialsOnce(env.DB, user.email, normalizedTwoFactorToken);
           if (!initialized) {
-            return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+            return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
           }
           credentials = initialized.credentials;
           initializedWithCurrentOtp = initialized.created;
         }
         if (!initializedWithCurrentOtp && !await verifyYubicoOtp(env, normalizedTwoFactorToken, credentials)) {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
       } else if (normalizedTwoFactorProvider === String(TWO_FACTOR_PROVIDER_WEBAUTHN)) {
         if (!effectiveWebAuthnCredentials.length) {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
         let deviceResponse: unknown;
         try {
           deviceResponse = JSON.parse(normalizedTwoFactorToken);
         } catch {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
         try {
           await assertTwoFactorPasskeyCredential(request, env, storage, user, deviceResponse);
         } catch {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
       } else if (
         normalizedTwoFactorProvider === TWO_FACTOR_PROVIDER_RECOVERY_CODE_RESPONSE ||
@@ -570,7 +623,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
         normalizedTwoFactorProvider === String(TWO_FACTOR_PROVIDER_RECOVERY_CODE_ANDROID_REQUEST)
       ) {
         if (!recoveryCodeEquals(normalizedTwoFactorToken, user.totpRecoveryCode)) {
-          return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+          return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
         }
         user.totpSecret = null;
         user.yubikeyKey1 = null;
@@ -591,7 +644,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
         rememberRequested = false;
       } else {
         // Unsupported provider for this server profile behaves as an invalid 2FA attempt.
-        return recordFailedTwoFactorAndBuildResponse(rateLimit, loginIdentifier);
+        return recordFailedTwoFactorAndBuildResponse(env, request, rateLimit, loginIdentifier, user.id);
       }
 
       // Upstream behavior: do not issue a new remember token when auth itself used remember provider.
@@ -611,7 +664,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     }
 
     // Persist device only after successful password + (optional) 2FA verification.
-    const deviceSession = await persistAndResolveDeviceSession(storage, user.id, deviceInfo);
+    const deviceSession = await persistAndResolveDeviceSession(env, request, storage, user.id, deviceInfo, 'password');
     if (deviceSession) {
       await persistIdentityDevicePushToken(env, storage, user.id, deviceSession, deviceInfo.deviceType, body);
     }
@@ -703,7 +756,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
         scope: 'Authentication',
       });
     } catch (error) {
-      await rateLimit.recordFailedLogin(loginIdentifier);
+      await recordFailedLogin(rateLimit, loginIdentifier, env, request);
       await safeWriteAuditEvent(env, {
         actorUserId: null,
         action: 'auth.passkey.login.failed',
@@ -722,7 +775,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
 
     const { user, credential } = asserted;
     if (user.status !== 'active') {
-      await rateLimit.recordFailedLogin(loginIdentifier);
+      await recordFailedLogin(rateLimit, loginIdentifier, env, request, user.id);
       return identityErrorResponse('Account is disabled', 'invalid_grant', 400);
     }
     if (isSsoLoginRequired(env, user) && !(await hasActiveWebSessionFor(request, env, user.id))) {
@@ -739,7 +792,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     }
 
     const deviceInfo = readAuthRequestDeviceInfo(body, request);
-    const deviceSession = await persistAndResolveDeviceSession(storage, user.id, deviceInfo);
+    const deviceSession = await persistAndResolveDeviceSession(env, request, storage, user.id, deviceInfo, 'webauthn');
     if (deviceSession) {
       await persistIdentityDevicePushToken(env, storage, user.id, deviceSession, deviceInfo.deviceType, body);
     }
@@ -824,11 +877,11 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
 
     const user = await storage.getUserById(uid);
     if (!user) {
-      await rateLimit.recordFailedLogin(loginIdentifier);
+      await recordFailedLogin(rateLimit, loginIdentifier, env, request);
       return identityErrorResponse('ClientId or clientSecret is incorrect. Try again', 'invalid_grant', 400);
     }
     if (user.status !== 'active') {
-      await rateLimit.recordFailedLogin(loginIdentifier);
+      await recordFailedLogin(rateLimit, loginIdentifier, env, request, user.id);
       await safeWriteAuditEvent(env, {
         actorUserId: user.id,
         action: 'auth.login.failed.user_inactive',
@@ -846,7 +899,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     }
 
     if (!user.apiKey || !(await verifyApiKey(clientSecret, user.apiKey))) {
-      await rateLimit.recordFailedLogin(loginIdentifier);
+      await recordFailedLogin(rateLimit, loginIdentifier, env, request, user.id);
       await safeWriteAuditEvent(env, {
         actorUserId: user.id,
         action: 'auth.login.failed.bad_api_key',
@@ -864,7 +917,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     }
 
     // Persist device only after successful client credential verification.
-    const deviceSession = await persistAndResolveDeviceSession(storage, user.id, deviceInfo);
+    const deviceSession = await persistAndResolveDeviceSession(env, request, storage, user.id, deviceInfo, 'client_credentials');
     if (deviceSession) {
       await persistIdentityDevicePushToken(env, storage, user.id, deviceSession, deviceInfo.deviceType, body);
     }
@@ -978,7 +1031,7 @@ export async function handleToken(request: Request, env: Env): Promise<Response>
     }
 
     const ssoDeviceInfo = readAuthRequestDeviceInfo(body, request);
-    const ssoDeviceSession = await persistAndResolveDeviceSession(ssoStorage, ssoUser.id, ssoDeviceInfo);
+    const ssoDeviceSession = await persistAndResolveDeviceSession(env, request, ssoStorage, ssoUser.id, ssoDeviceInfo, 'authorization_code');
     if (ssoDeviceSession) {
       await persistIdentityDevicePushToken(env, ssoStorage, ssoUser.id, ssoDeviceSession, ssoDeviceInfo.deviceType, body);
     }
@@ -1886,7 +1939,7 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
     deviceName: 'Zitadel SSO',
     deviceType: 14,
   };
-  const deviceSession = await persistAndResolveDeviceSession(storage, user.id, deviceInfo);
+  const deviceSession = await persistAndResolveDeviceSession(env, request, storage, user.id, deviceInfo, 'sso_oidc');
   const auth = new AuthService(env);
   const refreshToken = await auth.generateRefreshToken(user, deviceSession, 'web');
 

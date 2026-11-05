@@ -97,6 +97,69 @@
 >   | KV | 不需要 | 25 MiB（Cloudflare限制） | 1 GB |
 
 
+## Telegram 安全告警（可选）
+
+NodeWarden 可以把安全事件推送到你指定的 Telegram 聊天。该功能默认关闭，需要配置两个 Worker Secret。
+
+会推送两类事件：
+
+- **新客户端**：某账号使用此前从未出现过的客户端标识成功登录，包含首次登录。
+- **登录锁定**：触发了现有的登录锁定机制——10 次失败、锁定 2 分钟，按客户端来源、grant 类型和账号主体分别计数。
+
+新客户端常常只是换了手机或浏览器；锁定也常常只是输错密码或客户端重试。这类告警只是一个提醒：它不做地理位置判断，也不代表真的遭到攻击。
+
+> [!NOTE]
+> Web SSO 每次登录都会生成新的客户端标识，因此每次成功的 Web SSO 登录都会被当作新客户端推送（仍受下面的冷却窗口限制）。
+
+**消息包含哪些内容**
+
+- 请求所访问的主机名（你的 Worker 或自定义域名）
+- 事件类型
+- 账号 ID 的前 8 位字符；无法解析到账号时为 `unknown`
+- 认证方式，取自固定枚举：`password`、`webauthn`、`client_credentials`、`authorization_code`、`sso_oidc`，其余情况记为 `unknown`
+- UTC 时间
+
+消息中不包含邮箱、IP 地址、User-Agent、设备名称、凭据或令牌。
+
+**推送频率**
+
+- 每个账号、每种事件在 15 分钟窗口内最多一条；无法解析到账号的告警共用一个计数桶。
+- 整个实例在 15 分钟窗口内最多 10 条。
+- 窗口按固定时长切分，因此两条消息的间隔可能略小于 15 分钟。
+- 额度用完后，后续事件会被丢弃：没有队列，也不会重试。
+
+推送为尽力而为，超时 5 秒，失败不重试，所以某条消息可能丢失，该事件在当前窗口内也不会再补发。这类告警无法覆盖所有攻击，也不是 WAF 或 DDoS 告警系统。
+
+**配置步骤**
+
+1. 用 [@BotFather](https://t.me/BotFather) 创建机器人：发送 `/newbot` 并复制返回的 token。请把 token 当作密码保管：不要贴到 Telegram 聊天、代码仓库或 issue 里。
+2. 打开你的机器人，在希望接收告警的私聊中发送 `/start`。只有和机器人对话过的聊天才能收到消息。
+3. 通过 Bot API 获取 chat ID，同时避免把 token 留在 shell 历史里：
+
+   ```bash
+   read -rsp "Bot token: " TG_TOKEN; echo
+   curl -s "https://api.telegram.org/bot${TG_TOKEN}/getUpdates" | jq -r '.result[-1].message.chat.id'
+   unset TG_TOKEN
+   ```
+
+   打印出来的就是 chat ID（群组和频道为负数）。没有 `jq` 时，同一响应是 JSON，数值位于 `result[].message.chat.id`。chat ID 本身不是凭据，单凭它发不出任何消息；它只是指明告警要发到哪个会话，同样不要贴到聊天或仓库里。Windows 下可以用 `Read-Host -MaskInput` 读取 token 后在 PowerShell 里请求同一接口。
+
+4. 把两个值保存为 Worker Secret：
+
+   ```bash
+   npx wrangler secret put TELEGRAM_BOT_TOKEN
+   npx wrangler secret put TELEGRAM_CHAT_ID
+   ```
+
+   命令会提示输入并保存为 Cloudflare Secret，`wrangler.toml` 和仓库里都不会留下内容。如果本地没有 Wrangler 凭据，就到 **Workers → Settings → Variables and Secrets** 里把两个值都添加为 **Secret**（不要用明文变量）。
+
+5. 运行中的 Worker 必须同时具备两个 Secret，并运行包含告警代码的版本；只配一个或不配都不会推送。此 fork 通过 `.github/workflows/deploy.yml` 自动部署推送到 `main` 的代码，请等待 **Deploy worker** 步骤成功。Secret 保存在 Cloudflare，不要复制到 GitHub 或 `wrangler.toml`。
+
+如果没收到消息，请检查 chat ID 是否属于你发送 `/start` 的那个聊天、两个 Secret 是否仍在 **Variables and Secrets** 中，并注意冷却窗口：同一账号、同一事件类型在同一个 15 分钟窗口内的第二次事件会被有意静默。
+
+部署后可用全新浏览器配置或无痕窗口，通过正常认证方式成功登录来验证推送。已有客户端重新登录或解锁保险库不会触发新客户端告警；Web SSO 会生成新客户端标识，也可以用成功的 SSO 登录验证。不要故意锁定生产账号。请确认 Telegram 实际收到消息；部署成功本身不能证明推送已送达。
+
+
 ## 常见问题：
 - **Fork 完仓库后，在 Cloudflare 连接 GitHub 账户时看不到自己的仓库，或者选择仓库后返回 404？**  
   这通常与 GitHub Fork 仓库的识别或 Cloudflare 对仓库的授权/同步有关。如果 Fork 后仓库名称、描述等信息与上游项目高度一致，可能更容易触发相关限制或异常。建议在 Fork 时就将仓库名称修改为与上游不同的名称，并同时修改仓库描述，例如改为 `2233warden`。如果已经完成 Fork，也可以直接在 GitHub 仓库设置中修改名称和描述，然后重新尝试在 Cloudflare 中连接。
