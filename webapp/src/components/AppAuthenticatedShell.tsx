@@ -169,7 +169,7 @@ export default function AppAuthenticatedShell(props: AppAuthenticatedShellProps)
 
   return (
     <div className="app-page">
-      <div className="app-shell">
+      <div className={`app-shell ${props.location === '/vault' ? 'vault-route' : ''}`}>
         <header className="topbar">
           <div className="brand">
             <span className="brand-wordmark">Vault</span>
@@ -210,6 +210,7 @@ export default function AppAuthenticatedShell(props: AppAuthenticatedShellProps)
 
         <div className="app-main">
           <aside className="app-side">
+            {props.location === '/vault' && <div id="vault-sidebar-slot" />}
             <div className="side-nav-main">
               {groupedNav}
             </div>

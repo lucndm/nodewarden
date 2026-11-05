@@ -1463,20 +1463,10 @@ input[type='file'].input::file-selector-button {
   }
 }
 
-/* ───────────────────────────────────────────────────────────────────────────
-   Proton Pass layout pass.
-
-   The vault follows Proton Pass's three-pane reading order: a fixed filter
-   rail, an item list, and a detail pane whose title carries its own actions.
-   Surfaces stay flat with hairline borders; selection is signalled by a
-   tinted fill plus a left edge marker instead of a drop shadow.
-   ─────────────────────────────────────────────────────────────────────────── */
-
-/* ── vault frame ── */
+/* ── vault frame: navigation, items, detail ── */
 @media (min-width: 1181px) {
   .vault-grid {
     gap: 8px;
-    grid-template-columns: 244px minmax(0, 340px) minmax(0, 1fr);
   }
 }
 
@@ -1757,7 +1747,6 @@ input[type='file'].input::file-selector-button {
 .kv-field:last-child {
   border-bottom: none;
 }
-
 .kv-field-icon {
   display: grid;
   place-items: center;

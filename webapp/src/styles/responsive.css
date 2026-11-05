@@ -8,7 +8,8 @@
     height: calc(100vh - 16px);
   }
 
-  .app-main {
+  .app-main,
+  .vault-route .app-main {
     grid-template-columns: 1fr;
   }
 

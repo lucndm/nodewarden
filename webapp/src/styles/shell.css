@@ -173,6 +173,18 @@
   grid-template-columns: 200px 1fr;
 }
 
+.vault-route .app-main {
+  grid-template-columns: 270px minmax(0, 1fr);
+}
+
+.vault-route .app-side {
+  overflow: auto;
+}
+
+.vault-route .side-nav-main {
+  flex: none;
+}
+
 .app-side {
   @apply flex flex-col gap-2 border-r px-3 py-4;
   border-color: var(--line-soft);
@@ -437,7 +449,6 @@
   border-radius: 8px;
   padding: 10px;
 }
-
 .auth-request-fingerprint strong,
 .auth-request-fingerprint-inline {
   overflow-wrap: anywhere;
