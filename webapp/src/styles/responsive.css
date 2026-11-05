@@ -56,11 +56,8 @@
   .standalone-title-row {
     padding-inline: 68px;
   }
-
-  .standalone-footer {
-    @apply text-xs leading-[1.4];
-  }
 }
+
 
 @media (max-width: 1180px) {
   .auth-page {
@@ -73,10 +70,6 @@
 
   .standalone-brand-outside {
     @apply justify-center;
-  }
-
-  .standalone-brand-logo {
-    @apply h-11 w-[55px];
   }
 
   .auth-card {
@@ -111,10 +104,6 @@
 
   .brand {
     @apply min-w-0 gap-2.5 text-lg;
-  }
-
-  .brand-logo {
-    @apply h-[34px] w-[43px];
   }
 
   .brand-wordmark {

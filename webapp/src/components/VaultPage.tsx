@@ -1123,12 +1123,16 @@ const folderName = useCallback((id: string | null | undefined): string => {
     }
   }
 
+  const handleSearchInput = useCallback((value: string) => {
+    setSearchInput(value);
+    if (value.trim()) setSidebarFilter((filter) => filter.kind === 'all' ? filter : { kind: 'all' });
+  }, []);
   const handleClearSearch = useCallback(() => setSearchInput(''), []);
   const handleSearchCompositionStart = useCallback(() => setSearchComposing(true), []);
   const handleSearchCompositionEnd = useCallback((value: string) => {
     setSearchComposing(false);
-    setSearchInput(value);
-  }, []);
+    handleSearchInput(value);
+  }, [handleSearchInput]);
   const handleToggleSortMenu = useCallback(() => setSortMenuOpen((open) => !open), []);
   const handleSelectSortMode = useCallback((value: VaultSortMode) => {
     setSortMode(value);
@@ -1257,7 +1261,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
           createMenuRef={createMenuRef}
           sortMenuRef={sortMenuRef}
           listPanelRef={listPanelRef}
-          onSearchInput={setSearchInput}
+          onSearchInput={handleSearchInput}
           onClearSearch={handleClearSearch}
           onSearchCompositionStart={handleSearchCompositionStart}
           onSearchCompositionEnd={handleSearchCompositionEnd}

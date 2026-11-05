@@ -99,6 +99,8 @@ function WebsiteRow(props: WebsiteRowProps) {
       <input
         className="input"
         value={props.uriEntry.uri}
+        placeholder={t('txt_website')}
+        aria-label={t('txt_website')}
         onInput={(e) => props.onUpdateUri(props.index, (e.currentTarget as HTMLInputElement).value)}
       />
       <select
@@ -141,6 +143,7 @@ export default function VaultEditor(props: VaultEditorProps) {
   const totpQrFileRef = useRef<HTMLInputElement | null>(null);
   const totpQrStreamRef = useRef<MediaStream | null>(null);
   const totpQrFrameRef = useRef<number | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const [totpQrOpen, setTotpQrOpen] = useState(false);
   const [totpQrStatus, setTotpQrStatus] = useState('');
   const [totpQrBusy, setTotpQrBusy] = useState(false);
@@ -155,6 +158,12 @@ export default function VaultEditor(props: VaultEditorProps) {
     props.onUpdateDraft({ tags: [...props.draft.tags, tag] });
   };
   useDialogLifecycle(totpQrOpen, () => setTotpQrOpen(false));
+
+  // Every new item needs a title, so put the caret there as soon as the form
+  // opens instead of making the user hunt for the first field.
+  useEffect(() => {
+    if (props.isCreating) nameInputRef.current?.focus();
+  }, [props.isCreating]);
 
   const stopTotpQrScanner = () => {
     if (totpQrFrameRef.current != null) {
@@ -363,64 +372,14 @@ export default function VaultEditor(props: VaultEditorProps) {
             {t('txt_favorite')}
           </button>
         </div>
-        <div className="field-grid">
-          <label className="field">
-            <span>{t('txt_type')}</span>
-            <select
-              className="input"
-              value={props.draft.type}
-              disabled={!props.isCreating}
-              onInput={(e) => {
-                const nextType = Number((e.currentTarget as HTMLSelectElement).value);
-                props.onUpdateDraft({ type: nextType });
-                if (nextType === 5) props.onSeedSshDefaults();
-              }}
-            >
-              {createTypeOptions.map((option) => (
-                <option key={option.type} value={option.type}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="field">
-            <span>{t('txt_tags')}</span>
-            <div className="tag-input-wrap">
-              {props.draft.tags.map((tag) => (
-                <span key={tag} className="tag-chip">
-                  {tag}
-                  <button
-                    type="button"
-                    className="tag-chip-remove"
-                    title={t('txt_delete')}
-                    aria-label={`${t('txt_delete')}: ${tag}`}
-                    onClick={() => props.onUpdateDraft({ tags: props.draft.tags.filter((existing) => existing !== tag) })}
-                  >
-                    <X size={11} />
-                  </button>
-                </span>
-              ))}
-              <input
-                className="tag-input"
-                value={tagInput}
-                placeholder={t('txt_add_tag')}
-                onInput={(e) => setTagInput((e.currentTarget as HTMLInputElement).value)}
-                onKeyDown={(e) => {
-                  if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ',') {
-                    e.preventDefault();
-                    commitTagInput();
-                  } else if ((e as KeyboardEvent).key === 'Backspace' && !tagInput && props.draft.tags.length > 0) {
-                    props.onUpdateDraft({ tags: props.draft.tags.slice(0, -1) });
-                  }
-                }}
-                onBlur={commitTagInput}
-              />
-            </div>
-          </div>
-        </div>
         <label className="field">
           <span>{t('txt_name')}</span>
-          <input className="input" value={props.draft.name} onInput={(e) => props.onUpdateDraft({ name: (e.currentTarget as HTMLInputElement).value })} />
+          <input
+            ref={nameInputRef}
+            className="input"
+            value={props.draft.name}
+            onInput={(e) => props.onUpdateDraft({ name: (e.currentTarget as HTMLInputElement).value })}
+          />
         </label>
       </div>
 
@@ -681,6 +640,75 @@ export default function VaultEditor(props: VaultEditorProps) {
       )}
 
       <div className="card">
+        <h4>{t('txt_notes')}</h4>
+        <textarea
+          className="input textarea"
+          aria-label={t('txt_notes')}
+          value={props.draft.notes}
+          onInput={(e) => props.onUpdateDraft({ notes: (e.currentTarget as HTMLTextAreaElement).value })}
+        />
+      </div>
+
+      <div className="card">
+        <h4>{t('txt_metadata')}</h4>
+        <div className="field-grid">
+          <label className="field">
+            <span>{t('txt_type')}</span>
+            <select
+              className="input"
+              value={props.draft.type}
+              disabled={!props.isCreating}
+              onInput={(e) => {
+                const nextType = Number((e.currentTarget as HTMLSelectElement).value);
+                props.onUpdateDraft({ type: nextType });
+                if (nextType === 5) props.onSeedSshDefaults();
+              }}
+            >
+              {createTypeOptions.map((option) => (
+                <option key={option.type} value={option.type}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="field">
+            <span>{t('txt_tags')}</span>
+            <div className="tag-input-wrap">
+              {props.draft.tags.map((tag) => (
+                <span key={tag} className="tag-chip">
+                  {tag}
+                  <button
+                    type="button"
+                    className="tag-chip-remove"
+                    title={t('txt_delete')}
+                    aria-label={`${t('txt_delete')}: ${tag}`}
+                    onClick={() => props.onUpdateDraft({ tags: props.draft.tags.filter((existing) => existing !== tag) })}
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
+              <input
+                className="tag-input"
+                value={tagInput}
+                placeholder={t('txt_add_tag')}
+                onInput={(e) => setTagInput((e.currentTarget as HTMLInputElement).value)}
+                onKeyDown={(e) => {
+                  if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ',') {
+                    e.preventDefault();
+                    commitTagInput();
+                  } else if ((e as KeyboardEvent).key === 'Backspace' && !tagInput && props.draft.tags.length > 0) {
+                    props.onUpdateDraft({ tags: props.draft.tags.slice(0, -1) });
+                  }
+                }}
+                onBlur={commitTagInput}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
         <div className="section-head attachment-head">
           <h4>{t('txt_attachments')}</h4>
           <button
@@ -769,10 +797,6 @@ export default function VaultEditor(props: VaultEditorProps) {
 
       <div className="card">
         <h4>{t('txt_additional_options')}</h4>
-        <label className="field">
-          <span>{t('txt_notes')}</span>
-          <textarea className="input textarea" value={props.draft.notes} onInput={(e) => props.onUpdateDraft({ notes: (e.currentTarget as HTMLTextAreaElement).value })} />
-        </label>
         <label className="check-line">
           <input type="checkbox" checked={props.draft.reprompt} onInput={(e) => props.onUpdateDraft({ reprompt: (e.currentTarget as HTMLInputElement).checked })} />
           {t('txt_master_password_reprompt')}

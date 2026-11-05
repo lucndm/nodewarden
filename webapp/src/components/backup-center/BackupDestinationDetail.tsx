@@ -453,7 +453,7 @@ export function BackupDestinationDetail(props: BackupDestinationDetailProps) {
                   className="input"
                   value={(props.selectedDestination.destination as WebDavBackupDestination).remotePath}
                   disabled={props.loadingSettings || props.disableWhileBusy}
-                  placeholder="nodewarden"
+                  placeholder="vault"
                   onInput={(event) => props.onUpdateDestination((destination) => ({
                     ...destination,
                     destination: {

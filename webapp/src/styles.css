@@ -266,16 +266,10 @@ h4 {
   gap: 10px;
 }
 
-.brand-logo {
-  height: 36px;
-  width: 45px;
-  filter: none;
-}
-
 .brand-wordmark,
 .standalone-brand-wordmark,
 .not-found-wordmark {
-  background: var(--primary);
+  color: var(--primary);
 }
 
 .topbar-actions {
@@ -392,12 +386,6 @@ h4 {
 
 .standalone-brand {
   gap: 12px;
-}
-
-.standalone-brand-logo {
-  height: 48px;
-  width: 60px;
-  filter: none;
 }
 
 .auth-card,
@@ -1140,15 +1128,6 @@ textarea {
 
   .standalone-shell {
     max-width: 100%;
-  }
-
-  .standalone-brand-logo {
-    height: 42px;
-    width: 53px;
-  }
-
-  .standalone-brand-wordmark {
-    width: clamp(176px, 58vw, 244px);
   }
 
   .field {

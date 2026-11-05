@@ -20,9 +20,9 @@ const EMPTY_FORMS_SCHEMA_BODY = JSON.stringify({
 });
 
 const EMPTY_MANIFEST_BODY = JSON.stringify({
-  buildId: 'nodewarden-empty-fill-assist-v1',
+  buildId: 'empty-fill-assist-v1',
   timestamp: '2026-07-06T00:00:00.000Z',
-  gitSha: 'nodewarden',
+  gitSha: 'unknown',
   maps: {
     forms: {
       v1: {

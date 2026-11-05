@@ -591,6 +591,18 @@ export default function App() {
     };
   }, [lockedSessionRefreshError, phase]);
 
+  // Master passwords stay in client state until the auth flow that owns them
+  // ends. Every terminal step of a flow drops them here, so returning to the
+  // login page never renders a stored master password back into the form.
+  function clearAuthCredentialInputs() {
+    setLoginValues((prev) => ({ ...prev, password: '' }));
+    setRegisterValues((prev) => ({ ...prev, password: '', password2: '' }));
+    setRecoverValues((prev) => ({ ...prev, password: '' }));
+    setUnlockPassword('');
+    setPasskeyPassword('');
+    setPendingPasskeyPassword(null);
+  }
+
   async function finalizeLogin(login: CompletedLogin) {
     loginScopedBackupRepairAuthRef.current =
       login.session.accessToken && (login.freshMasterPasswordHash || login.freshUserVerificationToken)
@@ -606,10 +618,8 @@ export default function App() {
     setLockedSessionRefreshError('');
     setPendingTotp(null);
     setPendingTotpMode(null);
-    setPendingPasskeyPassword(null);
     setTotpCode('');
-    setPasskeyPassword('');
-    setUnlockPassword('');
+    clearAuthCredentialInputs();
     setPhase('app');
     if (location === '/' || location === '/login' || location === '/register' || location === '/lock') {
       navigate('/vault');
@@ -677,7 +687,10 @@ export default function App() {
       }
       if (result.kind === 'password') {
         setPendingPasskeyPassword(result.pendingPasskeyPassword);
-        setLoginValues({ email: result.pendingPasskeyPassword.email, password: '' });
+        // The passkey unlocked the account key but not the vault, so the
+        // master password is still required. The login form must not keep an
+        // older typed password next to that prompt.
+        setLoginValues((prev) => ({ ...prev, email: result.pendingPasskeyPassword.email, password: '' }));
         setPasskeyPassword('');
         pushToast('warning', t('txt_passkey_requires_master_password'));
         return;
@@ -791,6 +804,9 @@ export default function App() {
         return;
       }
       pushToast('error', t('txt_recovered_but_auto_login_failed_please_sign_in'));
+      // The account was recovered, so the recovery flow is over: the master
+      // password must not stay in the form while the user signs in again.
+      setRecoverValues((prev) => ({ ...prev, password: '' }));
       navigate('/login');
     } catch (error) {
       pushToast('error', error instanceof Error ? error.message : t('txt_recover_2fa_failed'));
@@ -832,6 +848,9 @@ export default function App() {
         return;
       }
       setLoginValues({ email: registerValues.email.toLowerCase(), password: '' });
+      // The account exists now: drop the new master password and its
+      // confirmation so they cannot come back when the register form reopens.
+      clearAuthCredentialInputs();
       setPhase('login');
       navigate('/login');
       pushToast('success', t('txt_registration_succeeded_please_sign_in'));
@@ -906,7 +925,7 @@ export default function App() {
     setDecryptedCiphers([]);
     setDecryptedSends([]);
     clearPasswordSecurityCache();
-    setUnlockPassword('');
+    clearAuthCredentialInputs();
     setPendingTotp(null);
     setPendingTotpMode(null);
     setTotpCode('');
@@ -934,6 +953,9 @@ export default function App() {
     setUnlockPreparing(false);
     setPendingTotp(null);
     setPendingTotpMode(null);
+    // Logging out ends every credential flow at once: no master password may
+    // survive into the login form that is about to be rendered.
+    clearAuthCredentialInputs();
     setPhase('login');
     navigate('/login');
   }

@@ -36,6 +36,23 @@ test('official Bitwarden desktop origin receives credentialed CORS', () => {
   assert.equal(preflight.headers.get('Access-Control-Allow-Credentials'), 'true');
 });
 
+test('public responses do not advertise the web session header but same-origin preflight permits it', () => {
+  const base = 'https://vault.example.test';
+  const publicResponse = applyCors(new Request(base + '/'), new Response('ok'), env);
+  assert.doesNotMatch(publicResponse.headers.get('Access-Control-Allow-Headers') || '', /X-NodeWarden-Web-Session/i);
+
+  const preflight = handleCors(new Request(base + '/identity/connect/token', {
+    method: 'OPTIONS',
+    headers: {
+      Origin: base,
+      'Access-Control-Request-Headers': 'content-type, x-nodewarden-web-session',
+    },
+  }), env);
+  assert.equal(preflight.headers.get('Access-Control-Allow-Origin'), base);
+  assert.equal(preflight.headers.get('Access-Control-Allow-Credentials'), 'true');
+  assert.match(preflight.headers.get('Access-Control-Allow-Headers') || '', /x-nodewarden-web-session/i);
+});
+
 test('Worker assets preserve exact official connector .html paths', async () => {
   for (const configUrl of [
     new URL('../wrangler.toml', import.meta.url),
