@@ -21,22 +21,13 @@
 }
 
 .brand-wordmark {
-  @apply block max-w-full;
-  width: clamp(168px, 17vw, 224px);
-  aspect-ratio: 862 / 102;
-  background: #6d4aff;
-  mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
-  -webkit-mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
+  @apply block max-w-full text-[26px] font-extrabold leading-none tracking-tight;
+  color: var(--primary);
 }
 
 .mobile-page-title {
   @apply hidden min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-extrabold leading-tight text-slate-900;
   max-width: min(58vw, 240px);
-}
-
-.brand-logo {
-  @apply h-[42px] w-[53px] object-contain;
-  filter: drop-shadow(0 10px 22px rgba(91, 60, 224, 0.22));
 }
 
 .topbar-actions {

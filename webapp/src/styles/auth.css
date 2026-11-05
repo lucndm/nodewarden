@@ -352,18 +352,9 @@
   @apply inline-flex max-w-full items-center justify-center gap-3.5;
 }
 
-.not-found-logo {
-  @apply h-14 w-14 shrink-0 object-contain;
-  filter: drop-shadow(0 8px 18px rgba(91, 60, 224, 0.22));
-}
-
 .not-found-wordmark {
-  @apply block max-w-full;
-  width: clamp(200px, 38vw, 330px);
-  aspect-ratio: 862 / 102;
-  background: #6d4aff;
-  mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
-  -webkit-mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
+  @apply block max-w-full text-[34px] font-extrabold leading-none tracking-tight;
+  color: var(--primary);
 }
 
 .not-found-code {
@@ -403,12 +394,8 @@
     @apply gap-2.5;
   }
 
-  .not-found-logo {
-    @apply h-12 w-[60px];
-  }
-
   .not-found-wordmark {
-    width: clamp(170px, 52vw, 230px);
+    @apply text-[28px];
   }
 
   .not-found-space {
@@ -464,18 +451,9 @@
   @apply mb-0.5 w-full justify-center;
 }
 
-.standalone-brand-logo {
-  @apply h-14 w-[70px] shrink-0 object-contain;
-  filter: drop-shadow(0 8px 18px rgba(91, 60, 224, 0.22));
-}
-
 .standalone-brand-wordmark {
-  @apply block max-w-full;
-  width: clamp(200px, 30vw, 340px);
-  aspect-ratio: 862 / 102;
-  background: #6d4aff;
-  mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
-  -webkit-mask: url('/nodewarden-wordmark.svg') center / contain no-repeat;
+  @apply block max-w-full text-[30px] font-extrabold leading-none tracking-tight;
+  color: var(--primary);
 }
 
 .standalone-title {
@@ -605,22 +583,4 @@
 .jwt-copy-hint {
   @apply text-[13px] font-bold;
   color: #15803d;
-}
-
-.standalone-footer {
-  @apply w-full text-center text-[13px] text-slate-500;
-}
-
-.standalone-footer a {
-  @apply font-bold no-underline;
-  color: var(--primary-hover);
-}
-
-.standalone-footer a:hover {
-  text-decoration: underline;
-}
-
-.standalone-version {
-  @apply font-bold;
-  color: var(--primary-hover);
 }

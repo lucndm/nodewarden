@@ -67,6 +67,8 @@ The Web Vault follows Proton Pass’s layout and visual language. The desktop va
 
 Login and autofill fields remain in separate cards without visible group headings; screen readers retain the group names.
 
+Searching from a filtered list switches to All Items so matches across the active vault are visible. Create and edit show the title and main fields first, then Notes; Type and Tags follow in a metadata card. Creating an item focuses its title.
+
 The colour system uses a violet interaction colour across both light and dark themes, with a navy-violet dark background, hairline borders and flat surfaces instead of heavy shadows. The filter rail marks the selected entry with a left edge marker, and the selected item in the list keeps a tinted fill.
 
 ## Tested clients
