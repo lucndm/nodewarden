@@ -44,8 +44,11 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'id TEXT PRIMARY KEY, user_id TEXT NOT NULL, type INTEGER NOT NULL, folder_id TEXT, name TEXT, notes TEXT, ' +
   'favorite INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL, reprompt INTEGER, key TEXT, ' +
   'created_at TEXT NOT NULL, updated_at TEXT NOT NULL, archived_at TEXT, deleted_at TEXT, ' +
+  'usage_count INTEGER NOT NULL DEFAULT 0, last_used_at TEXT, ' +
   'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',
   'ALTER TABLE ciphers ADD COLUMN archived_at TEXT',
+  'ALTER TABLE ciphers ADD COLUMN usage_count INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE ciphers ADD COLUMN last_used_at TEXT',
   'CREATE INDEX IF NOT EXISTS idx_ciphers_user_updated ON ciphers(user_id, updated_at)',
   'CREATE INDEX IF NOT EXISTS idx_ciphers_user_archived ON ciphers(user_id, archived_at)',
   'CREATE INDEX IF NOT EXISTS idx_ciphers_user_deleted ON ciphers(user_id, deleted_at)',

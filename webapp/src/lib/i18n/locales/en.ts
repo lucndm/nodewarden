@@ -1599,6 +1599,12 @@ Object.assign(en, {
   "txt_generator_forwarded_error_auth": "The alias provider rejected the API key.",
   "txt_generator_forwarded_error_quota": "The alias provider refused to create the alias (quota reached or no domain available).",
   "txt_generator_forwarded_error_generic": "The alias provider returned an error. Please try again.",
+  "txt_sort_most_used": "Most used",
+  "txt_password_copies": "Password Copies",
+  "txt_password_copied_count": "Copied {count} times",
+  "txt_last_copied": "Last Copied",
+  "txt_usage_metrics_unavailable": "Usage metrics unavailable",
+  "txt_usage_tracking_failed": "Password copied, but the copy could not be tracked",
 });
 
 export default en;

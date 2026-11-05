@@ -1662,3 +1662,24 @@ export async function handleBulkPermanentDeleteCiphers(request: Request, env: En
 
   return new Response(null, { status: 204 });
 }
+
+// GET /api/ciphers/usage
+// Password-copy counters for the current owner, keyed by cipher id. Ciphers
+// that were never copied are omitted.
+export async function handleGetCipherUsage(request: Request, env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  return jsonResponse(await storage.getCipherUsage(userId));
+}
+
+// POST /api/ciphers/:id/usage
+// Records one successful password copy. Only an owned, non-deleted,
+// non-archived login cipher can be counted. Recording a copy never changes the
+// cipher revision date, its updated_at or the sync notifications.
+export async function handleRecordCipherUsage(request: Request, env: Env, userId: string, id: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const usage = await storage.incrementCipherUsage(id, userId);
+  if (!usage) {
+    return errorResponse('Cipher not found', 404);
+  }
+  return jsonResponse(usage);
+}

@@ -1520,6 +1520,12 @@ Object.assign(fr, { "txt_password_security_show_all": "Tout afficher", "txt_pass
   "txt_generator_forwarded_error_auth": "Le fournisseur d’alias a rejeté la clé API.",
   "txt_generator_forwarded_error_quota": "Le fournisseur d’alias n’a pas pu créer l’alias (quota atteint ou aucun domaine disponible).",
   "txt_generator_forwarded_error_generic": "Le fournisseur d’alias a renvoyé une erreur. Veuillez réessayer.",
+  "txt_sort_most_used": "Les plus utilisés",
+  "txt_password_copies": "Copies du mot de passe",
+  "txt_password_copied_count": "Copié {count} fois",
+  "txt_last_copied": "Dernière copie",
+  "txt_usage_metrics_unavailable": "Métriques d’utilisation indisponibles",
+  "txt_usage_tracking_failed": "Mot de passe copié, mais la copie n’a pas pu être enregistrée",
 });
 
 export default fr;

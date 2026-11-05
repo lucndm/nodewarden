@@ -284,6 +284,14 @@ export interface Cipher {
   [key: string]: any;
 }
 
+// Password-copy usage counter for a cipher.
+// Stored in dedicated columns so recording a copy never touches the cipher
+// payload, its revision date or the sync payload.
+export interface CipherUsage {
+  useCount: number;
+  lastUsedAt: string | null;
+}
+
 // Folder model
 export interface Folder {
   id: string;

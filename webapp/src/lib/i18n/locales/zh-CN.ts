@@ -1549,6 +1549,12 @@ Object.assign(zhCN, {
   "txt_generator_forwarded_error_auth": "别名服务拒绝了 API 密钥。",
   "txt_generator_forwarded_error_quota": "别名服务无法创建别名（配额已满或没有可用域名）。",
   "txt_generator_forwarded_error_generic": "别名服务返回错误，请重试。",
+  "txt_sort_most_used": "最常用",
+  "txt_password_copies": "密码复制次数",
+  "txt_password_copied_count": "已复制 {count} 次",
+  "txt_last_copied": "最近复制",
+  "txt_usage_metrics_unavailable": "使用统计暂不可用",
+  "txt_usage_tracking_failed": "密码已复制，但未能记录本次复制",
 });
 
 export default zhCN;

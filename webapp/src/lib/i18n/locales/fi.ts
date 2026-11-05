@@ -1520,6 +1520,12 @@ Object.assign(fi, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_forwarded_error_auth": "Aliastarjoaja hylkäsi API-avaimen.",
   "txt_generator_forwarded_error_quota": "Aliastarjoaja ei voinut luoda aliasta (kiintiö täyttynyt tai ei käytettävissä olevaa domainia).",
   "txt_generator_forwarded_error_generic": "Aliastarjoaja palautti virheen. Yritä uudelleen.",
+  "txt_sort_most_used": "Eniten käytetyt",
+  "txt_password_copies": "Salasanan kopioinnit",
+  "txt_password_copied_count": "Kopioitu {count} kertaa",
+  "txt_last_copied": "Viimeisin kopiointi",
+  "txt_usage_metrics_unavailable": "Käyttötilastot eivät ole saatavilla",
+  "txt_usage_tracking_failed": "Salasana kopioitiin, mutta kopiointia ei kirjattu",
 });
 
 export default fi;

@@ -315,6 +315,11 @@ async function importPreparedBackupRows(db: D1Database, payload: BackupPayload['
     ciphers: cloneRows(payload.ciphers || []).map((row) => ({
       ...row,
       archived_at: row.archived_at ?? null,
+      // Archives taken before the usage counters existed carry no counter at
+      // all; they restore as "never used" instead of failing on the NOT NULL
+      // column. A present value was already validated as a real counter.
+      usage_count: row.usage_count == null || row.usage_count === '' ? 0 : Number(row.usage_count),
+      last_used_at: row.last_used_at == null || row.last_used_at === '' ? null : String(row.last_used_at),
     })),
     attachments: cloneRows(payload.attachments || []),
   };
@@ -680,7 +685,7 @@ async function importBackupRows(db: D1Database, payload: BackupPayload['db'], us
     buildInsertStatements(
       db,
       tableName('ciphers'),
-      ['id', 'user_id', 'type', 'folder_id', 'name', 'notes', 'favorite', 'data', 'reprompt', 'key', 'created_at', 'updated_at', 'archived_at', 'deleted_at'],
+      ['id', 'user_id', 'type', 'folder_id', 'name', 'notes', 'favorite', 'data', 'reprompt', 'key', 'created_at', 'updated_at', 'archived_at', 'deleted_at', 'usage_count', 'last_used_at'],
       payload.ciphers || []
     )
   );

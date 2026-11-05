@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS ciphers (
   updated_at TEXT NOT NULL,
   archived_at TEXT,
   deleted_at TEXT,
+  usage_count INTEGER NOT NULL DEFAULT 0,
+  last_used_at TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_ciphers_user_updated ON ciphers(user_id, updated_at);

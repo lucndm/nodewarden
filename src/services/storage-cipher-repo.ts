@@ -1,4 +1,4 @@
-import type { Cipher } from '../types';
+import type { Cipher, CipherUsage } from '../types';
 
 function normalizeOptionalId(value: unknown): string | null {
   if (value == null) return null;
@@ -195,6 +195,56 @@ function sanitizeIds(ids: string[]): string[] {
 
 export async function deleteCipher(db: D1Database, id: string, userId: string): Promise<void> {
   await db.prepare('DELETE FROM ciphers WHERE id = ? AND user_id = ?').bind(id, userId).run();
+}
+
+// Password-copy usage counters live in their own columns. They are written
+// without touching updated_at or the user revision date, so recording a copy
+// never produces a vault change or a sync notification.
+export async function getCipherUsageMap(db: D1Database, userId: string): Promise<Record<string, CipherUsage>> {
+  const res = await db
+    .prepare('SELECT id, usage_count, last_used_at FROM ciphers WHERE user_id = ? AND usage_count > 0')
+    .bind(userId)
+    .all<{ id: string; usage_count: number | null; last_used_at: string | null }>();
+  const usage: Record<string, CipherUsage> = {};
+  for (const row of res.results || []) {
+    usage[row.id] = {
+      useCount: Number(row.usage_count) || 0,
+      lastUsedAt: row.last_used_at ?? null,
+    };
+  }
+  return usage;
+}
+
+// Only an owned, non-deleted, non-archived login cipher can be counted. The
+// increment and the read-back share one transaction so the returned counter
+// is the value this request wrote.
+export async function incrementCipherUsage(
+  db: D1Database,
+  id: string,
+  userId: string
+): Promise<CipherUsage | null> {
+  const now = new Date().toISOString();
+  const [update, read] = await db.batch([
+    db
+      .prepare(
+        'UPDATE ciphers SET usage_count = usage_count + 1, last_used_at = ? ' +
+        'WHERE id = ? AND user_id = ? AND type = 1 ' +
+        'AND deleted_at IS NULL AND archived_at IS NULL ' +
+        "AND json_extract(data, '$.deletedAt') IS NULL AND json_extract(data, '$.deletedDate') IS NULL " +
+        "AND json_extract(data, '$.archivedAt') IS NULL AND json_extract(data, '$.archivedDate') IS NULL"
+      )
+      .bind(now, id, userId),
+    db.prepare('SELECT usage_count, last_used_at FROM ciphers WHERE id = ? AND user_id = ?').bind(id, userId),
+  ]);
+  if ((update.meta.changes ?? 0) !== 1) return null;
+  const row = (read.results || [])[0] as
+    | { usage_count?: number | null; last_used_at?: string | null }
+    | undefined;
+  if (!row) return null;
+  return {
+    useCount: Number(row.usage_count) || 0,
+    lastUsedAt: row.last_used_at ?? null,
+  };
 }
 
 export async function bulkSoftDeleteCiphers(

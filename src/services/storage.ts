@@ -1,4 +1,4 @@
-import { User, Cipher, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord } from '../types';
+import { User, Cipher, CipherUsage, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord } from '../types';
 import { LIMITS } from '../config/limits';
 import { ensurePushInstallationCredentials } from './push-relay';
 import { ensureStorageSchema } from './storage-schema';
@@ -64,6 +64,8 @@ import {
   getCipherForUser as findStoredCipherForUser,
   getCiphersByIds as listStoredCiphersByIds,
   getCiphersPage as listStoredCiphersPage,
+  getCipherUsageMap as listStoredCipherUsageMap,
+  incrementCipherUsage as bumpStoredCipherUsage,
   saveCipher as saveStoredCipher,
   updateCipherIfUnchanged as updateStoredCipherIfUnchanged,
   deleteCipher as deleteStoredCipher,
@@ -182,7 +184,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-05-user-key-id';
+const STORAGE_SCHEMA_VERSION = '2026-11-05-cipher-usage';
 const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
 
 // D1-backed storage.
@@ -555,6 +557,16 @@ export class StorageService {
 
   async deleteCipher(id: string, userId: string): Promise<void> {
     await deleteStoredCipher(this.db, id, userId);
+  }
+
+  // --- Cipher password-copy usage counters ---
+
+  async getCipherUsage(userId: string): Promise<Record<string, CipherUsage>> {
+    return listStoredCipherUsageMap(this.db, userId);
+  }
+
+  async incrementCipherUsage(id: string, userId: string): Promise<CipherUsage | null> {
+    return bumpStoredCipherUsage(this.db, id, userId);
   }
 
   async bulkSoftDeleteCiphers(ids: string[], userId: string): Promise<string | null> {

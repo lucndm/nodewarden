@@ -4,6 +4,7 @@ import { AlertTriangle, Archive, Clipboard, Download, Eye, EyeOff, ExternalLink,
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
+import type { CipherUsageEntry } from '@/lib/api/vault';
 import type { Cipher } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import {
@@ -32,6 +33,10 @@ interface VaultDetailViewProps {
   showPassword: boolean;
   totpLive: TotpCodeResult | null;
   passkeyCreatedAt: string | null;
+  usage: CipherUsageEntry | null;
+  usageAvailable: boolean;
+  usageError: boolean;
+  onPasswordCopied: (cipherId: string) => void;
   hiddenFieldVisibleMap: Record<number, boolean>;
   folderName: (id: string | null | undefined) => string;
   downloadingAttachmentKey: string;
@@ -152,6 +157,13 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
       : t('txt_downloading_percent', { percent: props.attachmentDownloadPercent });
   };
 
+  // Only a copy that really reached the clipboard counts as a use. The reprompt
+  // gate above already keeps a locked item from being copied at all.
+  const copyLoginPassword = async () => {
+    const copied = await copyToClipboard(props.selectedCipher.login?.decPassword || '');
+    if (copied) props.onPasswordCopied(props.selectedCipher.id);
+  };
+
   return (
     <>
       {Number(props.selectedCipher.reprompt || 0) === 1 && props.repromptApprovedCipherId !== props.selectedCipher.id && (
@@ -207,7 +219,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                     {props.showPassword ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
                     {props.showPassword ? t('txt_hide') : t('txt_reveal')}
                   </button>
-                  <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.login?.decPassword || '')}>
+                  <button type="button" className="btn btn-secondary small" onClick={() => void copyLoginPassword()}>
                     <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
                   </button>
                   <button type="button" className="btn btn-secondary small" disabled={checkingBreach || !props.selectedCipher.login?.decPassword} onClick={() => void checkBreach()}>
@@ -216,6 +228,15 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </button>
                 </div>
               </div>
+              {props.usageAvailable && (
+                <>
+                  <div className="detail-sub">{t('txt_password_copies')}: {t('txt_password_copied_count', { count: props.usage?.useCount || 0 })}</div>
+                  <div className="detail-sub">{t('txt_last_copied')}: {formatHistoryTime(props.usage?.lastUsedAt)}</div>
+                </>
+              )}
+              {props.usageError && (
+                <div className="detail-sub" role="status">{t('txt_usage_metrics_unavailable')}</div>
+              )}
               {breachResult && (
                 <div className={`password-breach-inline ${breachResult.available ? (breachResult.count ? 'danger' : 'safe') : 'warning'}`} role="status">
                   {breachResult.available ? (breachResult.count ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />) : <AlertTriangle size={15} />}

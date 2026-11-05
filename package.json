@@ -23,6 +23,8 @@
     "test:web-crypto": "tsx --test scripts/web-crypto-availability.test.ts",
     "test:authed-fetch-retry": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/authed-fetch-retry.test.ts",
     "test:user-key-id": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/user-key-id.test.ts",
+    "test:cipher-usage": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/cipher-usage.test.ts",
+    "test:cipher-usage-web": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/cipher-usage-web.test.ts",
     "test:master-password-hint": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/master-password-hint.test.ts",
     "test:sync-cipher-filter": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/sync-cipher-filter.test.ts",
     "test:password-hint-endpoint-removed": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/password-hint-endpoint-removed.test.ts",

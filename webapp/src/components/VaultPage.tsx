@@ -14,6 +14,7 @@ import {
   bankAccountListSubtitle,
   cipherTypeKey,
   cipherTypeLabel,
+  compareCipherUsage,
   createEmptyDraft,
   creationTimeValue,
   draftFromCipher,
@@ -33,6 +34,7 @@ import {
 import { calcTotpNow, type TotpCodeResult } from '@/lib/crypto';
 import { computeSshFingerprint, generateDefaultSshKeyMaterial } from '@/lib/ssh';
 import { ChevronLeft } from 'lucide-preact';
+import type { CipherUsageMap } from '@/lib/api/vault';
 import type { Cipher, CustomFieldType, Folder, VaultDraft, VaultDraftField } from '@/lib/types';
 import { t } from '@/lib/i18n';
 
@@ -42,6 +44,9 @@ interface VaultPageProps {
   loading: boolean;
   error: string;
   emailForReprompt: string;
+  cipherUsage: CipherUsageMap | null;
+  cipherUsageError: boolean;
+  onTrackPasswordCopy: (cipherId: string) => void;
   onRefresh: () => Promise<void>;
   onCreate: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
   onUpdate: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
@@ -162,7 +167,7 @@ export default function VaultPage(props: VaultPageProps) {
   useEffect(() => {
     try {
       const saved = String(localStorage.getItem(VAULT_SORT_STORAGE_KEY) || '').trim() as VaultSortMode;
-      if (saved === 'edited' || saved === 'created' || saved === 'name') {
+      if (saved === 'edited' || saved === 'created' || saved === 'name' || saved === 'usage') {
         setSortMode(saved);
       }
     } catch {
@@ -312,6 +317,17 @@ export default function VaultPage(props: VaultPageProps) {
     []
   );
 
+  // Copy counters per cipher. A missing map means the counters never loaded:
+  // every item then counts as zero, which only orders the list by name.
+  const usageCountById = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!props.cipherUsage) return counts;
+    for (const [cipherId, entry] of Object.entries(props.cipherUsage)) {
+      counts.set(cipherId, Math.max(0, Number(entry?.useCount) || 0));
+    }
+    return counts;
+  }, [props.cipherUsage]);
+
   const duplicateSignatureInfo = useMemo(() => {
     if (sidebarFilter.kind !== 'duplicates') return null;
     const byId = new Map<string, string[]>();
@@ -420,6 +436,13 @@ export default function VaultPage(props: VaultPageProps) {
       } else if (sortMode === 'created') {
         const diff = (metaB?.creationTime || 0) - (metaA?.creationTime || 0);
         if (diff !== 0) return diff;
+      } else if (sortMode === 'usage') {
+        return compareCipherUsage(
+          { id: a.id, name: metaA?.name || '' },
+          { id: b.id, name: metaB?.name || '' },
+          usageCountById,
+          nameCollator
+        );
       } else {
         const nameDiff = nameCollator.compare(metaA?.name || '', metaB?.name || '');
         if (nameDiff !== 0) return nameDiff;
@@ -429,7 +452,7 @@ export default function VaultPage(props: VaultPageProps) {
     });
 
     return next;
-  }, [props.ciphers, cipherMetaById, sidebarFilter, searchQuery, sortMode, duplicateSignatureInfo, nameCollator]);
+  }, [props.ciphers, cipherMetaById, sidebarFilter, searchQuery, sortMode, duplicateSignatureInfo, nameCollator, usageCountById]);
 
   const filteredCipherIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1322,6 +1345,10 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 showPassword={showPassword}
                 totpLive={totpLive}
                 passkeyCreatedAt={firstPasskeyCreationTime(selectedCipher)}
+                usage={props.cipherUsage?.[selectedCipher.id] || null}
+                usageAvailable={!!props.cipherUsage}
+                usageError={props.cipherUsageError}
+                onPasswordCopied={props.onTrackPasswordCopy}
                 hiddenFieldVisibleMap={hiddenFieldVisibleMap}
                 folderName={folderName}
                 onOpenReprompt={() => setRepromptOpen(true)}

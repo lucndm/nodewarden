@@ -1520,6 +1520,12 @@ Object.assign(ru, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_generator_forwarded_error_auth": "Провайдер псевдонимов отклонил API-ключ.",
   "txt_generator_forwarded_error_quota": "Провайдер псевдонимов не смог создать псевдоним (достигнута квота или нет доступного домена).",
   "txt_generator_forwarded_error_generic": "Провайдер псевдонимов вернул ошибку. Попробуйте ещё раз.",
+  "txt_sort_most_used": "Самые используемые",
+  "txt_password_copies": "Копирования пароля",
+  "txt_password_copied_count": "Скопировано {count} раз",
+  "txt_last_copied": "Последнее копирование",
+  "txt_usage_metrics_unavailable": "Статистика использования недоступна",
+  "txt_usage_tracking_failed": "Пароль скопирован, но копирование не удалось записать",
 });
 
 export default ru;
