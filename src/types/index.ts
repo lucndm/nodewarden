@@ -13,6 +13,8 @@ export interface Env {
   // Optional fallback for attachment/send file storage (no credit card required).
   ATTACHMENTS_KV?: KVNamespace;
   JWT_SECRET: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_CHAT_ID?: string;
   // Zitadel / generic OIDC SSO for the web vault (all three enable the flow).
   OIDC_ISSUER?: string;
   OIDC_CLIENT_ID?: string;

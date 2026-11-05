@@ -97,6 +97,69 @@ Counters start at zero when this feature is enabled and are stored per item in t
 >   | KV | No | 25 MiB (Cloudflare limit) | 1 GB |
 
 
+## Telegram security alerts (optional)
+
+NodeWarden can post security events to a Telegram chat you choose. The feature is off by default and needs two Worker secrets.
+
+Two events are reported:
+
+- **New client** — a successful sign-in from a client identifier the account has never used before, including the very first login.
+- **Login lockout** — the existing login lockout was triggered: 10 failed attempts, 2-minute lock, counted separately per client source, grant type, and account subject.
+
+A new client is often just a new phone or a new browser, and a lockout is often a typo or a client retrying. These alerts are a heads-up channel: they do not detect geolocation and they are not proof of an attack.
+
+> [!NOTE]
+> Web SSO signs in with a freshly generated client identifier every time, so a successful web SSO login is reported as a new client (subject to the cooldown below).
+
+**What a message contains**
+
+- the hostname the request was served on (your Worker or custom domain)
+- the event kind
+- the account ID, first 8 characters only, or `unknown` when no account could be resolved
+- the authentication method, taken from a fixed enum: `password`, `webauthn`, `client_credentials`, `authorization_code`, or `sso_oidc` — anything else is reported as `unknown`
+- the time in UTC
+
+Email addresses, IP addresses, user agents, device names, credentials, and tokens are never included.
+
+**How often you are notified**
+
+- At most one message per account and event kind per 15-minute window. Alerts that could not be resolved to an account share a single bucket.
+- At most 10 messages per 15-minute window for the whole instance.
+- The window is fixed, so two messages can arrive slightly closer together than 15 minutes apart.
+- Once a budget is used up, further events are dropped — there is no queue and no retry.
+
+Delivery is best effort with a 5-second timeout, and a failed send is never retried, so a message can be lost and the event then stays unreported for the rest of the window. These alerts do not detect every attack, and they are not a WAF or DDoS alerting system.
+
+**Setup**
+
+1. Create a bot with [@BotFather](https://t.me/BotFather): send `/newbot` and copy the token it returns. Treat the token like a password — never paste it into the Telegram chat, the repository, or an issue.
+2. Open your bot in Telegram and send `/start` in the private chat that should receive the alerts. A bot can only post into chats that have started it.
+3. Read the chat ID from the Bot API without leaving the token in your shell history:
+
+   ```bash
+   read -rsp "Bot token: " TG_TOKEN; echo
+   curl -s "https://api.telegram.org/bot${TG_TOKEN}/getUpdates" | jq -r '.result[-1].message.chat.id'
+   unset TG_TOKEN
+   ```
+
+   The printed value is the chat ID (negative for groups and channels). Without `jq`, the same response is JSON and the number sits under `result[].message.chat.id`. The chat ID on its own is not a credential — it cannot post anything — but it names the chat that receives your alerts, so keep it out of chat messages and the repository as well. On Windows, read the token with `Read-Host -MaskInput` and call the same endpoint from PowerShell.
+
+4. Store both values as Worker secrets:
+
+   ```bash
+   npx wrangler secret put TELEGRAM_BOT_TOKEN
+   npx wrangler secret put TELEGRAM_CHAT_ID
+   ```
+
+   Each command prompts for the value and stores it as a Cloudflare Secret; nothing is written to `wrangler.toml` or to the repository. If you have no local Wrangler credentials, add both under **Workers → Settings → Variables and Secrets** and mark them as **Secret** rather than plain-text variables.
+
+5. Both secrets must be present in the running Worker, and the Worker must run a version containing the alert code. With one secret or none, nothing is sent. This fork deploys pushes to `main` through `.github/workflows/deploy.yml`; wait for the **Deploy worker** step to succeed. Worker secrets stay in Cloudflare and must not be copied into GitHub or `wrangler.toml`.
+
+If no message arrives, check that the chat ID belongs to the chat where you sent `/start`, that both secrets are still listed under **Variables and Secrets**, and remember the cooldown — a second event of the same kind for the same account inside the same 15-minute window is intentionally silent.
+
+To verify delivery after deployment, sign in successfully from a fresh browser profile or an incognito window, using your normal authentication method. An existing client or a vault unlock does not trigger a new-client alert. Web SSO creates a fresh client identifier, so a successful SSO sign-in can also exercise this path. Do not deliberately lock out your production account. Check Telegram for the message; a successful deployment alone does not prove delivery.
+
+
 ## FAQ
 
 - **After forking the repository, why can't I see my repository when connecting GitHub to Cloudflare, or why do I get a 404 after selecting it?**  
