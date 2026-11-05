@@ -7,7 +7,7 @@
   "main": "src/index.ts",
   "type": "module",
   "engines": {
-    "node": "^22.19.0 || >=24.11.0"
+    "node": "^22.23.4 || ^24.22.1 || ^26.12.1"
   },
   "scripts": {
     "dev": "wrangler dev -c wrangler.toml",
@@ -78,7 +78,7 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vite": "^8.3.2",
+    "vite": "^8.3.3",
     "wrangler": "^4.146.0"
   },
   "dependencies": {
