@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { createPortal } from 'preact/compat';
 import LoadingState from '@/components/LoadingState';
 import VaultDialogs from '@/components/vault/VaultDialogs';
 import VaultDetailView from '@/components/vault/VaultDetailView';
@@ -717,7 +718,6 @@ const folderName = useCallback((id: string | null | undefined): string => {
     });
     setPendingDeletePasskeyIndex(null);
   }
-
   async function seedSshDefaults(force = false): Promise<void> {
     const ticket = ++sshSeedTicketRef.current;
     try {
@@ -1214,6 +1214,25 @@ const folderName = useCallback((id: string | null | undefined): string => {
     setMobileSidebarOpen(false);
   }, [mobileSidebarOpen]);
 
+  const sidebarTarget = !isMobileLayout && typeof document !== 'undefined'
+    ? document.getElementById('vault-sidebar-slot')
+    : null;
+  const sidebar = (
+    <VaultSidebar
+      tags={tagSummary}
+      sidebarFilter={sidebarFilter}
+      busy={busy}
+      isMobileLayout={isMobileLayout}
+      mobileSidebarOpen={mobileSidebarOpen}
+      onCloseMobileSidebar={handleCloseMobileSidebar}
+      onChangeFilter={setSidebarFilter}
+      onOpenDeleteAllTags={handleOpenDeleteAllFolders}
+      onOpenCreateTag={handleOpenCreateFolder}
+      onOpenRenameTag={(entry) => handleOpenRenameFolder({ id: entry.folderId, name: entry.tag })}
+      onOpenDeleteTag={(entry) => setPendingDeleteFolder({ id: entry.folderId, name: entry.tag })}
+    />
+  );
+
   return (
     <>
       <div className={`vault-grid ${isMobileLayout ? `mobile-panel-${mobilePanel}` : ''}`}>
@@ -1223,19 +1242,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
             onClick={handleMobileSidebarMaskClick}
           />
         )}
-        <VaultSidebar
-          tags={tagSummary}
-          sidebarFilter={sidebarFilter}
-          busy={busy}
-          isMobileLayout={isMobileLayout}
-          mobileSidebarOpen={mobileSidebarOpen}
-          onCloseMobileSidebar={handleCloseMobileSidebar}
-          onChangeFilter={setSidebarFilter}
-          onOpenDeleteAllTags={handleOpenDeleteAllFolders}
-          onOpenCreateTag={handleOpenCreateFolder}
-          onOpenRenameTag={(entry) => handleOpenRenameFolder({ id: entry.folderId, name: entry.tag })}
-          onOpenDeleteTag={(entry) => setPendingDeleteFolder({ id: entry.folderId, name: entry.tag })}
-        />
+        {sidebarTarget ? createPortal(sidebar, sidebarTarget) : sidebar}
 
         <VaultListPanel
           busy={busy}
@@ -1479,4 +1486,3 @@ const folderName = useCallback((id: string | null | undefined): string => {
     </>
   );
 }
-
