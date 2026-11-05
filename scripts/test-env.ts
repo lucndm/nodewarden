@@ -13,16 +13,19 @@ export function installTestGlobals(): void {
     globals.crypto = webcrypto as unknown as Crypto;
   }
   if (!globals.caches) {
+    const cache = {
+      match: async (request: Request) => {
+        const value = rateLimitCacheStore.get(request.url);
+        return value === undefined ? undefined : new Response(value);
+      },
+      put: async (request: Request, response: Response) => {
+        rateLimitCacheStore.set(request.url, await response.text());
+      },
+    };
     globals.caches = {
-      open: async () => ({
-        match: async (request: Request) => {
-          const value = rateLimitCacheStore.get(request.url);
-          return value === undefined ? undefined : new Response(value);
-        },
-        put: async (request: Request, response: Response) => {
-          rateLimitCacheStore.set(request.url, await response.text());
-        },
-      }),
+      open: async () => cache,
+      // The workers runtime exposes the default cache without opening a bucket.
+      default: cache,
     };
   }
 }
