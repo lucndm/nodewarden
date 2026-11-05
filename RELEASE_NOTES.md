@@ -21,6 +21,42 @@ Release note writing rules:
 7. The English and Chinese versions should match in content and ordering, not be two different summaries.
 -->
 
+# v1.8.2 - Reliable Vault Saves and Newer Bitwarden Client Support
+
+### Added
+
+1. **Login works again in newer Bitwarden CLI releases.** The official CLI from version 2026.9 on records the id of your current user key once after the login and aborted the whole login when the server did not accept it, so `bw login` failed with a key-id backfill error and the vault stayed locked. The server now accepts that id, keeps it as metadata only, and returns it in the sync response. The id is written once and a different id is refused afterwards. Commit: [19c916d](https://github.com/lucndm/nodewarden/commit/19c916d46bc3be93aabd75de9e07e9e5fd0c3af5).
+
+### Improved
+
+1. **Saving an unchanged item no longer disturbs your other devices.** Opening an item and saving it without editing anything used to change the item timestamp, move the account revision and notify every other client, which made all of them sync again for nothing. Such a save now returns the stored item untouched and stays silent, while a save that really changes something behaves as before. Commit: [6d3a9b5](https://github.com/lucndm/nodewarden/commit/6d3a9b5037cccbc72597fb1725ce2e3235ddf015).
+
+1. **Patched Node.js releases for building and deploying.** Development, continuous integration and build tooling now require the October 2026 Node.js security releases, and the Vite build moved to 8.3.3. The Cloudflare Workers runtime and the deployed dependency versions are unchanged, so running deployments need no change. Commit: [fbc0e65](https://github.com/lucndm/nodewarden/commit/fbc0e65df8f405c3120887569e939d615ab68229).
+
+### Fixed
+
+1. **A lost connection no longer creates duplicate items.** The Web Vault repeated failed save requests up to three times, and because the server picks the id for a new item, a request that had actually been executed could be stored a second time under a different id. Only requests that cannot change anything are repeated now; a write is sent once, and a rate-limited request is still retried because the server rejected it before doing any work. Commit: [41820e5](https://github.com/lucndm/nodewarden/commit/41820e5efd7527a4ed43ac432fe461b681899744).
+
+1. **Clicking save twice no longer reports a false conflict.** The save button was disabled only after the page had redrawn, so a quick double click could send the same draft twice and the second write was rejected as an outdated copy. A running save now blocks the next one, so the item is stored once and no misleading "changed in another client" message appears. Commit: [e3e4eba](https://github.com/lucndm/nodewarden/commit/e3e4eba7428bd429fda2b6156566476bab8af2fb).
+
+---
+
+### 新增
+
+1. **新版 Bitwarden CLI 可以正常登录。** 官方 CLI 从 2026.9 版本起会在登录后上报一次当前用户密钥的 id，服务端不接受该 id 时会直接中止登录，导致 `bw login` 报密钥 id 回填错误且保险库保持锁定。服务端现在接受该 id，仅将其作为元数据保存，并在同步响应中返回。该 id 只写入一次，之后上报不同的 id 会被拒绝。提交：[19c916d](https://github.com/lucndm/nodewarden/commit/19c916d46bc3be93aabd75de9e07e9e5fd0c3af5)。
+
+### 改进
+
+1. **保存未修改的条目不再打扰其他设备。** 打开条目后不做任何修改直接保存，过去会改变条目时间戳、推进账户修订号并通知所有其他客户端，导致它们全部重新同步一次却没有意义。现在这类保存直接返回原有条目且不发出通知，真正修改内容的保存行为保持不变。提交：[6d3a9b5](https://github.com/lucndm/nodewarden/commit/6d3a9b5037cccbc72597fb1725ce2e3235ddf015)。
+
+1. **构建与部署改用已修补的 Node.js 版本。** 开发、持续集成与构建工具链现在要求 2026 年 10 月的 Node.js 安全修复版本，Vite 构建更新到 8.3.3。Cloudflare Workers 运行时与已部署的依赖版本保持不变，现网部署无需调整。提交：[fbc0e65](https://github.com/lucndm/nodewarden/commit/fbc0e65df8f405c3120887569e939d615ab68229)。
+
+### 修复
+
+1. **连接中断不再产生重复条目。** Web Vault 过去会把失败的保存请求重复发送最多三次，而新建条目的 id 由服务端生成，已经执行成功的请求可能被以另一个 id 再存一份。现在只有不会改变内容的请求才会重发，写入只发送一次；被限流的请求仍会重试，因为服务端在执行前就已拒绝它。提交：[41820e5](https://github.com/lucndm/nodewarden/commit/41820e5efd7527a4ed43ac432fe461b681899744)。
+
+1. **连续点击保存不再报出虚假冲突。** 保存按钮只在页面重绘后才禁用，快速双击可能把同一份草稿发送两次，第二次写入会被判定为过期副本而拒绝。现在进行中的保存会阻止下一次保存，条目只写入一次，也不会再出现误导性的“已在其他客户端修改”提示。提交：[e3e4eba](https://github.com/lucndm/nodewarden/commit/e3e4eba7428bd429fda2b6156566476bab8af2fb)。
+
 # v1.8.1 - Expanded Generators, Safer Vault Editing, and Client Compatibility
 
 ### Added
