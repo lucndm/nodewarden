@@ -1710,6 +1710,126 @@ input[type='file'].input::file-selector-button {
   color: var(--danger);
 }
 
+/* ── create menu ── */
+/* Proton gives every item type its own tinted round icon. */
+.create-menu-item {
+  gap: 12px;
+  padding-block: 10px;
+}
+
+.create-menu-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
+.create-menu-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.create-menu-icon-1 {
+  background: color-mix(in srgb, var(--primary) 20%, var(--panel));
+  color: var(--primary-strong);
+}
+
+.create-menu-icon-3 {
+  background: color-mix(in srgb, var(--success) 20%, var(--panel));
+  color: var(--success);
+}
+
+.create-menu-icon-6 {
+  background: color-mix(in srgb, var(--info) 20%, var(--panel));
+  color: var(--info);
+}
+
+.create-menu-icon-4,
+.create-menu-icon-7,
+.create-menu-icon-8 {
+  background: color-mix(in srgb, var(--primary) 20%, var(--panel));
+  color: var(--primary-strong);
+}
+
+.create-menu-icon-2 {
+  background: color-mix(in srgb, var(--warning) 22%, var(--panel));
+  color: var(--warning);
+}
+
+.create-menu-icon-5 {
+  background: color-mix(in srgb, var(--danger) 18%, var(--panel));
+  color: var(--danger);
+}
+
+/* ── field rows ── */
+/* Proton puts a small field icon on the left, the label above its value and
+   the row actions on the right. */
+.kv-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.kv-field:last-child {
+  border-bottom: none;
+}
+
+.kv-field-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--panel-muted);
+  color: var(--muted-strong);
+}
+
+.kv-field-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* The action cluster keeps the right-hand edge but may wrap onto two lines
+   instead of squeezing the value column until a masked secret breaks. */
+.kv-field .kv-actions {
+  max-width: 220px;
+}
+
+.kv-field-label {
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.kv-field-value {
+  color: var(--text);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.kv-field-value > strong {
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .kv-field {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .kv-field .kv-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+}
+
 /* ── metadata group ── */
 .detail-meta-group {
   display: grid;
