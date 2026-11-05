@@ -112,6 +112,7 @@ export default function VaultPage(props: VaultPageProps) {
   const [attachmentQueue, setAttachmentQueue] = useState<File[]>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  const savingRef = useRef(false);
   const [repromptOpen, setRepromptOpen] = useState(false);
   const [repromptPassword, setRepromptPassword] = useState('');
   const [repromptApprovedCipherId, setRepromptApprovedCipherId] = useState<string | null>(null);
@@ -802,28 +803,32 @@ const folderName = useCallback((id: string | null | undefined): string => {
   }
 
   async function saveDraft(): Promise<void> {
-    if (!draft) return;
-    let nextDraft = draft;
-    if (nextDraft.type === 5) {
-      const computedFingerprint = await computeSshFingerprint(nextDraft.sshPublicKey);
-      if (computedFingerprint !== nextDraft.sshFingerprint) {
-        nextDraft = { ...nextDraft, sshFingerprint: computedFingerprint };
-        setDraft(nextDraft);
-      }
-    }
-    if (!nextDraft.name.trim()) {
-      setLocalError(t('txt_item_name_is_required'));
-      return;
-    }
-    // Sync may change the current selection while a draft is open. Save only
-    // the item that this draft belongs to, and retain it if the item disappeared.
-    const editedCipher = isCreating ? null : cipherById.get(nextDraft.id || selectedCipherId);
-    if (!isCreating && !editedCipher) {
-      setLocalError(t('txt_item_changed_elsewhere'));
-      return;
-    }
+    // A second click while the first save is still running must not send a
+    // second write: the server answers the stale copy with "out of date".
+    // The ref is set synchronously, the busy state only re-renders later.
+    if (!draft || savingRef.current) return;
+    savingRef.current = true;
     setBusy(true);
     try {
+      let nextDraft = draft;
+      if (nextDraft.type === 5) {
+        const computedFingerprint = await computeSshFingerprint(nextDraft.sshPublicKey);
+        if (computedFingerprint !== nextDraft.sshFingerprint) {
+          nextDraft = { ...nextDraft, sshFingerprint: computedFingerprint };
+          setDraft(nextDraft);
+        }
+      }
+      if (!nextDraft.name.trim()) {
+        setLocalError(t('txt_item_name_is_required'));
+        return;
+      }
+      // Sync may change the current selection while a draft is open. Save only
+      // the item that this draft belongs to, and retain it if the item disappeared.
+      const editedCipher = isCreating ? null : cipherById.get(nextDraft.id || selectedCipherId);
+      if (!isCreating && !editedCipher) {
+        setLocalError(t('txt_item_changed_elsewhere'));
+        return;
+      }
       if (isCreating) {
         await props.onCreate(nextDraft, attachmentQueue);
       } else if (editedCipher) {
@@ -843,6 +848,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
     } catch {
       // The action layer already shows the user-facing error toast.
     } finally {
+      savingRef.current = false;
       setBusy(false);
     }
   }
