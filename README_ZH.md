@@ -153,6 +153,8 @@ NodeWarden 可以把安全事件推送到你指定的 Telegram 聊天。该功�
 
    命令会提示输入并保存为 Cloudflare Secret，`wrangler.toml` 和仓库里都不会留下内容。如果本地没有 Wrangler 凭据，就到 **Workers → Settings → Variables and Secrets** 里把两个值都添加为 **Secret**（不要用明文变量）。
 
+两个 Wrangler 配置均设置 `keep_vars = true`，部署时保留 Dashboard 文本变量。Telegram 两个值仍建议使用 Secret。若把 `TELEGRAM_CHAT_ID` 保存为 GitHub Actions 加密仓库 Secret，此 fork 的部署流程会先将它写入 Worker Secret；机器人 token 仍保存在 Cloudflare。
+
 5. 运行中的 Worker 必须同时具备两个 Secret，并运行包含告警代码的版本；只配一个或不配都不会推送。此 fork 通过 `.github/workflows/deploy.yml` 自动部署推送到 `main` 的代码，请等待 **Deploy worker** 步骤成功。Secret 保存在 Cloudflare，不要复制到 GitHub 或 `wrangler.toml`。
 
 如果没收到消息，请检查 chat ID 是否属于你发送 `/start` 的那个聊天、两个 Secret 是否仍在 **Variables and Secrets** 中，并注意冷却窗口：同一账号、同一事件类型在同一个 15 分钟窗口内的第二次事件会被有意静默。
