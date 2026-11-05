@@ -153,6 +153,8 @@ Delivery is best effort with a 5-second timeout, and a failed send is never retr
 
    Each command prompts for the value and stores it as a Cloudflare Secret; nothing is written to `wrangler.toml` or to the repository. If you have no local Wrangler credentials, add both under **Workers → Settings → Variables and Secrets** and mark them as **Secret** rather than plain-text variables.
 
+Dashboard text variables are preserved during deployment (`keep_vars = true` in both Wrangler configurations). Prefer Secrets for both Telegram values. If `TELEGRAM_CHAT_ID` is supplied as an encrypted GitHub Actions repository secret, this fork’s deploy workflow installs it as a Worker Secret before deployment; the bot token stays in Cloudflare.
+
 5. Both secrets must be present in the running Worker, and the Worker must run a version containing the alert code. With one secret or none, nothing is sent. This fork deploys pushes to `main` through `.github/workflows/deploy.yml`; wait for the **Deploy worker** step to succeed. Worker secrets stay in Cloudflare and must not be copied into GitHub or `wrangler.toml`.
 
 If no message arrives, check that the chat ID belongs to the chat where you sent `/start`, that both secrets are still listed under **Variables and Secrets**, and remember the cooldown — a second event of the same kind for the same account inside the same 15-minute window is intentionally silent.
