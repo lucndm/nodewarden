@@ -48,7 +48,11 @@ async function fixture(ctx: TestContext) {
       return statement;
     },
   };
-  ctx.mock.method(StorageService.prototype, 'updateRevisionDate', async () => revision);
+  let revisionBumps = 0;
+  ctx.mock.method(StorageService.prototype, 'updateRevisionDate', async () => {
+    revisionBumps += 1;
+    return revision;
+  });
   ctx.mock.method(StorageService.prototype, 'createAuditLog', async () => {});
   ctx.mock.method(StorageService.prototype, 'getConfigValue', async () => null);
   ctx.mock.method(StorageService.prototype, 'pruneAuditLogs', async () => {});
@@ -81,7 +85,7 @@ async function fixture(ctx: TestContext) {
     return response;
   };
   const attachment = { id: attachmentId, cipherId: id, fileName: await encrypt('file.txt'), key: null, size: 7, sizeName: '7 B' };
-  return { storage, base, env, sqlite, route, deletedBlobs, notifications, attachment };
+  return { storage, base, env, sqlite, route, deletedBlobs, notifications, attachment, revisionBumps: () => revisionBumps };
 }
 
 for (const method of ['PUT', 'POST']) {
@@ -178,6 +182,54 @@ test('concurrent saves from the same revision accept only one, even in the same 
   ));
   assert.deepEqual(response.map((r) => r.status).sort(), [200, 400]);
   assert.equal((await f.storage.getCipherForUser(id, owner))?.updatedAt, '2026-10-04T00:00:00.001Z');
+});
+
+test('a save that changes nothing does not write, bump the revision or notify', async (ctx) => {
+  const f = await fixture(ctx);
+  const body = {
+    id: f.base.id,
+    type: f.base.type,
+    name: f.base.name,
+    notes: f.base.notes,
+    favorite: f.base.favorite,
+    folderId: f.base.folderId,
+    key: f.base.key,
+    login: f.base.login,
+  };
+  // The first save stores the normalised row; the second one carries no change.
+  assert.equal((await f.route(`/api/ciphers/${id}`, 'PUT', { ...body, lastKnownRevisionDate: revision })).status, 200);
+  assert.equal(f.revisionBumps(), 1);
+  const stored = await f.storage.getCipherForUser(id, owner);
+  const notificationsAfterFirstSave = f.notifications.length;
+
+  const response = await f.route(`/api/ciphers/${id}`, 'PUT', { ...body, lastKnownRevisionDate: stored?.updatedAt });
+  assert.equal(response.status, 200);
+  assert.equal(f.revisionBumps(), 1, 'a save without changes must not bump the revision');
+  assert.equal(f.notifications.length, notificationsAfterFirstSave, 'a save without changes must not notify the other clients');
+  const after = await f.storage.getCipherForUser(id, owner);
+  assert.equal(after?.updatedAt, stored?.updatedAt);
+  assert.equal(after?.name, stored?.name);
+});
+
+test('a save that only renames an attachment still writes and notifies', async (ctx) => {
+  const f = await fixture(ctx);
+  await f.storage.saveAttachment(f.attachment);
+  const response = await f.route(`/api/ciphers/${id}`, 'PUT', {
+    id: f.base.id,
+    type: f.base.type,
+    name: f.base.name,
+    notes: f.base.notes,
+    favorite: f.base.favorite,
+    folderId: f.base.folderId,
+    key: f.base.key,
+    login: f.base.login,
+    lastKnownRevisionDate: revision,
+    attachments2: { [attachmentId]: { fileName: await encrypt('renamed.txt') } },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(f.revisionBumps(), 1);
+  assert.ok(f.notifications.length > 0);
+  assert.notEqual((await f.storage.getCipherForUser(id, owner))?.updatedAt, revision);
 });
 
 test('a competing deletion cannot be resurrected by a delayed update', async (ctx) => {
