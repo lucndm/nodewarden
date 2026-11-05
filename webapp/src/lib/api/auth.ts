@@ -490,8 +490,32 @@ export async function registerAccount(args: {
   }
 }
 
+const IDEMPOTENT_METHODS: Record<string, true> = {
+  GET: true,
+  HEAD: true,
+  OPTIONS: true,
+};
+
+// A write (POST/PUT/PATCH/DELETE) must only be submitted once. The server
+// generates the id for created items, so a retried POST would store a second
+// row instead of repeating the same one.
+export function isIdempotentMethod(method: string | undefined): boolean {
+  return IDEMPOTENT_METHODS[(method || 'GET').toUpperCase()] === true;
+}
+
+// 429 means the server rejected the request before it did any work, so sending
+// it again is safe for writes too. A 5xx may mean the write already landed
+// and a thrown fetch may mean the request reached the server at all: both are
+// only repeated for idempotent methods.
+export function isRetryableResponse(method: string | undefined, status: number): boolean {
+  if (status === 429) return true;
+  const serverError = status >= 500 && status < 600;
+  return serverError && isIdempotentMethod(method);
+}
+
 export function createAuthedFetch(getSession: () => SessionState | null, setSession: SessionSetter) {
   return async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+    const idempotent = isIdempotentMethod(init.method);
     const retryableRequest = async (headers: Headers): Promise<Response> => {
       const maxAttempts = 3;
       let lastError: unknown;
@@ -499,7 +523,7 @@ export function createAuthedFetch(getSession: () => SessionState | null, setSess
         try {
           const response = await fetch(input, { ...init, headers });
           recordNodeWardenReachable();
-          if (response.status !== 429 && (response.status < 500 || response.status >= 600)) {
+          if (!isRetryableResponse(init.method, response.status)) {
             return response;
           }
           lastError = new Error(`HTTP ${response.status}`);
@@ -507,6 +531,11 @@ export function createAuthedFetch(getSession: () => SessionState | null, setSess
             return response;
           }
         } catch (error) {
+          // The request may have reached the server and been executed, so a
+          // write is never sent again. Only idempotent methods are repeated.
+          if (!idempotent) {
+            throw error;
+          }
           lastError = error;
           if (attempt === maxAttempts - 1) {
             recordNodeWardenUnreachable();
