@@ -477,7 +477,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .desktop-create-trigger {
-  @apply h-[34px] min-w-[34px] gap-1.5 rounded-[10px] px-3 py-0;
+  @apply h-[34px] min-w-[34px] gap-1.5 rounded-full px-4 py-0;
 }
 
 .desktop-create-trigger .btn-icon {
@@ -742,7 +742,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .list-icon {
-  @apply h-6 w-6 rounded-md;
+  @apply h-6 w-6 rounded-full;
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-smooth);
 }
@@ -774,8 +774,9 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .list-icon-fallback {
-  @apply grid place-items-center;
-  color: #64748b;
+  @apply grid place-items-center rounded-full;
+  color: var(--primary-strong);
+  background: color-mix(in srgb, var(--primary) 14%, var(--panel));
   transition:
     color var(--dur-fast) var(--ease-smooth),
     opacity var(--dur-fast) var(--ease-smooth),
@@ -783,7 +784,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .list-icon-fallback svg {
-  @apply h-6 w-6;
+  @apply h-[18px] w-[18px];
 }
 
 .list-text {

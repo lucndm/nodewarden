@@ -1,6 +1,6 @@
 import { createPortal } from 'preact/compat';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AlertTriangle, Archive, CalendarPlus, Clipboard, Download, Eye, EyeOff, ExternalLink, KeyRound, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, Tag, Trash2, X } from 'lucide-preact';
+import { AlertTriangle, Archive, CalendarPlus, Clipboard, Download, Eye, EyeOff, ExternalLink, Globe, KeyRound, List, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, Tag, Trash2, User, X } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
@@ -248,10 +248,15 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           {props.selectedCipher.login && (
             <div className="card">
               <h4>{t('txt_login_credentials')}</h4>
-              <div className="kv-row">
-                <span className="kv-label">{t('txt_username')}</span>
-                <div className="kv-main">
-                  <strong className="value-ellipsis" title={props.selectedCipher.login.decUsername || ''}>{props.selectedCipher.login.decUsername || ''}</strong>
+              <div className="kv-field">
+                <span className="kv-field-icon" aria-hidden="true">
+                  <User size={15} />
+                </span>
+                <div className="kv-field-body">
+                  <span className="kv-field-label">{t('txt_username')}</span>
+                  <div className="kv-field-value">
+                    <strong className="value-ellipsis" title={props.selectedCipher.login.decUsername || ''}>{props.selectedCipher.login.decUsername || ''}</strong>
+                  </div>
                 </div>
                 <div className="kv-actions">
                   <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.login?.decUsername || '')}>
@@ -259,10 +264,15 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </button>
                 </div>
               </div>
-              <div className="kv-row">
-                <span className="kv-label">{t('txt_password')}</span>
-                <div className="kv-main">
-                  <strong>{props.showPassword ? props.selectedCipher.login.decPassword || '' : maskSecret(props.selectedCipher.login.decPassword || '')}</strong>
+              <div className="kv-field">
+                <span className="kv-field-icon" aria-hidden="true">
+                  <KeyRound size={15} />
+                </span>
+                <div className="kv-field-body">
+                  <span className="kv-field-label">{t('txt_password')}</span>
+                  <div className="kv-field-value">
+                    <strong>{props.showPassword ? props.selectedCipher.login.decPassword || '' : maskSecret(props.selectedCipher.login.decPassword || '')}</strong>
+                  </div>
                 </div>
                 <div className="kv-actions">
                   <button type="button" className="btn btn-secondary small" onClick={props.onToggleShowPassword}>
@@ -291,33 +301,38 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                 </div>
               )}
               {!!props.selectedCipher.login.decTotp && (
-                <div className="kv-row">
-                  <span className="kv-label">{t('txt_totp')}</span>
-                  <div className="kv-main">
-                    <div className="totp-inline">
-                      <strong>{props.totpLive ? formatTotp(props.totpLive.code) : t('txt_text_3')}</strong>
-                      <div
-                        className="totp-timer"
-                        title={t('txt_refresh_in_seconds_s', { seconds: props.totpLive ? props.totpLive.remain : 0 })}
-                        aria-label={t('txt_refresh_in_seconds_s', { seconds: props.totpLive ? props.totpLive.remain : 0 })}
-                      >
-                        <svg viewBox="0 0 36 36" className="totp-ring" role="presentation" aria-hidden="true">
-                          <circle className="totp-ring-track" cx="18" cy="18" r="15.9155" />
-                          <circle
-                            className="totp-ring-progress"
-                            cx="18"
-                            cy="18"
-                            r="15.9155"
-                            style={{
-                              strokeDasharray: `${TOTP_RING_CIRCUMFERENCE} ${TOTP_RING_CIRCUMFERENCE}`,
-                              strokeDashoffset: String(
-                                TOTP_RING_CIRCUMFERENCE -
-                                  TOTP_RING_CIRCUMFERENCE * totpProgress(props.totpLive)
-                              ),
-                            }}
-                          />
-                        </svg>
-                        <span className="totp-timer-value">{props.totpLive ? props.totpLive.remain : 0}</span>
+                <div className="kv-field">
+                  <span className="kv-field-icon" aria-hidden="true">
+                    <ShieldCheck size={15} />
+                  </span>
+                  <div className="kv-field-body">
+                    <span className="kv-field-label">{t('txt_totp')}</span>
+                    <div className="kv-field-value">
+                      <div className="totp-inline">
+                        <strong>{props.totpLive ? formatTotp(props.totpLive.code) : t('txt_text_3')}</strong>
+                        <div
+                          className="totp-timer"
+                          title={t('txt_refresh_in_seconds_s', { seconds: props.totpLive ? props.totpLive.remain : 0 })}
+                          aria-label={t('txt_refresh_in_seconds_s', { seconds: props.totpLive ? props.totpLive.remain : 0 })}
+                        >
+                          <svg viewBox="0 0 36 36" className="totp-ring" role="presentation" aria-hidden="true">
+                            <circle className="totp-ring-track" cx="18" cy="18" r="15.9155" />
+                            <circle
+                              className="totp-ring-progress"
+                              cx="18"
+                              cy="18"
+                              r="15.9155"
+                              style={{
+                                strokeDasharray: `${TOTP_RING_CIRCUMFERENCE} ${TOTP_RING_CIRCUMFERENCE}`,
+                                strokeDashoffset: String(
+                                  TOTP_RING_CIRCUMFERENCE -
+                                    TOTP_RING_CIRCUMFERENCE * totpProgress(props.totpLive)
+                                ),
+                              }}
+                            />
+                          </svg>
+                          <span className="totp-timer-value">{props.totpLive ? props.totpLive.remain : 0}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -329,10 +344,15 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                 </div>
               )}
               {!!props.passkeyCreatedAt && (
-                <div className="kv-row">
-                  <span className="kv-label">{t('txt_passkey')}</span>
-                  <div className="kv-main">
-                    <strong>{t('txt_passkey_created_at_value', { value: formatHistoryTime(props.passkeyCreatedAt) })}</strong>
+                <div className="kv-field">
+                  <span className="kv-field-icon" aria-hidden="true">
+                    <ShieldCheck size={15} />
+                  </span>
+                  <div className="kv-field-body">
+                    <span className="kv-field-label">{t('txt_passkey')}</span>
+                    <div className="kv-field-value">
+                      <strong>{t('txt_passkey_created_at_value', { value: formatHistoryTime(props.passkeyCreatedAt) })}</strong>
+                    </div>
                   </div>
                   <div className="kv-actions" />
                 </div>
@@ -347,10 +367,15 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                 const value = uri.decUri || uri.uri || '';
                 if (!value.trim()) return null;
                 return (
-                  <div key={`view-uri-${index}`} className="kv-row">
-                    <span className="kv-label">{t('txt_website')}</span>
-                    <div className="kv-main">
-                      <strong className="value-ellipsis" title={value}>{value}</strong>
+                  <div key={`view-uri-${index}`} className="kv-field">
+                    <span className="kv-field-icon" aria-hidden="true">
+                      <Globe size={15} />
+                    </span>
+                    <div className="kv-field-body">
+                      <span className="kv-field-label">{t('txt_website')}</span>
+                      <div className="kv-field-value">
+                        <strong className="value-ellipsis" title={value}>{value}</strong>
+                      </div>
                     </div>
                     <div className="kv-actions">
                       <button type="button" className="btn btn-secondary small" onClick={() => openUri(value)}>
@@ -398,15 +423,20 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           {props.selectedCipher.sshKey && (
             <div className="card">
               <h4>{t('txt_ssh_key')}</h4>
-              <div className="kv-row">
-                <span className="kv-label">{t('txt_private_key')}</span>
-                <div className="kv-main">
-                  <strong
-                    className="value-ellipsis"
-                    title={showSshPrivateKey ? props.selectedCipher.sshKey.decPrivateKey || '' : maskSecret(props.selectedCipher.sshKey.decPrivateKey || '')}
-                  >
-                    {showSshPrivateKey ? props.selectedCipher.sshKey.decPrivateKey || '' : maskSecret(props.selectedCipher.sshKey.decPrivateKey || '')}
-                  </strong>
+              <div className="kv-field">
+                <span className="kv-field-icon" aria-hidden="true">
+                  <KeyRound size={15} />
+                </span>
+                <div className="kv-field-body">
+                  <span className="kv-field-label">{t('txt_private_key')}</span>
+                  <div className="kv-field-value">
+                    <strong
+                      className="value-ellipsis"
+                      title={showSshPrivateKey ? props.selectedCipher.sshKey.decPrivateKey || '' : maskSecret(props.selectedCipher.sshKey.decPrivateKey || '')}
+                    >
+                      {showSshPrivateKey ? props.selectedCipher.sshKey.decPrivateKey || '' : maskSecret(props.selectedCipher.sshKey.decPrivateKey || '')}
+                    </strong>
+                  </div>
                 </div>
                 <div className="kv-actions">
                   <button type="button" className="btn btn-secondary small" onClick={() => setShowSshPrivateKey((value) => !value)}>
@@ -418,12 +448,17 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </button>
                 </div>
               </div>
-              <div className="kv-row">
-                <span className="kv-label">{t('txt_public_key')}</span>
-                <div className="kv-main">
-                  <strong className="value-ellipsis" title={props.selectedCipher.sshKey.decPublicKey || ''}>
-                    {props.selectedCipher.sshKey.decPublicKey || ''}
-                  </strong>
+              <div className="kv-field">
+                <span className="kv-field-icon" aria-hidden="true">
+                  <KeyRound size={15} />
+                </span>
+                <div className="kv-field-body">
+                  <span className="kv-field-label">{t('txt_public_key')}</span>
+                  <div className="kv-field-value">
+                    <strong className="value-ellipsis" title={props.selectedCipher.sshKey.decPublicKey || ''}>
+                      {props.selectedCipher.sshKey.decPublicKey || ''}
+                    </strong>
+                  </div>
                 </div>
                 <div className="kv-actions">
                   <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.sshKey?.decPublicKey || '')}>
@@ -431,12 +466,17 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </button>
                 </div>
               </div>
-              <div className="kv-row">
-                <span className="kv-label">{t('txt_fingerprint')}</span>
-                <div className="kv-main">
-                  <strong className="value-ellipsis" title={props.selectedCipher.sshKey.decFingerprint || ''}>
-                    {props.selectedCipher.sshKey.decFingerprint || ''}
-                  </strong>
+              <div className="kv-field">
+                <span className="kv-field-icon" aria-hidden="true">
+                  <List size={15} />
+                </span>
+                <div className="kv-field-body">
+                  <span className="kv-field-label">{t('txt_fingerprint')}</span>
+                  <div className="kv-field-value">
+                    <strong className="value-ellipsis" title={props.selectedCipher.sshKey.decFingerprint || ''}>
+                      {props.selectedCipher.sshKey.decFingerprint || ''}
+                    </strong>
+                  </div>
                 </div>
                 <div className="kv-actions">
                   <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.sshKey?.decFingerprint || '')}>

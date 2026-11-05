@@ -280,7 +280,9 @@ export default function VaultListPanel(props: VaultListPanelProps) {
         <div className="create-menu">
           {createTypeOptions.map((option) => (
             <button key={option.type} type="button" className="create-menu-item" onClick={() => props.onStartCreate(option.type)}>
-              <CreateTypeIcon type={option.type} />
+              <span className={`create-menu-icon create-menu-icon-${option.type}`} aria-hidden="true">
+                <CreateTypeIcon type={option.type} />
+              </span>
               <span>{option.label}</span>
             </button>
           ))}
