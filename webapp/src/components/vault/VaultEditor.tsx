@@ -8,6 +8,7 @@ import { normalizeTotpInput } from '@/lib/crypto';
 import { defaultGeneratorSettings, generatePassphrase, generatePassword, normalizeGeneratorSettings, type GeneratorSettings } from '@/lib/password-generator';
 import type { Cipher, VaultDraft, VaultDraftField } from '@/lib/types';
 import { t } from '@/lib/i18n';
+import { looksLikeCipherString } from '@/lib/app-support';
 import { cardBrand } from '@/lib/import-format-shared';
 import {
   CARD_BRAND_OPTIONS,
@@ -164,7 +165,8 @@ export default function VaultEditor(props: VaultEditorProps) {
     : CARD_BRAND_OPTIONS;
   // Where the item will be filed. The first tag mirrors the folder position,
   // so the tags are the honest destination - it is not a separate vault.
-  const destinationLabel = props.draft.tags.length ? props.draft.tags.join(', ') : t('txt_no_folder');
+  const visibleTags = props.draft.tags.filter((tag) => !looksLikeCipherString(tag));
+  const destinationLabel = visibleTags.length ? visibleTags.join(', ') : t('txt_no_folder');
   const totpQrVideoRef = useRef<HTMLVideoElement | null>(null);
   const totpQrFileRef = useRef<HTMLInputElement | null>(null);
   const totpQrStreamRef = useRef<MediaStream | null>(null);
@@ -746,7 +748,7 @@ export default function VaultEditor(props: VaultEditorProps) {
           <div className="field">
             <span>{t('txt_tags')}</span>
             <div className="tag-input-wrap">
-              {props.draft.tags.map((tag) => (
+              {visibleTags.map((tag) => (
                 <span key={tag} className="tag-chip">
                   {tag}
                   <button
@@ -769,8 +771,9 @@ export default function VaultEditor(props: VaultEditorProps) {
                   if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ',') {
                     e.preventDefault();
                     commitTagInput();
-                  } else if ((e as KeyboardEvent).key === 'Backspace' && !tagInput && props.draft.tags.length > 0) {
-                    props.onUpdateDraft({ tags: props.draft.tags.slice(0, -1) });
+                  } else if ((e as KeyboardEvent).key === 'Backspace' && !tagInput && visibleTags.length > 0) {
+                    const last = visibleTags[visibleTags.length - 1];
+                    props.onUpdateDraft({ tags: props.draft.tags.filter((tag) => tag !== last) });
                   }
                 }}
                 onBlur={commitTagInput}

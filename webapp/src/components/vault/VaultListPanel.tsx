@@ -28,6 +28,7 @@ import {
 import LoadingState from '@/components/LoadingState';
 import type { Cipher } from '@/lib/types';
 import { t } from '@/lib/i18n';
+import { looksLikeCipherString } from '@/lib/app-support';
 import {
   CreateTypeIcon,
   getCreateTypeOptions,
@@ -82,6 +83,10 @@ interface VaultListPanelProps {
   onSelectSortMode: (value: VaultSortMode) => void;
   onDuplicateModeChange: (value: DuplicateDetectionMode) => void;
   onChangeFilter: (filter: SidebarFilter) => void;
+  onOpenCreateTag: () => void;
+  onOpenDeleteAllTags: () => void;
+  onOpenRenameTag: (tag: { tag: string; count: number; folderId: string }) => void;
+  onOpenDeleteTag: (tag: { tag: string; count: number; folderId: string }) => void;
   onSyncVault: () => void;
   onOpenBulkDelete: () => void;
   onSelectDuplicates: () => void;
@@ -133,6 +138,7 @@ function dateGroupLabel(cipher: Cipher, previous?: Cipher): string | undefined {
 
 const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) {
   const duplicateGroupHue = props.duplicateGroupIndex === null ? null : (props.duplicateGroupIndex * 137.508) % 360;
+  const tags = (props.cipher.tags || []).filter((tag) => tag && !looksLikeCipherString(tag));
   return (
     <div
       className={`list-item ${props.selected ? 'active' : ''} ${duplicateGroupHue === null ? '' : 'duplicate-group-item'} ${props.dayLabel ? 'day-boundary' : ''}`}
@@ -160,12 +166,12 @@ const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) 
             <span className="list-title-text">{props.cipher.decName || t('txt_no_name')}</span>
           </span>
           <span className="list-sub" title={props.subtitle}>{props.subtitle}</span>
-          {Array.isArray(props.cipher.tags) && props.cipher.tags.length > 0 && (
+          {tags.length > 0 && (
             <span className="list-tags">
-              {props.cipher.tags.slice(0, 3).map((tag) => (
+              {tags.slice(0, 3).map((tag) => (
                 <span key={tag} className="tag-chip tag-chip-static">{tag}</span>
               ))}
-              {props.cipher.tags.length > 3 && <span className="tag-chip tag-chip-static">+{props.cipher.tags.length - 3}</span>}
+              {tags.length > 3 && <span className="tag-chip tag-chip-static">+{tags.length - 3}</span>}
             </span>
           )}
         </div>
@@ -213,6 +219,8 @@ export default function VaultListPanel(props: VaultListPanelProps) {
   const menuFilterSelected = menuFilterOptions.find((option) => option.active);
   const typeFilterSelected = typeMobileFilterOptions.find((option) => option.active);
   const tagFilterSelected = tagMobileFilterOptions.find((option) => option.active);
+  const selectedTagName = props.sidebarFilter.kind === 'tag' ? props.sidebarFilter.tag : '';
+  const selectedDesktopTag = selectedTagName ? props.tags.find(({ tag }) => tag === selectedTagName) : undefined;
   const duplicateModeSelected = duplicateModeOptions.find((option) => option.active);
 
   useEffect(() => {
@@ -394,6 +402,36 @@ export default function VaultListPanel(props: VaultListPanelProps) {
               {props.sidebarFilter.kind === 'duplicates' && !props.isMobileLayout && (
                 <div className="duplicate-mode-head-menu">
                   {renderMobileFilterMenu('duplicate', t('txt_duplicate_detection_mode'), duplicateModeSelected, <Copy size={14} />, duplicateModeOptions)}
+                </div>
+              )}
+              {!props.isMobileLayout && (
+                <div className="desktop-tag-filter">
+                  <label className="sr-only" for="vault-tag-filter">{t('txt_tags')}</label>
+                  <select
+                    id="vault-tag-filter"
+                    aria-label={t('txt_tags')}
+                    title={selectedTagName || t('txt_tags')}
+                    value={props.sidebarFilter.kind === 'tag' ? `tag:${props.sidebarFilter.tag}` : props.sidebarFilter.kind === 'untagged' ? 'untagged' : ''}
+                    onChange={(event) => {
+                      const tag = (event.currentTarget as HTMLSelectElement).value;
+                      props.onChangeFilter(tag === '' ? { kind: 'all' } : tag === 'untagged' ? { kind: 'untagged' } : { kind: 'tag', tag: tag.slice(4) });
+                    }}
+                  >
+                    <option value="">{t('txt_tags')}</option>
+                    <option value="untagged">{t('txt_untagged')}</option>
+                    {props.tags.map(({ tag, count }) => <option key={tag} value={`tag:${tag}`}>{tag} ({count})</option>)}
+                  </select>
+                  <details className="tag-management">
+                    <summary aria-label={`${t('txt_edit')} ${t('txt_tags')}`} title={`${t('txt_edit')} ${t('txt_tags')}`}><Tag size={14} /></summary>
+                    <div className="sort-menu tag-management-menu" onClick={(event) => (event.currentTarget.parentElement as HTMLDetailsElement).open = false}>
+                      <button type="button" className="sort-menu-item" disabled={props.busy} onClick={props.onOpenCreateTag}>{t('txt_create_folder')}</button>
+                      {selectedDesktopTag?.folderId && <>
+                        <button type="button" className="sort-menu-item" disabled={props.busy} onClick={() => props.onOpenRenameTag(selectedDesktopTag)}>{t('txt_edit')}: {selectedDesktopTag.tag}</button>
+                        <button type="button" className="sort-menu-item" disabled={props.busy} onClick={() => props.onOpenDeleteTag(selectedDesktopTag)}>{t('txt_delete')}: {selectedDesktopTag.tag}</button>
+                      </>}
+                      <button type="button" className="sort-menu-item" disabled={props.busy || !props.tags.length} onClick={props.onOpenDeleteAllTags}>{t('txt_delete_all_tags')}</button>
+                    </div>
+                  </details>
                 </div>
               )}
               <div className="sort-menu-wrap" ref={props.sortMenuRef}>

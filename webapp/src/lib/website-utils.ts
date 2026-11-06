@@ -1,12 +1,17 @@
 import type { Cipher } from './types';
+import { looksLikeCipherString } from './app-support';
 
 export function firstCipherUri(cipher: Cipher): string {
   const uris = cipher.login?.uris || [];
   for (const uri of uris) {
-    const raw = uri.decUri || uri.uri || '';
-    if (raw.trim()) return raw.trim();
+    const raw = String(uri.decUri || uri.uri || '').trim();
+    if (raw && !looksLikeCipherString(raw)) return raw;
   }
   return '';
+}
+
+export function hasUnresolvedCipherUri(cipher: Cipher): boolean {
+  return (cipher.login?.uris || []).some((uri) => looksLikeCipherString(String(uri.decUri || uri.uri || '')));
 }
 
 export function hostFromUri(uri: string): string {

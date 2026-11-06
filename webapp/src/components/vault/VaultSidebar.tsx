@@ -110,7 +110,7 @@ export default function VaultSidebar(props: VaultSidebarProps) {
         </button>
       </div>
 
-      <div className="sidebar-block">
+      {props.isMobileLayout && <div className="sidebar-block">
         <div className="sidebar-title-row">
           <div className="sidebar-title">{t('txt_tags')}</div>
           <div className="folder-title-actions">
@@ -177,7 +177,7 @@ export default function VaultSidebar(props: VaultSidebarProps) {
             </button>
           </div>
         ))}
-      </div>
+      </div>}
 
       <div className="sidebar-block">
         <Link href="/security/password-health" className="tree-btn">

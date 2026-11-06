@@ -10,6 +10,7 @@ installTestGlobals();
 
 import { maskSecret, vaultDeleteAction } from '../webapp/src/components/vault/vault-page-helpers';
 import type { Cipher } from '../webapp/src/lib/types';
+import { firstCipherUri, hasUnresolvedCipherUri } from '../webapp/src/lib/website-utils';
 
 const activeCipher: Cipher = { id: 'a', type: 1 };
 const trashedCipher: Cipher = { id: 'b', type: 1, deletedDate: '2026-11-01T10:00:00.000Z' };
@@ -30,4 +31,18 @@ test('a masked secret never shows any part of the value', () => {
   const masked = maskSecret('4111111111111111');
   assert.match(masked, /^\*+$/);
   assert.ok(!/\d/.test(masked));
+});
+
+test('list URI ignores encrypted entries and uses the next readable website', () => {
+  const cipher: Cipher = { id: 'c', type: 1, login: { uris: [
+    { uri: '2.Zm9v|YmFy' },
+    { uri: 'https://example.test' },
+  ] } };
+  assert.equal(firstCipherUri(cipher), 'https://example.test');
+  assert.equal(firstCipherUri({ id: 'd', type: 1, login: { uris: [{ uri: '2.Zm9v|YmFy' }] } }), '');
+});
+
+test('editing must wait for an unreadable URI to decrypt', () => {
+  assert.equal(hasUnresolvedCipherUri({ id: 'e', type: 1, login: { uris: [{ uri: '2.Zm9v|YmFy', decUri: '' }] } }), true);
+  assert.equal(hasUnresolvedCipherUri({ id: 'f', type: 1, login: { uris: [{ uri: '2.Zm9v|YmFy', decUri: 'https://example.test' }] } }), false);
 });

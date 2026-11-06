@@ -303,6 +303,8 @@ select.input.duplicate-mode-toolbar-select {
 .list-quick-filters .list-select-multiple { margin-left: auto; }
 .list-quick-filters button:focus-visible { outline: 2px solid var(--primary-strong); outline-offset: 2px; }
 
+.list-toolbar-stack { position: relative; z-index: 2; }
+
 .list-head {
   @apply mb-1.5 flex flex-wrap items-center gap-2;
   min-height: 34px;
@@ -426,6 +428,18 @@ select.input.duplicate-mode-toolbar-select {
 .list-icon-btn {
   @apply whitespace-nowrap;
 }
+
+.desktop-tag-filter { display: flex; align-items: center; gap: 4px; min-width: 120px; flex: 1 1 120px; }
+.desktop-tag-filter select { height: 34px; width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.desktop-tag-filter select:focus-visible { outline: 2px solid var(--primary-strong); outline-offset: 2px; }
+.tag-management { position: relative; flex: none; }
+.tag-management summary { display: grid; place-items: center; width: 34px; height: 34px; cursor: pointer; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); list-style: none; }
+.tag-management summary::-webkit-details-marker { display: none; }
+.tag-management summary:focus-visible { outline: 2px solid var(--primary-strong); outline-offset: 2px; }
+.tag-management-menu { left: 0; right: auto; width: max-content; max-width: min(300px, 90vw); max-height: 280px; overflow: auto; }
+.tag-management-menu .sort-menu-item { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-management-menu .sort-menu-item:disabled { opacity: .5; cursor: not-allowed; }
+
 
 .sort-menu-wrap {
   @apply relative shrink-0;
@@ -940,7 +954,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .kv-line > span {
-  color: #64748b;
+  color: var(--muted);
 }
 
 /* A masked vault value keeps its reveal and copy buttons next to it. */
@@ -1056,7 +1070,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .totp-ring-track {
-  stroke: #d9e2ef;
+  stroke: color-mix(in srgb, var(--muted) 34%, transparent);
 }
 
 .totp-ring-progress {
@@ -1165,7 +1179,7 @@ select.input.duplicate-mode-toolbar-select {
 
 .detail-folder-line {
   @apply mt-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold;
-  color: #667085;
+  color: var(--muted);
 }
 
 .detail-folder-line span {
@@ -1260,7 +1274,7 @@ select.input.duplicate-mode-toolbar-select {
 
 .attachment-row {
   @apply flex items-center justify-between gap-2.5 py-2.5;
-  border-bottom: 1px solid #ecf0f5;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .attachment-row:last-child {
@@ -1277,7 +1291,7 @@ select.input.duplicate-mode-toolbar-select {
 
 .attachment-text span {
   @apply text-xs;
-  color: #64748b;
+  color: var(--muted);
 }
 
 .attachment-row.is-removed {
@@ -1299,7 +1313,7 @@ select.input.duplicate-mode-toolbar-select {
 
 .custom-field-card {
   @apply grid gap-2 py-2.5;
-  border-bottom: 1px solid #ecf0f5;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .custom-field-card:last-child {
@@ -1309,7 +1323,7 @@ select.input.duplicate-mode-toolbar-select {
 
 .custom-field-label {
   @apply block overflow-hidden text-ellipsis whitespace-nowrap text-xs font-bold leading-[1.2];
-  color: #64748b;
+  color: var(--muted);
 }
 
 .custom-field-body {
@@ -1340,7 +1354,7 @@ select.input.duplicate-mode-toolbar-select {
 
 .custom-field-check span {
   @apply text-sm font-semibold;
-  color: #334155;
+  color: var(--text);
 }
 
 .custom-field-remove {
@@ -1351,12 +1365,12 @@ select.input.duplicate-mode-toolbar-select {
   @apply min-h-12 whitespace-pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
-  color: #334155;
+  color: var(--text);
 }
 
 .empty {
   @apply grid min-h-[120px] place-items-center;
-  color: #667085;
+  color: var(--muted);
 }
 
 .vault-error-state {
@@ -1371,4 +1385,118 @@ select.input.duplicate-mode-toolbar-select {
 .inline-icon {
   display: inline;
   vertical-align: middle;
+}
+
+/* ── item detail ──
+   The detail column follows the Proton Pass treatment: every card opens with
+   a tinted icon and its title, a row keeps a muted label above a brighter
+   value, and the colours come from the theme tokens so the panel holds its
+   contrast in the dark ramp. */
+
+/* Section header shared by every card in the detail column. */
+.detail-section-head {
+  @apply mb-3 flex items-center gap-2.5;
+}
+
+.detail-col .detail-section-head h4 {
+  @apply m-0;
+}
+
+.detail-section-icon {
+  @apply grid h-7 w-7 shrink-0 place-items-center rounded-full;
+  background: color-mix(in srgb, var(--primary) 16%, var(--panel-muted));
+  color: var(--primary-strong);
+}
+
+/* The item name carries the type scale of the reference. */
+.detail-col .detail-item-title {
+  font-size: var(--font-3xl);
+  font-weight: 700;
+}
+
+/* A row keeps its label above the value and its actions on the right. */
+.detail-col .kv-field {
+  gap: 14px;
+  padding: 12px 0;
+}
+
+.detail-col .kv-field-icon {
+  width: 28px;
+  height: 28px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--panel-muted));
+  color: var(--primary-strong);
+}
+
+.detail-col .kv-field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.detail-col .kv-field-value {
+  font-size: var(--font-md);
+}
+
+.detail-col .kv-field .kv-actions {
+  max-width: 260px;
+}
+
+/* The metadata rows share the icon treatment of the value rows. */
+.detail-col .detail-meta-icon {
+  @apply grid h-7 w-7 shrink-0 place-items-center rounded-full;
+  background: color-mix(in srgb, var(--primary) 12%, var(--panel-muted));
+  color: var(--primary-strong);
+}
+
+.detail-col .detail-meta-value {
+  font-size: var(--font-base);
+}
+
+/* Footer of a card that carries usage and password-health information. */
+.detail-card-footer {
+  @apply mt-3 grid gap-2.5 pt-3;
+  border-top: 1px solid var(--line-soft);
+}
+
+.detail-card-footer .detail-sub {
+  @apply mt-0;
+}
+
+.detail-card-actions {
+  @apply flex flex-wrap items-center gap-2;
+}
+
+/* A website reads as an address field. */
+.detail-uri-list {
+  @apply grid gap-2;
+}
+
+.detail-uri-row {
+  @apply flex items-center gap-3 rounded-xl border px-3 py-2.5;
+  border-color: var(--line-soft);
+  background: var(--panel-soft);
+}
+
+.detail-uri-link {
+  @apply min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left;
+  font: inherit;
+  font-size: var(--font-base);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--primary-strong);
+}
+
+.detail-uri-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .detail-uri-row {
+    @apply flex-col items-stretch gap-2;
+  }
+
+  .detail-col .kv-field .kv-actions {
+    max-width: none;
+  }
 }
