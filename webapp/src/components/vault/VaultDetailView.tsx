@@ -1,7 +1,9 @@
 import { createPortal } from 'preact/compat';
+import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AlertTriangle, Archive, CalendarPlus, Clipboard, Download, Eye, EyeOff, ExternalLink, Globe, KeyRound, List, MoreVertical, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, Tag, Trash2, User, X } from 'lucide-preact';
+import { AlertTriangle, Archive, BookOpen, CalendarPlus, Clipboard, Contact, CreditCard, Download, Eye, EyeOff, ExternalLink, Globe, History, IdCard, KeyRound, Landmark, List, Lock, MoreVertical, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, StickyNote, Tag, Terminal, Trash2, User, X } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
+import { looksLikeCipherString } from '@/lib/app-support';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
 import type { CipherUsageEntry } from '@/lib/api/vault';
@@ -57,6 +59,27 @@ interface VaultDetailViewProps {
 function totpProgress(live: TotpCodeResult | null): number {
   const period = Math.max(1, live?.period || 30);
   return live ? Math.max(0, Math.min(period, live.remain)) / period : 0;
+}
+
+// The raw counterpart of a decrypted field is the encrypted blob, so a value
+// that still looks like a cipher string never reaches the screen.
+function plainValue(decrypted: string | null | undefined, raw: string | null | undefined): string {
+  const dec = String(decrypted ?? '');
+  if (dec && !looksLikeCipherString(dec)) return dec;
+  const value = String(raw ?? '');
+  return looksLikeCipherString(value) ? '' : value;
+}
+
+/* Every card in the detail column opens with the same tinted icon and title. */
+function DetailSectionHead(props: { icon: ComponentChildren; title: string }) {
+  return (
+    <div className="detail-section-head">
+      <span className="detail-section-icon" aria-hidden="true">
+        {props.icon}
+      </span>
+      <h4>{props.title}</h4>
+    </div>
+  );
 }
 
 function PasswordHistoryDialog(props: {
@@ -142,11 +165,15 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     () =>
       (props.selectedCipher.passwordHistory || [])
         .map((entry) => ({
-          password: String(entry?.decPassword || entry?.password || ''),
+          password: plainValue(entry?.decPassword, entry?.password),
           lastUsedDate: entry?.lastUsedDate ?? null,
         }))
         .filter((entry) => entry.password.trim()),
     [props.selectedCipher.passwordHistory]
+  );
+  const websiteValues = useMemo(
+    () => (props.selectedCipher.login?.uris || []).map((uri) => plainValue(uri.decUri, uri.uri).trim()).filter((value) => !!value),
+    [props.selectedCipher.login?.uris]
   );
   useEffect(() => {
     breachControllerRef.current?.abort();
@@ -273,7 +300,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                 <VaultListIcon cipher={props.selectedCipher} />
               </span>
               <div className="detail-title-main">
-                <h3 className="detail-title">{props.selectedCipher.decName || t('txt_no_name')}</h3>
+                <h3 className="detail-title detail-item-title">{props.selectedCipher.decName || t('txt_no_name')}</h3>
                 <div className="detail-folder-line">
                   <Tag size={13} aria-hidden="true" />
                   <span>{props.folderName(props.selectedCipher.folderId)}</span>
@@ -363,6 +390,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {props.selectedCipher.login && (
             <div className="card" role="group" aria-label={t('txt_login_credentials')}>
+              <DetailSectionHead icon={<KeyRound size={15} />} title={t('txt_login_credentials')} />
               <div className="kv-field">
                 <span className="kv-field-icon" aria-hidden="true">
                   <User size={15} />
@@ -397,28 +425,12 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   <button type="button" className="btn btn-secondary small" onClick={() => void copyLoginPassword()}>
                     <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
                   </button>
-                  <button type="button" className="btn btn-secondary small" disabled={checkingBreach || !props.selectedCipher.login?.decPassword} onClick={() => void checkBreach()}>
-                    {checkingBreach ? <RefreshCw size={14} className="btn-icon spin" /> : <ShieldCheck size={14} className="btn-icon" />}
-                    {checkingBreach ? t('txt_checking_password_security') : t('txt_check_password_breach')}
-                  </button>
                 </div>
               </div>
-              {props.usageAvailable && (
-                <div className="detail-sub">{t('txt_password_copies')}: {t('txt_password_copied_count', { count: props.usage?.useCount || 0 })}</div>
-              )}
-              {props.usageError && (
-                <div className="detail-sub" role="status">{t('txt_usage_metrics_unavailable')}</div>
-              )}
-              {breachResult && (
-                <div className={`password-breach-inline ${breachResult.available ? (breachResult.count ? 'danger' : 'safe') : 'warning'}`} role="status">
-                  {breachResult.available ? (breachResult.count ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />) : <AlertTriangle size={15} />}
-                  <span>{breachResult.available ? (breachResult.count ? t('txt_password_exposed_count', { count: breachResult.count }) : t('txt_password_not_found_in_breaches')) : t('txt_password_security_check_failed')}</span>
-                </div>
-              )}
               {!!props.selectedCipher.login.decTotp && (
                 <div className="kv-field">
                   <span className="kv-field-icon" aria-hidden="true">
-                    <ShieldCheck size={15} />
+                    <Lock size={15} />
                   </span>
                   <div className="kv-field-body">
                     <span className="kv-field-label">{t('txt_totp')}</span>
@@ -472,42 +484,55 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   <div className="kv-actions" />
                 </div>
               )}
+              <div className="detail-card-footer">
+                {props.usageAvailable && (
+                  <div className="detail-sub">{t('txt_password_copies')}: {t('txt_password_copied_count', { count: props.usage?.useCount || 0 })}</div>
+                )}
+                {props.usageError && (
+                  <div className="detail-sub" role="status">{t('txt_usage_metrics_unavailable')}</div>
+                )}
+                {breachResult && (
+                  <div className={`password-breach-inline ${breachResult.available ? (breachResult.count ? 'danger' : 'safe') : 'warning'}`} role="status">
+                    {breachResult.available ? (breachResult.count ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />) : <AlertTriangle size={15} />}
+                    <span>{breachResult.available ? (breachResult.count ? t('txt_password_exposed_count', { count: breachResult.count }) : t('txt_password_not_found_in_breaches')) : t('txt_password_security_check_failed')}</span>
+                  </div>
+                )}
+                <div className="detail-card-actions">
+                  <button type="button" className="btn btn-secondary small" disabled={checkingBreach || !props.selectedCipher.login?.decPassword} onClick={() => void checkBreach()}>
+                    {checkingBreach ? <RefreshCw size={14} className="btn-icon spin" /> : <ShieldCheck size={14} className="btn-icon" />}
+                    {checkingBreach ? t('txt_checking_password_security') : t('txt_check_password_breach')}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
-          {(props.selectedCipher.login?.uris || []).length > 0 && (
-            <div className="card" role="group" aria-label={t('txt_autofill_options')}>
-              {(props.selectedCipher.login?.uris || []).map((uri, index) => {
-                const value = uri.decUri || uri.uri || '';
-                if (!value.trim()) return null;
-                return (
-                  <div key={`view-uri-${index}`} className="kv-field">
-                    <span className="kv-field-icon" aria-hidden="true">
-                      <Globe size={15} />
-                    </span>
-                    <div className="kv-field-body">
-                      <span className="kv-field-label">{t('txt_website')}</span>
-                      <div className="kv-field-value">
-                        <strong className="value-ellipsis" title={value}>{value}</strong>
-                      </div>
-                    </div>
+          {websiteValues.length > 0 && (
+            <div className="card" role="group" aria-label={t('txt_websites')}>
+              <DetailSectionHead icon={<Globe size={15} />} title={t('txt_websites')} />
+              <div className="detail-uri-list">
+                {websiteValues.map((value, index) => (
+                  <div key={`view-uri-${index}`} className="detail-uri-row">
+                    <button type="button" className="detail-uri-link" title={value} onClick={() => openUri(value)}>
+                      {value}
+                    </button>
                     <div className="kv-actions">
-                      <button type="button" className="btn btn-secondary small" onClick={() => openUri(value)}>
+                      <button type="button" className="btn btn-secondary small" title={t('txt_open')} onClick={() => openUri(value)}>
                         <ExternalLink size={14} className="btn-icon" /> {t('txt_open')}
                       </button>
-                      <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(value)}>
+                      <button type="button" className="btn btn-secondary small" title={t('txt_copy')} onClick={() => copyToClipboard(value)}>
                         <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
                       </button>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
           )}
 
           {props.selectedCipher.card && (
             <div className="card">
-              <h4>{t('txt_card_details')}</h4>
+              <DetailSectionHead icon={<CreditCard size={15} />} title={t('txt_card_details')} />
               <div className="kv-line"><span>{t('txt_cardholder_name')}</span><strong>{props.selectedCipher.card.decCardholderName || ''}</strong></div>
               {renderSecretLine('card-number', t('txt_number'), props.selectedCipher.card.decNumber || '')}
               <div className="kv-line">
@@ -524,7 +549,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {props.selectedCipher.identity && (
             <div className="card">
-              <h4>{t('txt_identity_details')}</h4>
+              <DetailSectionHead icon={<Contact size={15} />} title={t('txt_identity_details')} />
               <div className="kv-line"><span>{t('txt_name')}</span><strong>{`${props.selectedCipher.identity.decFirstName || ''} ${props.selectedCipher.identity.decLastName || ''}`.trim()}</strong></div>
               <div className="kv-line"><span>{t('txt_username')}</span><strong>{props.selectedCipher.identity.decUsername || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_email')}</span><strong>{props.selectedCipher.identity.decEmail || ''}</strong></div>
@@ -536,7 +561,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {props.selectedCipher.sshKey && (
             <div className="card">
-              <h4>{t('txt_ssh_key')}</h4>
+              <DetailSectionHead icon={<Terminal size={15} />} title={t('txt_ssh_key')} />
               <div className="kv-field">
                 <span className="kv-field-icon" aria-hidden="true">
                   <KeyRound size={15} />
@@ -603,7 +628,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {props.selectedCipher.bankAccount && (
             <div className="card">
-              <h4>{t('txt_bank_account_details')}</h4>
+              <DetailSectionHead icon={<Landmark size={15} />} title={t('txt_bank_account_details')} />
               <div className="kv-line"><span>{t('txt_bank_name')}</span><strong>{props.selectedCipher.bankAccount.decBankName || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_name_on_account')}</span><strong>{props.selectedCipher.bankAccount.decNameOnAccount || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_account_type')}</span><strong>{props.selectedCipher.bankAccount.decAccountType || ''}</strong></div>
@@ -619,7 +644,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {props.selectedCipher.driversLicense && (
             <div className="card">
-              <h4>{t('txt_drivers_license_details')}</h4>
+              <DetailSectionHead icon={<IdCard size={15} />} title={t('txt_drivers_license_details')} />
               <div className="kv-line"><span>{t('txt_name')}</span><strong>{[props.selectedCipher.driversLicense.decFirstName, props.selectedCipher.driversLicense.decMiddleName, props.selectedCipher.driversLicense.decLastName].filter(Boolean).join(' ')}</strong></div>
               <div className="kv-line"><span>{t('txt_date_of_birth')}</span><strong>{props.selectedCipher.driversLicense.decDateOfBirth || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_license_number')}</span><strong>{props.selectedCipher.driversLicense.decLicenseNumber || ''}</strong></div>
@@ -634,7 +659,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {props.selectedCipher.passport && (
             <div className="card">
-              <h4>{t('txt_passport_details')}</h4>
+              <DetailSectionHead icon={<BookOpen size={15} />} title={t('txt_passport_details')} />
               <div className="kv-line"><span>{t('txt_name')}</span><strong>{[props.selectedCipher.passport.decGivenName, props.selectedCipher.passport.decSurname].filter(Boolean).join(' ')}</strong></div>
               <div className="kv-line"><span>{t('txt_date_of_birth')}</span><strong>{props.selectedCipher.passport.decDateOfBirth || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_sex')}</span><strong>{props.selectedCipher.passport.decSex || ''}</strong></div>
@@ -650,22 +675,22 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
             </div>
           )}
 
-          {!!(props.selectedCipher.decNotes || '').trim() && (
+          {!!plainValue(props.selectedCipher.decNotes, props.selectedCipher.notes).trim() && (
             <div className="card">
-              <h4>{t('txt_notes')}</h4>
-              <div className="notes">{props.selectedCipher.decNotes || ''}</div>
+              <DetailSectionHead icon={<StickyNote size={15} />} title={t('txt_notes')} />
+              <div className="notes">{plainValue(props.selectedCipher.decNotes, props.selectedCipher.notes)}</div>
             </div>
           )}
 
           {(props.selectedCipher.fields || []).some((x) => parseFieldType(x.type) !== 3) && (
             <div className="card">
-              <h4>{t('txt_custom_fields')}</h4>
+              <DetailSectionHead icon={<List size={15} />} title={t('txt_custom_fields')} />
               {(props.selectedCipher.fields || [])
                 .filter((x) => parseFieldType(x.type) !== 3)
                 .map((field, index) => {
                   const fieldType = parseFieldType(field.type);
-                  const fieldName = field.decName || t('txt_field');
-                  const rawValue = field.decValue || '';
+                  const fieldName = plainValue(field.decName, field.name) || t('txt_field');
+                  const rawValue = plainValue(field.decValue, field.value);
                   const isHiddenVisible = !!props.hiddenFieldVisibleMap[index];
                   if (fieldType === 2) {
                     const checked = toBooleanFieldValue(rawValue);
@@ -722,12 +747,12 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {selectedAttachments.some((attachment) => String(attachment?.id || '').trim()) && (
             <div className="card">
-              <h4>{t('txt_attachments')}</h4>
+              <DetailSectionHead icon={<Paperclip size={15} />} title={t('txt_attachments')} />
               <div className="attachment-list">
                 {selectedAttachments.map((attachment) => {
                   const attachmentId = String(attachment?.id || '').trim();
                   if (!attachmentId) return null;
-                  const fileName = String(attachment.decFileName || attachment.fileName || attachmentId).trim() || attachmentId;
+                  const fileName = plainValue(attachment.decFileName, attachment.fileName).trim() || attachmentId;
                   return (
                     <div key={`view-attachment-${attachmentId}`} className="attachment-row">
                       <div className="attachment-main">
@@ -756,7 +781,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {(props.selectedCipher.creationDate || props.selectedCipher.revisionDate) && (
             <div className="card detail-meta-card">
-              <h4>{t('txt_item_history')}</h4>
+              <DetailSectionHead icon={<History size={15} />} title={t('txt_item_history')} />
               <div className="detail-meta-group">
                 {props.usageAvailable && (
                   <div className="detail-meta-row">

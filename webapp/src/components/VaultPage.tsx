@@ -38,6 +38,8 @@ import { ChevronLeft } from 'lucide-preact';
 import type { CipherUsageMap } from '@/lib/api/vault';
 import type { Cipher, CustomFieldType, Folder, VaultDraft, VaultDraftField } from '@/lib/types';
 import { t } from '@/lib/i18n';
+import { looksLikeCipherString } from '@/lib/app-support';
+import { hasUnresolvedCipherUri } from '@/lib/website-utils';
 
 interface VaultPageProps {
   ciphers: Cipher[];
@@ -472,7 +474,7 @@ export default function VaultPage(props: VaultPageProps) {
       if (!isCipherVisibleInNormalVault(cipher)) continue;
       for (const rawTag of Array.isArray(cipher.tags) ? cipher.tags : []) {
         const tag = String(rawTag || '').trim();
-        if (!tag) continue;
+        if (!tag || looksLikeCipherString(tag)) continue;
         counts.set(tag, (counts.get(tag) || 0) + 1);
       }
     }
@@ -480,7 +482,7 @@ export default function VaultPage(props: VaultPageProps) {
     const folderIdByTag = new Map<string, string>();
     for (const folder of props.folders) {
       const name = String(folder.decName || folder.name || '').trim();
-      if (!name) continue;
+      if (!name || looksLikeCipherString(name)) continue;
       if (!counts.has(name)) counts.set(name, 0);
       folderIdByTag.set(name, folder.id);
     }
@@ -643,7 +645,8 @@ export default function VaultPage(props: VaultPageProps) {
 const folderName = useCallback((id: string | null | undefined): string => {
   if (!id) return t('txt_no_folder');
   const folder = folderById.get(id);
-  return folder?.decName || folder?.name || id;
+  const name = folder?.decName || folder?.name || '';
+  return name && !looksLikeCipherString(name) ? name : t('txt_no_folder');
 }, [folderById]);
 
   const listSubtitle = useCallback((cipher: Cipher): string => {
@@ -684,6 +687,10 @@ const folderName = useCallback((id: string | null | undefined): string => {
 
   const startEdit = useCallback((): void => {
     if (!selectedCipher) return;
+    if (hasUnresolvedCipherUri(selectedCipher)) {
+      props.onNotify('error', t('txt_decrypt_failed_2'));
+      return;
+    }
     setDraft(draftFromCipher(selectedCipher));
     setIsCreating(false);
     setIsEditing(true);
@@ -694,7 +701,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
     setRemovedAttachmentIds({});
     if (isMobileLayout) setMobilePanel('edit');
     setMobileSidebarOpen(false);
-  }, [selectedCipher, isMobileLayout]);
+  }, [selectedCipher, isMobileLayout, props.onNotify]);
 
   const cancelEdit = useCallback((): void => {
     const returnToDetail = isMobileLayout && !isCreating && !!selectedCipher;
@@ -857,6 +864,10 @@ const folderName = useCallback((id: string | null | undefined): string => {
       const editedCipher = isCreating ? null : cipherById.get(nextDraft.id || selectedCipherId);
       if (!isCreating && !editedCipher) {
         setLocalError(t('txt_item_changed_elsewhere'));
+        return;
+      }
+      if (editedCipher && hasUnresolvedCipherUri(editedCipher)) {
+        setLocalError(t('txt_decrypt_failed_2'));
         return;
       }
       if (isCreating) {
@@ -1024,6 +1035,9 @@ const folderName = useCallback((id: string | null | undefined): string => {
     setBusy(true);
     try {
       await props.onRenameFolder(pendingRenameFolder.id, nextName);
+      if (sidebarFilter.kind === 'tag' && sidebarFilter.tag === (pendingRenameFolder.decName || pendingRenameFolder.name)) {
+        setSidebarFilter({ kind: 'tag', tag: nextName });
+      }
       setPendingRenameFolder(null);
       setRenameFolderName('');
     } catch {
@@ -1303,6 +1317,10 @@ const folderName = useCallback((id: string | null | undefined): string => {
           onSelectSortMode={handleSelectSortMode}
           onDuplicateModeChange={setDuplicateMode}
           onChangeFilter={handleChangeFilter}
+          onOpenCreateTag={handleOpenCreateFolder}
+          onOpenDeleteAllTags={handleOpenDeleteAllFolders}
+          onOpenRenameTag={(entry) => handleOpenRenameFolder({ id: entry.folderId, name: entry.tag })}
+          onOpenDeleteTag={(entry) => setPendingDeleteFolder({ id: entry.folderId, name: entry.tag })}
           onSyncVault={handleSyncVault}
           onOpenBulkDelete={handleOpenBulkDelete}
           onSelectDuplicates={handleSelectDuplicates}
