@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
 import LoadingState from '@/components/LoadingState';
 import VaultDialogs from '@/components/vault/VaultDialogs';
@@ -86,6 +86,7 @@ export default function VaultPage(props: VaultPageProps) {
   const [searchComposing, setSearchComposing] = useState(false);
   const [sortMode, setSortMode] = useState<VaultSortMode>('edited');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [recentOnly, setRecentOnly] = useState(false);
   const [duplicateMode, setDuplicateMode] = useState<DuplicateDetectionMode>('exact');
   const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>({ kind: 'all' });
   const [selectedCipherId, setSelectedCipherId] = useState('');
@@ -369,7 +370,7 @@ export default function VaultPage(props: VaultPageProps) {
     return byId;
   }, [props.ciphers, duplicateSignatureInfo]);
 
-  const filteredCiphers = useMemo(() => {
+  const allFilteredCiphers = useMemo(() => {
     const next = props.ciphers.filter((cipher) => {
       const meta = cipherMetaById.get(cipher.id);
       if (sidebarFilter.kind === 'trash') {
@@ -455,6 +456,10 @@ export default function VaultPage(props: VaultPageProps) {
     return next;
   }, [props.ciphers, cipherMetaById, sidebarFilter, searchQuery, sortMode, duplicateSignatureInfo, nameCollator, usageCountById]);
 
+  const filteredCiphers = useMemo(() => recentOnly
+    ? allFilteredCiphers.filter((cipher) => sortTimeValue(cipher) >= Date.now() - 30 * 24 * 60 * 60 * 1000)
+    : allFilteredCiphers, [allFilteredCiphers, recentOnly]);
+
   const filteredCipherIds = useMemo(() => {
     const ids = new Set<string>();
     for (const cipher of filteredCiphers) ids.add(cipher.id);
@@ -495,7 +500,7 @@ export default function VaultPage(props: VaultPageProps) {
     setListScrollTop(0);
     listScrollBucketRef.current = 0;
     listPanelRef.current?.scrollTo({ top: 0 });
-  }, [searchQuery, sortMode, sidebarFilterKey]);
+  }, [searchQuery, sortMode, sidebarFilterKey, recentOnly]);
 
   useEffect(() => {
     if (sidebarFilter.kind === 'duplicates' && sortMode !== 'name') {
@@ -529,6 +534,8 @@ export default function VaultPage(props: VaultPageProps) {
         ? { kind: 'archive' }
         : { kind: 'all' };
     setSidebarFilter((prev) => (prev.kind === nextFilter.kind ? prev : nextFilter));
+    setRecentOnly(false);
+    setSelectedMap({});
     setSearchInput('');
     setSearchQuery('');
     setIsEditing(false);
@@ -571,6 +578,7 @@ export default function VaultPage(props: VaultPageProps) {
 
   const selectedCipher = useMemo(() => cipherById.get(selectedCipherId) || null, [cipherById, selectedCipherId]);
   const virtualRange = useMemo(() => {
+    if (isMobileLayout) return { start: 0, end: filteredCiphers.length, padTop: 0, padBottom: 0 };
     if (!filteredCiphers.length) {
       return { start: 0, end: 0, padTop: 0, padBottom: 0 };
     }
@@ -584,7 +592,7 @@ export default function VaultPage(props: VaultPageProps) {
       padTop: start * VAULT_LIST_ROW_HEIGHT,
       padBottom: Math.max(0, (filteredCiphers.length - end) * VAULT_LIST_ROW_HEIGHT),
     };
-  }, [filteredCiphers.length, listScrollTop, listViewportHeight]);
+  }, [filteredCiphers.length, listScrollTop, listViewportHeight, isMobileLayout]);
   const visibleCiphers = useMemo(
     () => filteredCiphers.slice(virtualRange.start, virtualRange.end),
     [filteredCiphers, virtualRange.start, virtualRange.end]
@@ -631,7 +639,6 @@ export default function VaultPage(props: VaultPageProps) {
     () => Object.values(selectedMap).reduce((sum, v) => sum + (v ? 1 : 0), 0),
     [selectedMap]
   );
-  const totalCipherCount = filteredCiphers.length;
 
 const folderName = useCallback((id: string | null | undefined): string => {
   if (!id) return t('txt_no_folder');
@@ -1125,7 +1132,11 @@ const folderName = useCallback((id: string | null | undefined): string => {
 
   const handleSearchInput = useCallback((value: string) => {
     setSearchInput(value);
-    if (value.trim()) setSidebarFilter((filter) => filter.kind === 'all' ? filter : { kind: 'all' });
+    if (value.trim()) {
+      setSelectedMap({});
+      setSidebarFilter((filter) => filter.kind === 'all' ? filter : { kind: 'all' });
+      setRecentOnly(false);
+    }
   }, []);
   const handleClearSearch = useCallback(() => setSearchInput(''), []);
   const handleSearchCompositionStart = useCallback(() => setSearchComposing(true), []);
@@ -1172,6 +1183,18 @@ const folderName = useCallback((id: string | null | undefined): string => {
     const map: Record<string, boolean> = {};
     for (const cipher of filteredCiphers) map[cipher.id] = true;
     setSelectedMap(map);
+  }, [filteredCiphers]);
+  const handleChangeFilter = useCallback((filter: SidebarFilter) => {
+    setSelectedMap({});
+    setRecentOnly(false);
+    setSidebarFilter(filter);
+  }, []);
+  const handleRecentOnlyChange = useCallback((recent: boolean) => {
+    setSelectedMap({});
+    setRecentOnly(recent);
+  }, []);
+  const handleSelectOne = useCallback(() => {
+    if (filteredCiphers[0]) setSelectedMap({ [filteredCiphers[0].id]: true });
   }, [filteredCiphers]);
   const handleToggleCreateMenu = useCallback(() => setCreateMenuOpen((open) => !open), []);
   const handleBulkRestore = useCallback(() => { void confirmBulkRestore(); }, [selectedMap, props.onBulkRestore]);
@@ -1225,7 +1248,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
       isMobileLayout={isMobileLayout}
       mobileSidebarOpen={mobileSidebarOpen}
       onCloseMobileSidebar={handleCloseMobileSidebar}
-      onChangeFilter={setSidebarFilter}
+      onChangeFilter={handleChangeFilter}
       onOpenDeleteAllTags={handleOpenDeleteAllFolders}
       onOpenCreateTag={handleOpenCreateFolder}
       onOpenRenameTag={(entry) => handleOpenRenameFolder({ id: entry.folderId, name: entry.tag })}
@@ -1243,6 +1266,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
           />
         )}
         {sidebarTarget ? createPortal(sidebar, sidebarTarget) : sidebar}
+        {!isMobileLayout && <div id="vault-workspace-toolbar" />}
 
         <VaultListPanel
           busy={busy}
@@ -1254,7 +1278,10 @@ const folderName = useCallback((id: string | null | undefined): string => {
           sortMenuOpen={sortMenuOpen}
           duplicateMode={duplicateMode}
           selectedCount={selectedCount}
-          totalCipherCount={totalCipherCount}
+          allFilteredCount={allFilteredCiphers.length}
+          recentOnly={recentOnly}
+          onRecentOnlyChange={handleRecentOnlyChange}
+          groupedByDay={sortMode === 'edited' && sidebarFilter.kind !== 'duplicates'}
           filteredCiphers={filteredCiphers}
           visibleCiphers={visibleCiphers}
           duplicateGroupIndexById={duplicateGroupIndexById}
@@ -1275,12 +1302,13 @@ const folderName = useCallback((id: string | null | undefined): string => {
           onToggleSortMenu={handleToggleSortMenu}
           onSelectSortMode={handleSelectSortMode}
           onDuplicateModeChange={setDuplicateMode}
-          onChangeFilter={setSidebarFilter}
+          onChangeFilter={handleChangeFilter}
           onSyncVault={handleSyncVault}
           onOpenBulkDelete={handleOpenBulkDelete}
           onSelectDuplicates={handleSelectDuplicates}
           onSelectUniqueFromDuplicates={handleSelectUniqueFromDuplicates}
           onSelectAll={handleSelectAll}
+          onSelectOne={handleSelectOne}
           onToggleCreateMenu={handleToggleCreateMenu}
           onStartCreate={startCreate}
           onBulkRestore={handleBulkRestore}
@@ -1370,6 +1398,11 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 attachmentDownloadPercent={props.attachmentDownloadPercent}
                 onStartEdit={startEdit}
                 onDelete={setPendingDelete}
+                onMoveItem={(cipher) => {
+                  setSelectedMap({ [cipher.id]: true });
+                  setMoveFolderId('__none__');
+                  setMoveOpen(true);
+                }}
                 onRestore={(cipher) => void handleRestoreSelected(cipher)}
                 onArchive={(cipher) => setPendingArchive(cipher)}
                 onUnarchive={(cipher) => void handleUnarchiveSelected(cipher)}
@@ -1402,7 +1435,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
         fieldValue={fieldValue}
         archiveConfirmOpen={!!pendingArchive}
         bulkArchiveOpen={bulkArchiveOpen}
-        pendingDeleteOpen={!!pendingDelete}
+        pendingDelete={pendingDelete}
         bulkDeleteOpen={bulkDeleteOpen}
         sidebarTrashMode={sidebarFilter.kind === 'trash'}
         selectedCount={selectedCount}

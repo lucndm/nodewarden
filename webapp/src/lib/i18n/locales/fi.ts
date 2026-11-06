@@ -1531,4 +1531,21 @@ Object.assign(fi, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_usage_tracking_failed": "Salasana kopioitiin, mutta kopiointia ei kirjattu",
 });
 
+Object.assign(fi, {
+  "txt_generate_password": "Luo salasana",
+  "txt_replace_password_message": "Tällä kohteella on jo salasana. Korvataanko se luodulla salasanalla?",
+  "txt_move_to_trash": "Siirrä roskakoriin",
+  "txt_move_item_to_trash": "Siirrä kohde roskakoriin",
+  "txt_move_item_to_trash_message": "Kohde siirretään roskakoriin. Voit palauttaa sen sieltä.",
+  "txt_delete_item_permanently": "Poista kohde pysyvästi",
+  "txt_delete_item_permanently_message": "Kohde poistetaan pysyvästi. Tätä ei voi perua.",
+  "txt_move_selected_items_to_trash": "Siirrä valitut kohteet roskakoriin",
+  "txt_move_selected_items_to_trash_message": "Siirretäänkö {count} valittua kohdetta roskakoriin? Voit palauttaa ne sieltä.",
+  "txt_move_to_tag": "Siirrä tunnisteeseen",
+  "txt_choose_destination_folder_item": "Valitse kohteelle tunniste.",
+  "txt_email_breach_disabled": "Sähköpostivuotojen valvonta ei ole käytössä tällä palvelimella.",
+  "txt_recent_30_days": "Viimeisimmät (30 päivää)",
+  "txt_multiple_select": "Valitse useita",
+});
+
 export default fi;

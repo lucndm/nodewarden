@@ -199,7 +199,9 @@ export async function inspectVaultPasswordSecurity(
       result = { count: null, available: false };
     }
     exposureByHash.set(hash, result);
-    checked += candidatesByHash.get(hash)?.length || 0;
+    // Only a lookup that produced a verdict counts as checked. A password the
+    // breach database never answered for stays unchecked, and the report says so.
+    if (result.count !== null) checked += candidatesByHash.get(hash)?.length || 0;
     onProgress?.(Math.min(checked, candidates.length), candidates.length);
     return result;
   }, signal);

@@ -67,7 +67,9 @@
 
 登录字段与自动填充网站分别保留独立卡片，不显示分组标题；屏幕阅读器仍能读取分组名称。
 
-在筛选列表中搜索时会切换到“全部条目”，以便找到保险库其他位置的匹配项。创建和编辑时先显示标题与主要字段，再显示备注；类型和标签位于后面的元数据卡片。创建条目时自动聚焦标题。
+桌面端搜索与创建按钮共用工作区顶栏；移动端在列表内搜索，并保留悬浮创建按钮。搜索会切换到“全部条目”。列表提供最近 30 天筛选、多选，以及按最近修改排序时的日期标记。编辑登录条目时，保存/取消位于顶部，网站字段单独分组；可按已保存的生成器设置直接生成密码，覆盖原密码前须确认。卡片、银行账户和历史密码默认隐藏，需逐项显示。将正常条目移入回收站可以恢复；仅回收站中的条目会被永久删除。标签用于整理条目，不是独立保险库。
+
+密码健康检查仅在手动启动后运行。检查前风险数量未知；未完成的泄露查询标记为“未检查”，而非安全。报告仅保留在浏览器内存中，应用内导航可继续查看，刷新、密码库变更或锁定/退出后清除。电子邮件泄露监测会明确提示停用或失败状态；不会推断网站是否支持双重身份验证。
 
 配色在浅色与深色主题下统一使用紫色交互色，深色主题为深紫蓝背景；界面使用细边框与扁平面板，不使用厚重阴影。筛选栏用左侧标记标出当前选中项，列表中的选中条目保留淡紫底色。
 
@@ -122,7 +124,6 @@ NodeWarden 可以把安全事件推送到你指定的 Telegram 聊天。该功�
 > Web SSO 每次登录都会生成新的客户端标识，因此每次成功的 Web SSO 登录都会被当作新客户端推送（仍受下面的冷却窗口限制）。
 
 **消息包含哪些内容**
-
 - 请求所访问的主机名（你的 Worker 或自定义域名）
 - 事件类型
 - 账号 ID 的前 8 位字符；无法解析到账号时为 `unknown`
@@ -247,4 +248,3 @@ LGPL-3.0 License
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=shuaiplus/NodeWarden&type=timeline&legend=top-left&sealed_token=ck0AMqR8EFMjJ6tMbnGDHT5QwMpO85IUuN7i8e82zRRNPtjoLsAAFwVzxmSZwaid97wLUwy56EEiVE9M-OY0cf16bQKBrU9GaauFoOFXGq-vMqcOyk0tIc4b3o1ZGfDw9IH8o6NUxC125TJkjKSLn9fxhFUUeNr1f1El0UcAUcjsMPl_LX80qQrlvQqp" />
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=shuaiplus/NodeWarden&type=timeline&legend=top-left&sealed_token=ck0AMqR8EFMjJ6tMbnGDHT5QwMpO85IUuN7i8e82zRRNPtjoLsAAFwVzxmSZwaid97wLUwy56EEiVE9M-OY0cf16bQKBrU9GaauFoOFXGq-vMqcOyk0tIc4b3o1ZGfDw9IH8o6NUxC125TJkjKSLn9fxhFUUeNr1f1El0UcAUcjsMPl_LX80qQrlvQqp" />
  </picture>
-</a>

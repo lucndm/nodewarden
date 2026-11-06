@@ -1,6 +1,10 @@
 import { inspectVaultPasswordSecurity, type PasswordSecurityReport } from '@/lib/password-security';
 import type { Cipher } from '@/lib/types';
 
+// The report lives in this module's memory only. It is never written to
+// localStorage or IndexedDB and never leaves the browser, so a reload clears
+// it. SPA navigation keeps it because the module stays loaded.
+
 export interface PasswordSecurityState {
   fingerprint: string;
   report: PasswordSecurityReport | null;

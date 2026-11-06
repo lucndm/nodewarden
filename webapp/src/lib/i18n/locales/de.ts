@@ -1531,4 +1531,21 @@ Object.assign(de, { "txt_password_security_show_all": "Alle anzeigen", "txt_pass
   "txt_usage_tracking_failed": "Passwort kopiert, aber die Kopie konnte nicht erfasst werden",
 });
 
+Object.assign(de, {
+  "txt_generate_password": "Passwort generieren",
+  "txt_replace_password_message": "Dieser Eintrag hat bereits ein Passwort. Durch das generierte ersetzen?",
+  "txt_move_to_trash": "In den Papierkorb verschieben",
+  "txt_move_item_to_trash": "Eintrag in den Papierkorb verschieben",
+  "txt_move_item_to_trash_message": "Dieser Eintrag wird in den Papierkorb verschoben. Du kannst ihn dort wiederherstellen.",
+  "txt_delete_item_permanently": "Eintrag endgültig löschen",
+  "txt_delete_item_permanently_message": "Dieser Eintrag wird endgültig gelöscht. Das kann nicht rückgängig gemacht werden.",
+  "txt_move_selected_items_to_trash": "Ausgewählte Einträge in den Papierkorb verschieben",
+  "txt_move_selected_items_to_trash_message": "{count} ausgewählte Einträge in den Papierkorb verschieben? Du kannst sie dort wiederherstellen.",
+  "txt_move_to_tag": "Zu Tag verschieben",
+  "txt_choose_destination_folder_item": "Wähle einen Tag für diesen Eintrag.",
+  "txt_email_breach_disabled": "Die E-Mail-Leak-Überwachung ist auf diesem Server nicht aktiviert.",
+  "txt_recent_30_days": "Zuletzt (30 Tage)",
+  "txt_multiple_select": "Mehrere auswählen",
+});
+
 export default de;

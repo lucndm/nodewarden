@@ -50,6 +50,7 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
   const loadEmailBreaches = async () => {
     if (!props.authedFetch || emailBreachLoading) return;
     setEmailBreachLoading(true);
+    setEmailBreach(null);
     setEmailBreachError(false);
     try {
       setEmailBreach(await getEmailBreachStatus(props.authedFetch));
@@ -64,12 +65,50 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
     void loadEmailBreaches();
   }, []);
 
+  // The breach card must always say something. A hidden card reads as
+  // "nothing found", which is exactly the false "you are safe" answer.
+  // No session means the lookup cannot run at all; a server that reports
+  // the feature as off is a different, weaker state. Keep them apart.
+  const emailBreachUnreachable = !props.authedFetch;
+  const emailBreachDisabled = !!emailBreach && !emailBreach.enabled;
+  const emailBreachPending = !emailBreachUnreachable && !emailBreachDisabled && !emailBreachError && !emailBreach;
+  const emailBreachCheckedAt = emailBreach?.checkedAt ? Date.parse(emailBreach.checkedAt) : Number.NaN;
+  // A failed refresh must not present the previous answer as the current one.
+  const emailBreachResult = !emailBreachError && emailBreach?.status === 'ok' ? emailBreach : null;
+  // Exactly one notice per server status: a status that is not "ok" never
+  // yields the green "no breaches" answer.
+  const emailBreachStatusText = !emailBreachError && emailBreach && emailBreach.status !== 'ok'
+    ? emailBreach.status === 'invalid_key'
+      ? t('txt_email_breach_invalid_key')
+      : emailBreach.status === 'rate_limited'
+        ? t('txt_email_breach_rate_limited')
+        : t('txt_email_breach_error')
+    : '';
+
   const { report, scannedAt, scanning, progress, scanError } = securityState;
+  // A scan that could not reach the breach database for every password is not
+  // a clean scan, so it must never be dressed up as one.
+  const reportComplete = !!report && report.unavailableCount === 0;
 
   const eligibleCount = useMemo(
     () => props.ciphers.filter((cipher) => Number(cipher.type) === 1 && !cipher.deletedDate && !(cipher as { deletedAt?: string | null }).deletedAt && !!cipher.login?.decPassword).length,
     [props.ciphers],
   );
+
+  // The scan is manual, so the page must always say where it stands: not
+  // started, running, failed, or finished. Silence would read as "all clear".
+  const scanStateLine = props.loading
+    ? t('txt_loading_vault')
+    : scanning
+      ? t('txt_checking_password_security')
+      : report
+        ? t('txt_password_security_last_checked', { value: formatCheckedAt(scannedAt || 0) })
+        : scanError
+          ? ''
+          : eligibleCount
+            ? t('txt_password_security_ready')
+            : t('txt_password_security_no_login');
+  const scanHintLine = eligibleCount ? t('txt_password_security_manual') : t('txt_password_security_no_login_help');
   const ciphersById = useMemo(() => new Map(props.ciphers.map((cipher) => [cipher.id, cipher])), [props.ciphers]);
   const filteredItems = useMemo(() => {
     if (!report || filter === 'all') return report?.items || [];
@@ -106,7 +145,8 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
         <div>
           <h2>{t('txt_password_security')}</h2>
           <p>{t('txt_password_security_privacy')}</p>
-          {scannedAt && <p className="password-security-checked-at">{t('txt_password_security_last_checked', { value: formatCheckedAt(scannedAt) })}</p>}
+          {scanStateLine && <p className="password-security-checked-at">{scanStateLine}</p>}
+          <p className="password-security-checked-at">{scanHintLine}</p>
         </div>
         <div className="password-security-intro-actions">
           {report && <button type="button" className="btn btn-secondary password-security-toggle-all" onClick={toggleAllPasswordVisibility}>
@@ -120,26 +160,30 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
         </div>
       </div>
 
-      {!report && !scanning && !props.loading && (
-        <div className="password-security-empty card">
-          <ShieldCheck size={26} aria-hidden="true" />
-          <strong>{eligibleCount ? t('txt_password_security_ready') : t('txt_password_security_no_login')}</strong>
-          <span>{eligibleCount ? t('txt_password_security_manual') : t('txt_password_security_no_login_help')}</span>
-        </div>
-      )}
-
-      {(scanning || report) && (
+      {!props.loading && (
         <div className="password-security-summary" aria-live="polite">
-          <SecurityMetric icon={<ShieldAlert size={18} />} tone="danger" label={t('txt_exposed_passwords')} value={report?.exposedCount ?? 0} active={filter === 'exposed'} disabled={!report} onClick={() => setFilter('exposed')} />
-          <SecurityMetric icon={<AlertTriangle size={18} />} tone="warning" label={t('txt_reused_passwords')} value={report?.reusedCount ?? 0} active={filter === 'reused'} disabled={!report} onClick={() => setFilter('reused')} />
-          <SecurityMetric icon={<AlertTriangle size={18} />} tone="warning" label={t('txt_weak_passwords')} value={report?.weakCount ?? 0} active={filter === 'weak'} disabled={!report} onClick={() => setFilter('weak')} />
-          <SecurityMetric icon={<CheckCircle2 size={18} />} tone="primary" label={t('txt_passwords_checked')} value={`${scanning ? progress.checked : report?.checkedCount || 0} / ${scanning ? progress.total : report?.eligibleCount || 0}`} active={filter === 'all'} disabled={!report} onClick={() => setFilter('all')} />
+          <SecurityMetric icon={<ShieldAlert size={18} />} tone="danger" label={t('txt_exposed_passwords')} value={report ? report.exposedCount : '—'} active={filter === 'exposed'} disabled={!report} onClick={() => setFilter('exposed')} />
+          <SecurityMetric icon={<AlertTriangle size={18} />} tone="warning" label={t('txt_reused_passwords')} value={report ? report.reusedCount : '—'} active={filter === 'reused'} disabled={!report} onClick={() => setFilter('reused')} />
+          <SecurityMetric icon={<AlertTriangle size={18} />} tone="warning" label={t('txt_weak_passwords')} value={report ? report.weakCount : '—'} active={filter === 'weak'} disabled={!report} onClick={() => setFilter('weak')} />
+          <SecurityMetric icon={<CheckCircle2 size={18} />} tone="primary" label={t('txt_passwords_checked')} value={scanning ? `${progress.checked} / ${progress.total}` : report ? `${report.checkedCount} / ${report.eligibleCount}` : `0 / ${eligibleCount}`} active={filter === 'all'} disabled={!report} onClick={() => setFilter('all')} />
         </div>
       )}
 
       {scanError && <div className="password-security-notice warning card" role="alert"><Unplug size={16} />{t('txt_password_security_check_failed')}</div>}
 
-      {emailBreach?.enabled && (
+      {report && report.unavailableCount > 0 && (
+        <div className="password-security-notice warning" role="status"><Unplug size={16} />{t('txt_password_security_unavailable', { count: report.unavailableCount })}</div>
+      )}
+
+      {emailBreachUnreachable && (
+        <div className="password-security-notice warning card" role="status"><Unplug size={16} />{t('txt_email_breach_error')}</div>
+      )}
+
+      {!emailBreachUnreachable && emailBreachDisabled && (
+        <div className="password-security-notice warning card" role="status"><Unplug size={16} />{t('txt_email_breach_disabled')}</div>
+      )}
+
+      {!emailBreachUnreachable && !emailBreachDisabled && (
         <section className="password-security-results card" aria-label={t('txt_email_breach_title')}>
           <div className="password-security-item-header">
             <strong>{t('txt_email_breach_title')}</strong>
@@ -149,39 +193,42 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
             </button>
           </div>
           <p className="password-security-email-breach-help">{t('txt_email_breach_description')}</p>
-          {emailBreachError && <div className="password-security-notice warning"><Unplug size={16} />{t('txt_email_breach_error')}</div>}
-          {!emailBreachError && emailBreach.status === 'invalid_key' && (
-            <div className="password-security-notice warning"><AlertTriangle size={16} />{t('txt_email_breach_invalid_key')}</div>
-          )}
-          {!emailBreachError && emailBreach.status === 'rate_limited' && (
-            <div className="password-security-notice warning"><Unplug size={16} />{t('txt_email_breach_rate_limited')}</div>
-          )}
-          {!emailBreachError && emailBreach.status === 'error' && (
-            <div className="password-security-notice warning"><Unplug size={16} />{t('txt_email_breach_error')}</div>
-          )}
-          {!emailBreachError && emailBreach.status === 'ok' && emailBreach.breaches.length === 0 && (
-            <div className="password-security-empty compact"><CheckCircle2 size={22} /><strong>{t('txt_email_breach_none')}</strong></div>
-          )}
-          {emailBreach.breaches.length > 0 && (
-            <div className="password-security-list">
-              {emailBreach.breaches.map((breach) => <EmailBreachRow key={breach.name} breach={breach} />)}
-            </div>
-          )}
-          {emailBreach.checkedAt && (
-            <p className="password-security-checked-at">{t('txt_email_breach_checked_at', { value: formatCheckedAt(Date.parse(emailBreach.checkedAt)) })}</p>
-          )}
+          <div aria-live="polite">
+            {emailBreachError && <div className="password-security-notice warning"><Unplug size={16} />{t('txt_email_breach_error')}</div>}
+            {emailBreachPending && !emailBreachError && (
+              <div className="password-security-empty compact"><RefreshCw size={22} className="spin" aria-hidden="true" /><strong>{t('txt_loading')}</strong></div>
+            )}
+            {emailBreachStatusText && (
+              <div className="password-security-notice warning">
+                {emailBreach?.status === 'invalid_key' ? <AlertTriangle size={16} /> : <Unplug size={16} />}
+                {emailBreachStatusText}
+              </div>
+            )}
+            {emailBreachResult && emailBreachResult.breaches.length === 0 && (
+              <div className="password-security-empty compact"><CheckCircle2 size={22} /><strong>{t('txt_email_breach_none')}</strong></div>
+            )}
+            {emailBreachResult && emailBreachResult.breaches.length > 0 && (
+              <div className="password-security-list">
+                {emailBreachResult.breaches.map((breach) => <EmailBreachRow key={breach.name} breach={breach} />)}
+              </div>
+            )}
+            {emailBreachResult && Number.isFinite(emailBreachCheckedAt) && (
+              <p className="password-security-checked-at">{t('txt_email_breach_checked_at', { value: formatCheckedAt(emailBreachCheckedAt) })}</p>
+            )}
+          </div>
         </section>
       )}
 
       {report && (
         <section className="password-security-results card">
-          {report.unavailableCount > 0 && (
-            <div className="password-security-notice warning"><Unplug size={16} />{t('txt_password_security_unavailable', { count: report.unavailableCount })}</div>
-          )}
           {!report.items.length ? (
-            <div className="password-security-empty compact"><CheckCircle2 size={25} /><strong>{t('txt_no_password_risks')}</strong></div>
+            reportComplete
+              ? <div className="password-security-empty compact"><CheckCircle2 size={25} /><strong>{t('txt_no_password_risks')}</strong></div>
+              : <div className="password-security-empty compact"><AlertTriangle size={25} /><strong>{t('txt_password_security_not_checked')}</strong></div>
           ) : !filteredItems.length ? (
-            <div className="password-security-empty compact"><CheckCircle2 size={25} /><strong>{t('txt_no_password_risks_in_filter')}</strong></div>
+            reportComplete
+              ? <div className="password-security-empty compact"><CheckCircle2 size={25} /><strong>{t('txt_no_password_risks_in_filter')}</strong></div>
+              : <div className="password-security-empty compact"><AlertTriangle size={25} /><strong>{t('txt_password_security_not_checked')}</strong></div>
           ) : (
             <div className="password-security-list">
               {filteredItems.map((item) => {

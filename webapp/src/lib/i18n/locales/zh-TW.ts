@@ -1610,4 +1610,21 @@ Object.assign(zhTW, {
   "txt_usage_tracking_failed": "密碼已複製，但未能記錄本次複製"
 });
 
+Object.assign(zhTW, {
+  "txt_generate_password": "產生密碼",
+  "txt_replace_password_message": "此項目已有密碼。要以產生的密碼取代嗎？",
+  "txt_move_to_trash": "移至垃圾桶",
+  "txt_move_item_to_trash": "將項目移至垃圾桶",
+  "txt_move_item_to_trash_message": "此項目將移至垃圾桶。之後可從垃圾桶還原。",
+  "txt_delete_item_permanently": "永久刪除項目",
+  "txt_delete_item_permanently_message": "此項目將被永久刪除。此操作無法復原。",
+  "txt_move_selected_items_to_trash": "將所選項目移至垃圾桶",
+  "txt_move_selected_items_to_trash_message": "確定將所選的 {count} 個項目移至垃圾桶嗎？之後可從垃圾桶還原。",
+  "txt_move_to_tag": "移至標籤",
+  "txt_choose_destination_folder_item": "選擇要套用至此項目的標籤。",
+  "txt_email_breach_disabled": "此伺服器未啟用電子郵件外洩監控。",
+  "txt_recent_30_days": "最近（30 天）",
+  "txt_multiple_select": "多選",
+});
+
 export default zhTW;

@@ -1,10 +1,11 @@
 import type { RefObject } from 'preact';
 import { createPortal } from 'preact/compat';
-import { ArrowDown, ArrowUp, CheckCheck, Download, Paperclip, Plus, QrCode, RefreshCw, Star, StarOff, Trash2, Upload, X } from 'lucide-preact';
+import { ArrowDown, ArrowUp, CheckCheck, Dices, Download, Paperclip, Plus, QrCode, RefreshCw, Star, StarOff, Tag, Trash2, Upload, X } from 'lucide-preact';
 import jsQR from 'jsqr';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { useDialogLifecycle } from '@/components/ConfirmDialog';
+import ConfirmDialog, { useDialogLifecycle } from '@/components/ConfirmDialog';
 import { normalizeTotpInput } from '@/lib/crypto';
+import { defaultGeneratorSettings, generatePassphrase, generatePassword, normalizeGeneratorSettings, type GeneratorSettings } from '@/lib/password-generator';
 import type { Cipher, VaultDraft, VaultDraftField } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import { cardBrand } from '@/lib/import-format-shared';
@@ -68,6 +69,28 @@ interface WebsiteRowProps {
 }
 
 const TOTP_QR_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+
+// The password generator stores its settings in localStorage. The editor
+// reuses them so an inline generated password matches the user's generator
+// configuration instead of inventing a second set of defaults.
+const GENERATOR_SETTINGS_KEY = 'nodewarden.passwordGenerator.settings.v2';
+const GENERATOR_SETTINGS_LEGACY_KEY = 'nodewarden.passwordGenerator.settings.v1';
+
+function readGeneratorSettings(): GeneratorSettings {
+  try {
+    const raw = localStorage.getItem(GENERATOR_SETTINGS_KEY) || localStorage.getItem(GENERATOR_SETTINGS_LEGACY_KEY);
+    return normalizeGeneratorSettings(raw ? JSON.parse(raw) : null);
+  } catch {
+    return defaultGeneratorSettings;
+  }
+}
+
+function generateDraftPassword(): string {
+  const settings = readGeneratorSettings();
+  return settings.mode === 'passphrase'
+    ? generatePassphrase(settings.passphrase)
+    : generatePassword(settings.password);
+}
 
 function WebsiteRow(props: WebsiteRowProps) {
   const websiteMatchOptions = getWebsiteMatchOptions();
@@ -139,6 +162,9 @@ export default function VaultEditor(props: VaultEditorProps) {
   const cardBrandOptions = normalizedDraftCardBrand && !CARD_BRAND_OPTIONS.includes(normalizedDraftCardBrand as any)
     ? [...CARD_BRAND_OPTIONS, normalizedDraftCardBrand]
     : CARD_BRAND_OPTIONS;
+  // Where the item will be filed. The first tag mirrors the folder position,
+  // so the tags are the honest destination - it is not a separate vault.
+  const destinationLabel = props.draft.tags.length ? props.draft.tags.join(', ') : t('txt_no_folder');
   const totpQrVideoRef = useRef<HTMLVideoElement | null>(null);
   const totpQrFileRef = useRef<HTMLInputElement | null>(null);
   const totpQrStreamRef = useRef<MediaStream | null>(null);
@@ -148,6 +174,7 @@ export default function VaultEditor(props: VaultEditorProps) {
   const [totpQrStatus, setTotpQrStatus] = useState('');
   const [totpQrBusy, setTotpQrBusy] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [pendingGeneratedPassword, setPendingGeneratedPassword] = useState<string | null>(null);
 
   const commitTagInput = () => {
     const tag = tagInput.trim().slice(0, 64);
@@ -362,8 +389,32 @@ export default function VaultEditor(props: VaultEditorProps) {
     props.onReorderDraftLoginUri(fromIndex, toIndex);
   };
 
+  const requestGeneratedPassword = () => {
+    const generated = generateDraftPassword();
+    // A password the user typed by hand is never overwritten silently.
+    if (props.draft.loginPassword) {
+      setPendingGeneratedPassword(generated);
+      return;
+    }
+    props.onUpdateDraft({ loginPassword: generated });
+  };
+
   return (
     <>
+      <div className="editor-action-bar">
+        <div className="actions">
+          <button type="button" className="btn btn-primary" disabled={props.busy} onClick={props.onSave}>
+            <CheckCheck size={14} className="btn-icon" />
+            {t('txt_save')}
+          </button>
+          <button type="button" className="btn btn-secondary" disabled={props.busy} onClick={props.onCancel}>
+            <X size={14} className="btn-icon" />
+            {t('txt_cancel')}
+          </button>
+        </div>
+        {props.localError && <div className="local-error">{props.localError}</div>}
+      </div>
+
       <div className="card">
         <div className="section-head">
           <h3 className="detail-title">{props.isCreating ? t('txt_new_type_header', { type: cipherTypeLabel(props.draft.type) }) : t('txt_edit_type_header', { type: cipherTypeLabel(props.draft.type) })}</h3>
@@ -381,6 +432,10 @@ export default function VaultEditor(props: VaultEditorProps) {
             onInput={(e) => props.onUpdateDraft({ name: (e.currentTarget as HTMLInputElement).value })}
           />
         </label>
+        <div className="detail-folder-line">
+          <Tag size={13} aria-hidden="true" />
+          <span title={destinationLabel}>{destinationLabel}</span>
+        </div>
       </div>
 
       {props.draft.type === 1 && (
@@ -393,7 +448,19 @@ export default function VaultEditor(props: VaultEditorProps) {
             </label>
             <label className="field">
               <span>{t('txt_password')}</span>
-              <input className="input" value={props.draft.loginPassword} onInput={(e) => props.onUpdateDraft({ loginPassword: (e.currentTarget as HTMLInputElement).value })} />
+              <div className="input-action-wrap">
+                <input className="input" type="password" autoComplete="new-password" value={props.draft.loginPassword} onInput={(e) => props.onUpdateDraft({ loginPassword: (e.currentTarget as HTMLInputElement).value })} />
+                <button
+                  type="button"
+                  className="input-icon-btn"
+                  title={t('txt_generate_password')}
+                  aria-label={t('txt_generate_password')}
+                  disabled={props.busy}
+                  onClick={requestGeneratedPassword}
+                >
+                  <Dices size={18} className="btn-icon" />
+                </button>
+              </div>
             </label>
           </div>
           <label className="field">
@@ -415,26 +482,6 @@ export default function VaultEditor(props: VaultEditorProps) {
               </button>
             </div>
           </label>
-          <div className="section-head">
-            <h4>{t('txt_websites')}</h4>
-            <button type="button" className="btn btn-secondary small" onClick={addLoginUri}>
-              <Plus size={14} className="btn-icon" /> {t('txt_add_website')}
-            </button>
-          </div>
-          {props.draft.loginUris.map((uriEntry, index) => (
-            <WebsiteRow
-              key={`uri-${index}`}
-              uriEntry={uriEntry}
-              index={index}
-              canMoveUp={index > 0}
-              canMoveDown={index < props.draft.loginUris.length - 1}
-              canRemove={props.draft.loginUris.length > 1}
-              onUpdateUri={props.onUpdateDraftLoginUri}
-              onUpdateMatch={props.onUpdateDraftLoginUriMatch}
-              onMove={moveLoginUri}
-              onRemove={removeLoginUri}
-            />
-          ))}
           {props.draft.loginFido2Credentials.length > 0 && (
             <>
               <div className="section-head passkeys-section-head">
@@ -471,6 +518,31 @@ export default function VaultEditor(props: VaultEditorProps) {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {props.draft.type === 1 && (
+        <div className="card">
+          <div className="section-head">
+            <h4>{t('txt_websites')}</h4>
+            <button type="button" className="btn btn-secondary small" onClick={addLoginUri}>
+              <Plus size={14} className="btn-icon" /> {t('txt_add_website')}
+            </button>
+          </div>
+          {props.draft.loginUris.map((uriEntry, index) => (
+            <WebsiteRow
+              key={`uri-${index}`}
+              uriEntry={uriEntry}
+              index={index}
+              canMoveUp={index > 0}
+              canMoveDown={index < props.draft.loginUris.length - 1}
+              canRemove={props.draft.loginUris.length > 1}
+              onUpdateUri={props.onUpdateDraftLoginUri}
+              onUpdateMatch={props.onUpdateDraftLoginUriMatch}
+              onMove={moveLoginUri}
+              onRemove={removeLoginUri}
+            />
+          ))}
         </div>
       )}
 
@@ -844,25 +916,27 @@ export default function VaultEditor(props: VaultEditorProps) {
           ))}
       </div>
 
-      <div className="detail-actions">
-        <div className="actions">
-          <button type="button" className="btn btn-primary" disabled={props.busy} onClick={props.onSave}>
-            <CheckCheck size={14} className="btn-icon" />
-            {t('txt_confirm')}
-          </button>
-          <button type="button" className="btn btn-secondary" disabled={props.busy} onClick={props.onCancel}>
-            <X size={14} className="btn-icon" />
-            {t('txt_cancel')}
-          </button>
-        </div>
-        {!props.isCreating && props.selectedCipher && (
+      {!props.isCreating && props.selectedCipher && (
+        <div className="editor-delete-row">
           <button type="button" className="btn btn-danger" disabled={props.busy} onClick={props.onDeleteSelected}>
             <Trash2 size={14} className="btn-icon" />
             {t('txt_delete')}
           </button>
-        )}
-      </div>
-      {props.localError && <div className="local-error">{props.localError}</div>}
+        </div>
+      )}
+      <ConfirmDialog
+        open={pendingGeneratedPassword !== null}
+        title={t('txt_generate_password')}
+        message={t('txt_replace_password_message')}
+        variant="warning"
+        confirmText={t('txt_generate_password')}
+        cancelText={t('txt_cancel')}
+        onConfirm={() => {
+          if (pendingGeneratedPassword) props.onUpdateDraft({ loginPassword: pendingGeneratedPassword });
+          setPendingGeneratedPassword(null);
+        }}
+        onCancel={() => setPendingGeneratedPassword(null)}
+      />
       {totpQrOpen && typeof document !== 'undefined' ? createPortal((
         <div className="dialog-mask totp-scan-mask open" onClick={(event) => event.target === event.currentTarget && setTotpQrOpen(false)}>
           <section className="dialog-card totp-scan-dialog open" role="dialog" aria-modal="true" aria-label={t('txt_scan_totp_qr')}>

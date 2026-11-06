@@ -623,8 +623,6 @@ h4 {
 }
 
 .list-item {
-  min-height: 60px;
-  margin-bottom: 6px;
   border-radius: var(--radius-md);
   background: var(--panel);
   border-color: var(--line-soft);
@@ -746,7 +744,6 @@ h4 {
 .settings-module h3 {
   margin-bottom: 12px;
 }
-
 .sensitive-actions-module {
   padding: 0;
   background: transparent;
@@ -1117,7 +1114,6 @@ textarea {
   body {
     font-size: 14px;
   }
-
   .auth-page {
     padding: 12px;
   }
@@ -1277,7 +1273,6 @@ input[type='file'].input::file-selector-button {
 .invite-table {
   border-spacing: 0;
 }
-
 .invite-table th {
   height: 42px;
   padding: 9px 10px;
@@ -1547,17 +1542,7 @@ input[type='file'].input::file-selector-button {
   gap: 6px;
 }
 
-/* The search field owns the first row; the row actions sit on the second,
-   with the primary create action pushed to the far edge. */
-.list-head .search-input-wrap {
-  flex-basis: 100%;
-}
-
-.list-head .desktop-create-menu-wrap {
-  margin-left: auto;
-}
-
-.list-head .search-input {
+.vault-workspace-search .search-input {
   height: 34px;
   border-radius: var(--radius-md);
   background: var(--panel);
@@ -1565,7 +1550,7 @@ input[type='file'].input::file-selector-button {
   color: var(--text);
 }
 
-.list-head .search-input:focus {
+.vault-workspace-search .search-input:focus {
   border-color: color-mix(in srgb, var(--primary) 58%, var(--line));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
 }
@@ -1583,8 +1568,9 @@ input[type='file'].input::file-selector-button {
 
 /* ── item rows ── */
 .list-item {
-  min-height: 56px;
-  margin-bottom: 2px;
+  height: 68px;
+  min-height: 68px;
+  margin-bottom: 6px;
   padding: 8px 10px;
   border-radius: var(--radius-md);
   border-color: transparent;

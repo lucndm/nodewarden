@@ -1531,4 +1531,21 @@ Object.assign(fr, { "txt_password_security_show_all": "Tout afficher", "txt_pass
   "txt_usage_tracking_failed": "Mot de passe copié, mais la copie n’a pas pu être enregistrée",
 });
 
+Object.assign(fr, {
+  "txt_generate_password": "Générer un mot de passe",
+  "txt_replace_password_message": "Cet élément possède déjà un mot de passe. Le remplacer par celui généré ?",
+  "txt_move_to_trash": "Déplacer vers la corbeille",
+  "txt_move_item_to_trash": "Déplacer cet élément vers la corbeille",
+  "txt_move_item_to_trash_message": "Cet élément sera déplacé vers la corbeille. Vous pourrez le restaurer depuis la corbeille.",
+  "txt_delete_item_permanently": "Supprimer définitivement cet élément",
+  "txt_delete_item_permanently_message": "Cet élément sera supprimé définitivement. Cette action est irréversible.",
+  "txt_move_selected_items_to_trash": "Déplacer les éléments sélectionnés vers la corbeille",
+  "txt_move_selected_items_to_trash_message": "Déplacer {count} éléments sélectionnés vers la corbeille ? Vous pourrez les restaurer depuis la corbeille.",
+  "txt_move_to_tag": "Déplacer vers une étiquette",
+  "txt_choose_destination_folder_item": "Choisissez une étiquette pour cet élément.",
+  "txt_email_breach_disabled": "La surveillance des fuites d’e-mail n’est pas activée sur ce serveur.",
+  "txt_recent_30_days": "Récents (30 jours)",
+  "txt_multiple_select": "Sélection multiple",
+});
+
 export default fr;
