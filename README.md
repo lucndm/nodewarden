@@ -73,6 +73,8 @@ Password Health runs only when started manually. Before a check, risk totals are
 
 The colour system uses a violet interaction colour across both light and dark themes, with a navy-violet dark background, hairline borders and flat surfaces instead of heavy shadows. The filter rail marks the selected entry with a left edge marker, and the selected item in the list keeps a tinted fill.
 
+For the feature-gap inventory and phased plans P0–P6, see [NodeWarden × Proton Pass roadmap](ROADMAP.md). This is a plan, not a list of implemented features.
+
 ## Tested clients
 
 - ✅ Windows desktop
