@@ -33,6 +33,7 @@ import {
   getCreateTypeOptions,
   getDuplicateDetectionOptions,
   getVaultSortOptions,
+  sortTimeValue,
   VaultListIcon,
   type DuplicateDetectionMode,
   type SidebarFilter,
@@ -56,7 +57,10 @@ interface VaultListPanelProps {
   sortMenuOpen: boolean;
   duplicateMode: DuplicateDetectionMode;
   selectedCount: number;
-  totalCipherCount: number;
+  allFilteredCount: number;
+  recentOnly: boolean;
+  onRecentOnlyChange: (recent: boolean) => void;
+  groupedByDay: boolean;
   filteredCiphers: Cipher[];
   visibleCiphers: Cipher[];
   duplicateGroupIndexById: Map<string, number>;
@@ -83,6 +87,7 @@ interface VaultListPanelProps {
   onSelectDuplicates: () => void;
   onSelectUniqueFromDuplicates: () => void;
   onSelectAll: () => void;
+  onSelectOne: () => void;
   onToggleCreateMenu: () => void;
   onStartCreate: (type: number) => void;
   onBulkRestore: () => void;
@@ -102,6 +107,7 @@ interface CipherListItemProps {
   checked: boolean;
   duplicateGroupIndex: number | null;
   subtitle: string;
+  dayLabel?: string;
   onToggleSelected: (cipherId: string, checked: boolean) => void;
   onSelectCipher: (cipherId: string) => void;
 }
@@ -116,11 +122,20 @@ interface MobileFilterOption {
   onSelect: () => void;
 }
 
+function dateGroupLabel(cipher: Cipher, previous?: Cipher): string | undefined {
+  const time = sortTimeValue(cipher);
+  if (!time) return undefined;
+  const date = new Date(time);
+  const prior = previous && sortTimeValue(previous);
+  if (prior && new Date(prior).toDateString() === date.toDateString()) return undefined;
+  return date.toLocaleDateString(undefined, { dateStyle: 'medium' });
+}
+
 const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) {
   const duplicateGroupHue = props.duplicateGroupIndex === null ? null : (props.duplicateGroupIndex * 137.508) % 360;
   return (
     <div
-      className={`list-item ${props.selected ? 'active' : ''} ${duplicateGroupHue === null ? '' : 'duplicate-group-item'}`}
+      className={`list-item ${props.selected ? 'active' : ''} ${duplicateGroupHue === null ? '' : 'duplicate-group-item'} ${props.dayLabel ? 'day-boundary' : ''}`}
       style={duplicateGroupHue === null ? undefined : { '--duplicate-group-hue': `${duplicateGroupHue}deg` }}
       onClick={(event) => {
         const target = event.target as HTMLElement;
@@ -128,6 +143,7 @@ const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) 
         props.onSelectCipher(props.cipher.id);
       }}
     >
+      {props.dayLabel && <span className="list-day-label">{props.dayLabel}</span>}
       <input
         type="checkbox"
         className="row-check"
@@ -157,7 +173,6 @@ const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) 
     </div>
   );
 });
-
 export default function VaultListPanel(props: VaultListPanelProps) {
   const [mobileFilterOpen, setMobileFilterOpen] = useState<MobileFilterMenuKey | null>(null);
   const mobileFilterRef = useRef<HTMLDivElement | null>(null);
@@ -264,6 +279,29 @@ export default function VaultListPanel(props: VaultListPanelProps) {
     </div>
   );
 
+  const searchControl = (
+    <div className="search-input-wrap">
+      <input
+        className="search-input"
+        placeholder={t('txt_search_your_secure_vault')}
+        value={props.searchInput}
+        onInput={(e) => props.onSearchInput((e.currentTarget as HTMLInputElement).value)}
+        onCompositionStart={props.onSearchCompositionStart}
+        onCompositionEnd={(e) => props.onSearchCompositionEnd((e.currentTarget as HTMLInputElement).value)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Escape' || !props.searchInput) return;
+          e.preventDefault();
+          props.onClearSearch();
+        }}
+      />
+      {!!props.searchInput && (
+        <button type="button" className="search-clear-btn" aria-label={t('txt_clear_search')} title={t('txt_clear_search_esc')} onClick={props.onClearSearch}>
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
+
   const createMenu = (
     <div className={`create-menu-wrap ${props.isMobileLayout ? 'mobile-fab-wrap' : 'desktop-create-menu-wrap'}`} ref={props.createMenuRef}>
       <button
@@ -290,10 +328,20 @@ export default function VaultListPanel(props: VaultListPanelProps) {
       )}
     </div>
   );
-
   return (
     <section className="list-col">
+      {!props.isMobileLayout && typeof document !== 'undefined' && document.getElementById('vault-workspace-toolbar') && createPortal(
+        <div className="vault-workspace-search">{searchControl}{createMenu}</div>,
+        document.getElementById('vault-workspace-toolbar')!
+      )}
       <div className="list-toolbar-stack" ref={mobileFilterRef}>
+        {props.sidebarFilter.kind !== 'duplicates' && (
+          <div className="list-quick-filters">
+            <button type="button" className={props.recentOnly ? '' : 'active'} aria-pressed={!props.recentOnly} onClick={() => props.onRecentOnlyChange(false)}>{t('txt_all_items')} ({props.allFilteredCount})</button>
+            <button type="button" className={props.recentOnly ? 'active' : ''} aria-pressed={props.recentOnly} onClick={() => props.onRecentOnlyChange(true)}>{t('txt_recent_30_days')}</button>
+            {!props.selectedCount && !!props.filteredCiphers.length && <button type="button" className="list-select-multiple" onClick={props.onSelectOne}>{t('txt_multiple_select')}</button>}
+          </div>
+        )}
         <div className={`list-head ${props.selectedCount > 0 ? 'selection-mode' : ''}`}>
           {props.selectedCount > 0 ? (
             <>
@@ -325,8 +373,8 @@ export default function VaultListPanel(props: VaultListPanelProps) {
                   <FolderInput size={14} className="btn-icon" /> {t('txt_move')}
                 </button>
               )}
-              <button type="button" className="btn btn-danger small" disabled={props.busy} onClick={props.onOpenBulkDelete}>
-                <Trash2 size={14} className="btn-icon" /> {props.sidebarFilter.kind === 'trash' ? t('txt_delete_permanently') : t('txt_delete_selected')}
+              <button type="button" className={`btn ${props.sidebarFilter.kind === 'trash' ? 'btn-danger' : 'btn-secondary'} small`} disabled={props.busy} onClick={props.onOpenBulkDelete}>
+                <Trash2 size={14} className="btn-icon" /> {props.sidebarFilter.kind === 'trash' ? t('txt_delete_permanently') : t('txt_move_to_trash')}
               </button>
             </>
           ) : (
@@ -341,32 +389,7 @@ export default function VaultListPanel(props: VaultListPanelProps) {
                   </button>
                 </div>
               ) : (
-                <div className="search-input-wrap">
-                  <input
-                    className="search-input"
-                    placeholder={t('txt_search_items_count', { count: props.totalCipherCount })}
-                    value={props.searchInput}
-                    onInput={(e) => props.onSearchInput((e.currentTarget as HTMLInputElement).value)}
-                    onCompositionStart={props.onSearchCompositionStart}
-                    onCompositionEnd={(e) => props.onSearchCompositionEnd((e.currentTarget as HTMLInputElement).value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Escape' || !props.searchInput) return;
-                      e.preventDefault();
-                      props.onClearSearch();
-                    }}
-                  />
-                  {!!props.searchInput && (
-                    <button
-                      type="button"
-                      className="search-clear-btn"
-                      aria-label={t('txt_clear_search')}
-                      title={t('txt_clear_search_esc')}
-                      onClick={props.onClearSearch}
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
+                props.isMobileLayout ? searchControl : null
               )}
               {props.sidebarFilter.kind === 'duplicates' && !props.isMobileLayout && (
                 <div className="duplicate-mode-head-menu">
@@ -402,12 +425,10 @@ export default function VaultListPanel(props: VaultListPanelProps) {
               <button type="button" className="btn btn-secondary small list-icon-btn" disabled={props.busy || props.loading} onClick={props.onSyncVault}>
                 <RefreshCw size={14} className="btn-icon" /> {t('txt_sync_vault')}
               </button>
-              {props.sidebarFilter.kind === 'duplicates' && !props.isMobileLayout ? (
+              {props.sidebarFilter.kind === 'duplicates' && !props.isMobileLayout && (
                 <button type="button" className="btn btn-secondary small" onClick={props.onSelectUniqueFromDuplicates}>
                   <Check size={14} className="btn-icon" /> {t('txt_select_duplicate_items')}
                 </button>
-              ) : (
-                !props.isMobileLayout && props.sidebarFilter !== undefined && createMenu
               )}
             </>
           )}
@@ -435,9 +456,10 @@ export default function VaultListPanel(props: VaultListPanelProps) {
         )}
         {!!props.filteredCiphers.length && (
           <div style={{ paddingTop: `${props.virtualRange.padTop}px`, paddingBottom: `${props.virtualRange.padBottom}px` }}>
-            {props.visibleCiphers.map((cipher) => (
+            {props.visibleCiphers.map((cipher, index) => (
               <CipherListItem
                 key={cipher.id}
+                dayLabel={props.groupedByDay ? dateGroupLabel(cipher, props.filteredCiphers[index + props.virtualRange.start - 1]) : undefined}
                 cipher={cipher}
                 selected={props.selectedCipherId === cipher.id}
                 checked={!!props.selectedMap[cipher.id]}

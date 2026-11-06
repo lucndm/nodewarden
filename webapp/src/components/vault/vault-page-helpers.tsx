@@ -689,6 +689,14 @@ export function maskSecret(value: string): string {
   return '*'.repeat(Math.max(8, Math.min(24, value.length)));
 }
 
+// Deleting an active item only moves it to the trash; only an item that is
+// already in the trash is removed for good. The detail view and the
+// confirmation dialog share this rule so the two labels cannot disagree.
+export function vaultDeleteAction(cipher: Cipher | null): { permanent: boolean; labelKey: string } {
+  const permanent = !!cipher && isCipherDeleted(cipher);
+  return { permanent, labelKey: permanent ? 'txt_delete_permanently' : 'txt_move_to_trash' };
+}
+
 export function formatTotp(code: string): string {
   if (!code) return code;
   if (code.length === 5) return `${code.slice(0, 2)} ${code.slice(2)}`;

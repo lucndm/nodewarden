@@ -1531,4 +1531,21 @@ Object.assign(ru, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_usage_tracking_failed": "Пароль скопирован, но копирование не удалось записать",
 });
 
+Object.assign(ru, {
+  "txt_generate_password": "Создать пароль",
+  "txt_replace_password_message": "У этого элемента уже есть пароль. Заменить его созданным?",
+  "txt_move_to_trash": "Переместить в корзину",
+  "txt_move_item_to_trash": "Переместить элемент в корзину",
+  "txt_move_item_to_trash_message": "Элемент будет перемещён в корзину. Его можно восстановить оттуда.",
+  "txt_delete_item_permanently": "Удалить элемент навсегда",
+  "txt_delete_item_permanently_message": "Элемент будет удалён навсегда. Это действие нельзя отменить.",
+  "txt_move_selected_items_to_trash": "Переместить выбранные элементы в корзину",
+  "txt_move_selected_items_to_trash_message": "Переместить {count} выбранных элементов в корзину? Их можно восстановить оттуда.",
+  "txt_move_to_tag": "Переместить к тегу",
+  "txt_choose_destination_folder_item": "Выберите тег для этого элемента.",
+  "txt_email_breach_disabled": "Мониторинг утечек email не включён на этом сервере.",
+  "txt_recent_30_days": "Недавние (30 дней)",
+  "txt_multiple_select": "Выбрать несколько",
+});
+
 export default ru;

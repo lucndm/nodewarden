@@ -3,6 +3,15 @@
   grid-template-columns: minmax(0, 36%) minmax(0, 1fr);
 }
 
+@media (min-width: 1181px) {
+  .vault-grid { grid-template-rows: auto minmax(0, 1fr); }
+  #vault-workspace-toolbar { grid-column: 1 / -1; min-width: 0; }
+  .vault-workspace-search { display: flex; align-items: center; gap: 12px; padding: 0 4px 4px; }
+  .vault-workspace-search .search-input-wrap { flex: 1; }
+  .vault-workspace-search .search-input { height: 38px; box-shadow: none; }
+  .vault-workspace-search .desktop-create-menu-wrap { flex: none; }
+}
+
 .sidebar,
 .list-panel,
 .card,
@@ -163,7 +172,6 @@
 .tag-chip-remove:hover {
   opacity: 1;
 }
-
 .tag-chip-static {
   padding: 1px 7px;
 }
@@ -289,6 +297,11 @@ select.input.duplicate-mode-toolbar-select {
 .duplicate-mode-toolbar-select {
   @apply w-auto max-w-[170px] shrink-0;
 }
+.list-quick-filters { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-x: auto; padding: 1px 2px 7px; }
+.list-quick-filters button { flex: none; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; padding: 5px 9px; font-size: 12px; font-weight: 600; }
+.list-quick-filters button.active { color: var(--primary-strong); background: rgba(109, 74, 255, 0.1); }
+.list-quick-filters .list-select-multiple { margin-left: auto; }
+.list-quick-filters button:focus-visible { outline: 2px solid var(--primary-strong); outline-offset: 2px; }
 
 .list-head {
   @apply mb-1.5 flex flex-wrap items-center gap-2;
@@ -338,7 +351,6 @@ select.input.duplicate-mode-toolbar-select {
 .mobile-vault-filter-control {
   @apply relative min-w-0;
 }
-
 .mobile-vault-filter-trigger {
   @apply flex h-[34px] w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[10px] border px-2.5 py-0 text-left text-[13px] font-semibold;
   background: var(--panel);
@@ -511,6 +523,9 @@ select.input.duplicate-mode-toolbar-select {
   overflow-anchor: none;
 }
 
+.list-item.day-boundary { padding-top: 18px; padding-bottom: 4px; }
+.list-day-label { position: absolute; top: 2px; left: 12px; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 700; color: var(--muted); line-height: 14px; pointer-events: none; }
+
 .list-item.duplicate-group-item {
   background: hsl(var(--duplicate-group-hue) 84% 94%);
   border-color: hsl(var(--duplicate-group-hue) 42% 78%);
@@ -581,7 +596,6 @@ select.input.duplicate-mode-toolbar-select {
 .detail-unlock-actions {
   @apply mt-2.5;
 }
-
 .archive-badge {
   @apply mt-2 w-fit;
 }
@@ -877,6 +891,11 @@ select.input.duplicate-mode-toolbar-select {
   animation: surface-enter 280ms var(--ease-out-soft) both;
 }
 
+.detail-switch-stage > .card:has(.sort-menu[role="menu"]) {
+  position: relative;
+  z-index: 1;
+}
+
 .card h4 {
   @apply mb-3 mt-0;
 }
@@ -922,6 +941,17 @@ select.input.duplicate-mode-toolbar-select {
 
 .kv-line > span {
   color: #64748b;
+}
+
+/* A masked vault value keeps its reveal and copy buttons next to it. */
+.kv-line > .kv-line-secret {
+  @apply inline-flex min-w-0 items-center justify-end gap-2;
+  color: var(--text);
+}
+
+.kv-line-secret > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .kv-row {
@@ -984,7 +1014,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .password-history-copy {
-  @apply absolute right-3 top-3;
+  @apply absolute right-3 top-3 flex items-center gap-2;
 }
 
 .password-history-copy-btn {

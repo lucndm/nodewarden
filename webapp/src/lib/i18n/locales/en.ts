@@ -1610,4 +1610,21 @@ Object.assign(en, {
   "txt_usage_tracking_failed": "Password copied, but the copy could not be tracked",
 });
 
+Object.assign(en, {
+  "txt_generate_password": "Generate password",
+  "txt_replace_password_message": "This item already has a password. Replace it with the generated one?",
+  "txt_move_to_trash": "Move to Trash",
+  "txt_move_item_to_trash": "Move Item to Trash",
+  "txt_move_item_to_trash_message": "This item will be moved to Trash. You can restore it later from the Trash view.",
+  "txt_delete_item_permanently": "Delete Item Permanently",
+  "txt_delete_item_permanently_message": "This item will be permanently deleted. This action cannot be undone.",
+  "txt_move_selected_items_to_trash": "Move Selected Items to Trash",
+  "txt_move_selected_items_to_trash_message": "Are you sure you want to move {count} selected items to Trash? You can restore them later from the Trash view.",
+  "txt_move_to_tag": "Move to Tag",
+  "txt_choose_destination_folder_item": "Choose a tag to apply to this item.",
+  "txt_email_breach_disabled": "Email breach monitoring is not enabled on this server.",
+  "txt_recent_30_days": "Recent (30 days)",
+  "txt_multiple_select": "Select multiple",
+});
+
 export default en;

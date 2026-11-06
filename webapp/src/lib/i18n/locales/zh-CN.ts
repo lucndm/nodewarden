@@ -1560,4 +1560,21 @@ Object.assign(zhCN, {
   "txt_usage_tracking_failed": "密码已复制，但未能记录本次复制",
 });
 
+Object.assign(zhCN, {
+  "txt_generate_password": "生成密码",
+  "txt_replace_password_message": "此项目已有密码。要用生成的密码替换吗？",
+  "txt_move_to_trash": "移至回收站",
+  "txt_move_item_to_trash": "将项目移至回收站",
+  "txt_move_item_to_trash_message": "此项目将移至回收站。之后可从回收站恢复。",
+  "txt_delete_item_permanently": "永久删除项目",
+  "txt_delete_item_permanently_message": "此项目将被永久删除。此操作无法撤销。",
+  "txt_move_selected_items_to_trash": "将所选项目移至回收站",
+  "txt_move_selected_items_to_trash_message": "确定将所选的 {count} 个项目移至回收站吗？之后可从回收站恢复。",
+  "txt_move_to_tag": "移动至标签",
+  "txt_choose_destination_folder_item": "选择要应用于此项目的标签。",
+  "txt_email_breach_disabled": "此服务器未启用邮箱泄露监控。",
+  "txt_recent_30_days": "最近（30 天）",
+  "txt_multiple_select": "多选",
+});
+
 export default zhCN;

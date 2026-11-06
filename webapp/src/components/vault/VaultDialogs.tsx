@@ -1,6 +1,6 @@
 import ConfirmDialog from '@/components/ConfirmDialog';
-import type { CustomFieldType, Folder } from '@/lib/types';
-import { getFieldTypeOptions, toBooleanFieldValue } from '@/components/vault/vault-page-helpers';
+import type { Cipher, CustomFieldType, Folder } from '@/lib/types';
+import { getFieldTypeOptions, toBooleanFieldValue, vaultDeleteAction } from '@/components/vault/vault-page-helpers';
 import { t } from '@/lib/i18n';
 
 interface VaultDialogsProps {
@@ -11,7 +11,7 @@ interface VaultDialogsProps {
   fieldValue: string;
   archiveConfirmOpen: boolean;
   bulkArchiveOpen: boolean;
-  pendingDeleteOpen: boolean;
+  pendingDelete: Cipher | null;
   bulkDeleteOpen: boolean;
   sidebarTrashMode: boolean;
   selectedCount: number;
@@ -62,6 +62,8 @@ interface VaultDialogsProps {
 
 export default function VaultDialogs(props: VaultDialogsProps) {
   const fieldTypeOptions = getFieldTypeOptions();
+  // A trashed item is removed for good, an active item only goes to the trash.
+  const { permanent: permanentDelete } = vaultDeleteAction(props.pendingDelete);
   return (
     <>
       <ConfirmDialog
@@ -133,10 +135,12 @@ export default function VaultDialogs(props: VaultDialogsProps) {
       />
 
       <ConfirmDialog
-        open={props.pendingDeleteOpen}
-        title={t('txt_delete_item')}
-        message={t('txt_are_you_sure_you_want_to_delete_this_item')}
-        danger
+        open={!!props.pendingDelete}
+        title={permanentDelete ? t('txt_delete_item_permanently') : t('txt_move_item_to_trash')}
+        message={permanentDelete ? t('txt_delete_item_permanently_message') : t('txt_move_item_to_trash_message')}
+        confirmText={permanentDelete ? t('txt_delete_permanently') : t('txt_move_to_trash')}
+        cancelText={t('txt_cancel')}
+        danger={permanentDelete}
         confirmDisabled={props.busy}
         cancelDisabled={props.busy}
         onConfirm={props.onConfirmDelete}
@@ -145,13 +149,15 @@ export default function VaultDialogs(props: VaultDialogsProps) {
 
       <ConfirmDialog
         open={props.bulkDeleteOpen}
-        title={props.sidebarTrashMode ? t('txt_delete_selected_items_permanently') : t('txt_delete_selected_items')}
+        title={props.sidebarTrashMode ? t('txt_delete_selected_items_permanently') : t('txt_move_selected_items_to_trash')}
         message={
           props.sidebarTrashMode
             ? t('txt_are_you_sure_you_want_to_delete_count_selected_items_permanently', { count: props.selectedCount })
-            : t('txt_are_you_sure_you_want_to_delete_count_selected_items', { count: props.selectedCount })
+            : t('txt_move_selected_items_to_trash_message', { count: props.selectedCount })
         }
-        danger
+        confirmText={props.sidebarTrashMode ? t('txt_delete_permanently') : t('txt_move_to_trash')}
+        cancelText={t('txt_cancel')}
+        danger={props.sidebarTrashMode}
         confirmDisabled={props.busy}
         cancelDisabled={props.busy}
         onConfirm={props.onConfirmBulkDelete}
@@ -160,8 +166,8 @@ export default function VaultDialogs(props: VaultDialogsProps) {
 
       <ConfirmDialog
         open={props.moveOpen}
-        title={t('txt_move_selected_items')}
-        message={t('txt_choose_destination_folder')}
+        title={props.selectedCount === 1 ? t('txt_move_to_tag') : t('txt_move_selected_items')}
+        message={props.selectedCount === 1 ? t('txt_choose_destination_folder_item') : t('txt_choose_destination_folder')}
         confirmText={t('txt_move')}
         cancelText={t('txt_cancel')}
         confirmDisabled={props.busy}

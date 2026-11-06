@@ -285,3 +285,24 @@ input[type='file'].input::file-selector-button:hover {
   @apply cursor-not-allowed no-underline;
   color: var(--muted);
 }
+
+/* Editor toolbar: Save/Cancel stay reachable while the form scrolls. */
+.editor-action-bar {
+  @apply sticky top-0 z-20 mb-2.5 flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-3 py-2;
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-action-bar .local-error {
+  @apply w-full;
+}
+
+.editor-delete-row {
+  @apply my-3 flex items-center justify-end;
+}
+
+/* Keep the focused field clear of the sticky toolbar. */
+.detail-col:has(.editor-action-bar) {
+  scroll-padding-top: 76px;
+}

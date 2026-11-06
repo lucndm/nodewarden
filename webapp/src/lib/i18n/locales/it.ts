@@ -1531,4 +1531,21 @@ Object.assign(it, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_usage_tracking_failed": "Password copiata, ma non è stato possibile registrare la copia",
 });
 
+Object.assign(it, {
+  "txt_generate_password": "Genera password",
+  "txt_replace_password_message": "Questo elemento ha già una password. Sostituirla con quella generata?",
+  "txt_move_to_trash": "Sposta nel cestino",
+  "txt_move_item_to_trash": "Sposta elemento nel cestino",
+  "txt_move_item_to_trash_message": "Questo elemento verrà spostato nel cestino. Puoi ripristinarlo da lì.",
+  "txt_delete_item_permanently": "Elimina elemento definitivamente",
+  "txt_delete_item_permanently_message": "Questo elemento verrà eliminato definitivamente. Questa azione non può essere annullata.",
+  "txt_move_selected_items_to_trash": "Sposta elementi selezionati nel cestino",
+  "txt_move_selected_items_to_trash_message": "Spostare {count} elementi selezionati nel cestino? Puoi ripristinarli da lì.",
+  "txt_move_to_tag": "Sposta in etichetta",
+  "txt_choose_destination_folder_item": "Scegli un’etichetta per questo elemento.",
+  "txt_email_breach_disabled": "Il monitoraggio delle violazioni e-mail non è attivato su questo server.",
+  "txt_recent_30_days": "Recenti (30 giorni)",
+  "txt_multiple_select": "Seleziona più elementi",
+});
+
 export default it;

@@ -1,6 +1,6 @@
 import { createPortal } from 'preact/compat';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AlertTriangle, Archive, CalendarPlus, Clipboard, Download, Eye, EyeOff, ExternalLink, Globe, KeyRound, List, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, Tag, Trash2, User, X } from 'lucide-preact';
+import { AlertTriangle, Archive, CalendarPlus, Clipboard, Download, Eye, EyeOff, ExternalLink, Globe, KeyRound, List, MoreVertical, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, Tag, Trash2, User, X } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
@@ -21,6 +21,7 @@ import {
   openUri,
   parseFieldType,
   toBooleanFieldValue,
+  vaultDeleteAction,
 } from '@/components/vault/vault-page-helpers';
 
 function isAbortError(error: unknown): boolean {
@@ -47,6 +48,7 @@ interface VaultDetailViewProps {
   onDownloadAttachment: (cipher: Cipher, attachmentId: string) => void;
   onStartEdit: () => void;
   onDelete: (cipher: Cipher) => void;
+  onMoveItem?: (cipher: Cipher) => void;
   onRestore: (cipher: Cipher) => void | Promise<void>;
   onArchive: (cipher: Cipher) => void | Promise<void>;
   onUnarchive: (cipher: Cipher) => void | Promise<void>;
@@ -62,7 +64,14 @@ function PasswordHistoryDialog(props: {
   entries: Array<{ password: string; lastUsedDate: string | null }>;
   onClose: () => void;
 }) {
+  const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   useDialogLifecycle(props.open, props.onClose);
+
+  // Old passwords stay masked until the user asks for one, and the mask comes
+  // back every time the dialog closes or the item changes.
+  useEffect(() => {
+    setRevealed({});
+  }, [props.open, props.entries]);
 
   if (!props.open || typeof document === 'undefined') return null;
   return createPortal(
@@ -75,17 +84,36 @@ function PasswordHistoryDialog(props: {
           </button>
         </div>
         <div className="password-history-list">
-          {props.entries.map((entry, index) => (
-            <div key={`password-history-${index}-${entry.lastUsedDate || 'none'}`} className="password-history-item">
-              <div className="password-history-copy">
-                <button type="button" className="btn btn-secondary small password-history-copy-btn" onClick={() => copyToClipboard(entry.password)}>
-                  <Clipboard size={16} />
-                </button>
+          {props.entries.map((entry, index) => {
+            const isRevealed = !!revealed[index];
+            const revealLabel = isRevealed ? t('txt_hide') : t('txt_reveal');
+            return (
+              <div key={`password-history-${index}-${entry.lastUsedDate || 'none'}`} className="password-history-item">
+                <div className="password-history-copy">
+                  <button
+                    type="button"
+                    className="btn btn-secondary small password-history-copy-btn"
+                    aria-label={`${t('txt_copy')} ${t('txt_password')}`}
+                    title={t('txt_copy')}
+                    onClick={() => void copyToClipboard(entry.password)}
+                  >
+                    <Clipboard size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary small password-history-copy-btn"
+                    aria-label={`${revealLabel} ${t('txt_password')}`}
+                    title={revealLabel}
+                    onClick={() => setRevealed((prev) => ({ ...prev, [index]: !prev[index] }))}
+                  >
+                    {isRevealed ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <div className="password-history-value">{isRevealed ? entry.password : maskSecret(entry.password)}</div>
+                <div className="password-history-time">{formatHistoryTime(entry.lastUsedDate)}</div>
               </div>
-              <div className="password-history-value">{entry.password}</div>
-              <div className="password-history-time">{formatHistoryTime(entry.lastUsedDate)}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <button type="button" className="btn btn-primary dialog-btn" onClick={props.onClose}>
           {t('txt_close')}
@@ -99,13 +127,17 @@ function PasswordHistoryDialog(props: {
 export default function VaultDetailView(props: VaultDetailViewProps) {
   const selectedAttachments = Array.isArray(props.selectedCipher.attachments) ? props.selectedCipher.attachments : [];
   const [showSshPrivateKey, setShowSshPrivateKey] = useState(false);
+  const [revealedFields, setRevealedFields] = useState<Record<string, boolean>>({});
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement | null>(null);
   const [passwordHistoryOpen, setPasswordHistoryOpen] = useState(false);
   const [breachResult, setBreachResult] = useState<PasswordBreachResult | null>(null);
   const [checkingBreach, setCheckingBreach] = useState(false);
   const breachControllerRef = useRef<AbortController | null>(null);
   const isArchived = !!(props.selectedCipher.archivedDate || (props.selectedCipher as { archivedAt?: string | null }).archivedAt);
   const isDeleted = isCipherDeleted(props.selectedCipher);
-  const deleteLabel = isDeleted ? t('txt_delete_permanently') : t('txt_delete');
+  const repromptLocked = Number(props.selectedCipher.reprompt || 0) === 1 && props.repromptApprovedCipherId !== props.selectedCipher.id;
+  const deleteLabel = t(vaultDeleteAction(props.selectedCipher).labelKey);
   const passwordHistoryEntries = useMemo(
     () =>
       (props.selectedCipher.passwordHistory || [])
@@ -120,6 +152,8 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     breachControllerRef.current?.abort();
     breachControllerRef.current = null;
     setShowSshPrivateKey(false);
+    setRevealedFields({});
+    setOverflowOpen(false);
     setPasswordHistoryOpen(false);
     setBreachResult(null);
     setCheckingBreach(false);
@@ -127,7 +161,26 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
       breachControllerRef.current?.abort();
       breachControllerRef.current = null;
     };
-  }, [props.selectedCipher.id, props.selectedCipher.login?.decPassword]);
+  }, [props.selectedCipher.id, props.selectedCipher.login?.decPassword, repromptLocked]);
+
+  // The overflow menu closes on outside click and on Escape, like the other
+  // menus in the vault.
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const onPointerDown = (event: Event) => {
+      const target = event.target as Node | null;
+      if (overflowRef.current && target && !overflowRef.current.contains(target)) setOverflowOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOverflowOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [overflowOpen]);
   const checkBreach = async () => {
     const password = String(props.selectedCipher.login?.decPassword || '');
     if (!password) return;
@@ -165,9 +218,43 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     if (copied) props.onPasswordCopied(props.selectedCipher.id);
   };
 
+  // Secrets stay masked until the user reveals that one field. The masked text
+  // never carries the secret in a title or an aria label.
+  const renderSecretLine = (key: string, label: string, value: string) => {
+    const secret = value || '';
+    const isRevealed = !!revealedFields[key];
+    const revealLabel = isRevealed ? t('txt_hide') : t('txt_reveal');
+    return (
+      <div className="kv-line">
+        <span>{label}</span>
+        <span className="kv-line-secret">
+          <strong>{isRevealed ? secret : maskSecret(secret)}</strong>
+          <button
+            type="button"
+            className="btn btn-secondary small"
+            aria-label={`${revealLabel} ${label}`}
+            title={revealLabel}
+            onClick={() => setRevealedFields((prev) => ({ ...prev, [key]: !prev[key] }))}
+          >
+            {isRevealed ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary small"
+            aria-label={`${t('txt_copy')} ${label}`}
+            title={t('txt_copy')}
+            onClick={() => void copyToClipboard(secret)}
+          >
+            <Clipboard size={14} className="btn-icon" />
+          </button>
+        </span>
+      </div>
+    );
+  };
+
   return (
     <>
-      {Number(props.selectedCipher.reprompt || 0) === 1 && props.repromptApprovedCipherId !== props.selectedCipher.id && (
+      {repromptLocked && (
         <div className="card">
           <h4>{t('txt_master_password_reprompt_2')}</h4>
           <div className="detail-sub">{t('txt_this_item_requires_master_password_every_time_before_viewing_details')}</div>
@@ -178,7 +265,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           </div>
         </div>
       )}
-      {(Number(props.selectedCipher.reprompt || 0) !== 1 || props.repromptApprovedCipherId === props.selectedCipher.id) && (
+      {!repromptLocked && (
         <>
           <div className="card">
             <div className="detail-title-row">
@@ -208,36 +295,65 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                     <button type="button" className="btn btn-secondary small" onClick={props.onStartEdit}>
                       <Pencil size={14} className="btn-icon" /> {t('txt_edit')}
                     </button>
-                    {isArchived ? (
+                    <div className="sort-menu-wrap" ref={overflowRef}>
                       <button
                         type="button"
                         className="detail-icon-action"
-                        title={t('txt_unarchive')}
-                        aria-label={t('txt_unarchive')}
-                        onClick={() => void props.onUnarchive(props.selectedCipher)}
+                        aria-haspopup="menu"
+                        aria-expanded={overflowOpen}
+                        aria-label={t('txt_actions')}
+                        title={t('txt_actions')}
+                        onClick={() => setOverflowOpen((open) => !open)}
                       >
-                        <RotateCcw size={16} />
+                        <MoreVertical size={16} />
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="detail-icon-action"
-                        title={t('txt_archive')}
-                        aria-label={t('txt_archive')}
-                        onClick={() => void props.onArchive(props.selectedCipher)}
-                      >
-                        <Archive size={16} />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="detail-icon-action danger"
-                      title={deleteLabel}
-                      aria-label={deleteLabel}
-                      onClick={() => props.onDelete(props.selectedCipher)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                      {overflowOpen && (
+                        <div className="sort-menu" role="menu">
+                          {props.onMoveItem && (
+                            <button
+                              type="button"
+                              className="sort-menu-item"
+                              role="menuitem"
+                              onClick={() => {
+                                setOverflowOpen(false);
+                                props.onMoveItem?.(props.selectedCipher);
+                              }}
+                            >
+                              <span>
+                                <Tag size={14} /> {t('txt_move_to_tag')}
+                              </span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="sort-menu-item"
+                            role="menuitem"
+                            onClick={() => {
+                              setOverflowOpen(false);
+                              if (isArchived) void props.onUnarchive(props.selectedCipher);
+                              else void props.onArchive(props.selectedCipher);
+                            }}
+                          >
+                            <span>
+                              {isArchived ? <RotateCcw size={14} /> : <Archive size={14} />} {isArchived ? t('txt_unarchive') : t('txt_archive')}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="sort-menu-item"
+                            role="menuitem"
+                            onClick={() => {
+                              setOverflowOpen(false);
+                              props.onDelete(props.selectedCipher);
+                            }}
+                          >
+                            <span>
+                              <Trash2 size={14} /> {t('txt_move_to_trash')}
+                            </span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -393,7 +509,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
             <div className="card">
               <h4>{t('txt_card_details')}</h4>
               <div className="kv-line"><span>{t('txt_cardholder_name')}</span><strong>{props.selectedCipher.card.decCardholderName || ''}</strong></div>
-              <div className="kv-line"><span>{t('txt_number')}</span><strong>{props.selectedCipher.card.decNumber || ''}</strong></div>
+              {renderSecretLine('card-number', t('txt_number'), props.selectedCipher.card.decNumber || '')}
               <div className="kv-line">
                 <span>{t('txt_brand')}</span>
                 <strong className="card-brand-detail">
@@ -402,7 +518,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                 </strong>
               </div>
               <div className="kv-line"><span>{t('txt_expiry')}</span><strong>{`${props.selectedCipher.card.decExpMonth || ''}/${props.selectedCipher.card.decExpYear || ''}`}</strong></div>
-              <div className="kv-line"><span>{t('txt_security_code')}</span><strong>{props.selectedCipher.card.decCode || ''}</strong></div>
+              {renderSecretLine('card-code', t('txt_security_code'), props.selectedCipher.card.decCode || '')}
             </div>
           )}
 
@@ -491,12 +607,12 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
               <div className="kv-line"><span>{t('txt_bank_name')}</span><strong>{props.selectedCipher.bankAccount.decBankName || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_name_on_account')}</span><strong>{props.selectedCipher.bankAccount.decNameOnAccount || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_account_type')}</span><strong>{props.selectedCipher.bankAccount.decAccountType || ''}</strong></div>
-              <div className="kv-line"><span>{t('txt_account_number')}</span><strong>{props.selectedCipher.bankAccount.decAccountNumber || ''}</strong></div>
-              <div className="kv-line"><span>{t('txt_routing_number')}</span><strong>{props.selectedCipher.bankAccount.decRoutingNumber || ''}</strong></div>
-              <div className="kv-line"><span>{t('txt_branch_number')}</span><strong>{props.selectedCipher.bankAccount.decBranchNumber || ''}</strong></div>
-              <div className="kv-line"><span>{t('txt_pin')}</span><strong>{props.selectedCipher.bankAccount.decPin || ''}</strong></div>
-              <div className="kv-line"><span>{t('txt_swift_code')}</span><strong>{props.selectedCipher.bankAccount.decSwiftCode || ''}</strong></div>
-              <div className="kv-line"><span>{t('txt_iban')}</span><strong>{props.selectedCipher.bankAccount.decIban || ''}</strong></div>
+              {renderSecretLine('bank-account-number', t('txt_account_number'), props.selectedCipher.bankAccount.decAccountNumber || '')}
+              {renderSecretLine('bank-routing-number', t('txt_routing_number'), props.selectedCipher.bankAccount.decRoutingNumber || '')}
+              {renderSecretLine('bank-branch-number', t('txt_branch_number'), props.selectedCipher.bankAccount.decBranchNumber || '')}
+              {renderSecretLine('bank-pin', t('txt_pin'), props.selectedCipher.bankAccount.decPin || '')}
+              {renderSecretLine('bank-swift-code', t('txt_swift_code'), props.selectedCipher.bankAccount.decSwiftCode || '')}
+              {renderSecretLine('bank-iban', t('txt_iban'), props.selectedCipher.bankAccount.decIban || '')}
               <div className="kv-line"><span>{t('txt_bank_contact_phone')}</span><strong>{props.selectedCipher.bankAccount.decBankContactPhone || ''}</strong></div>
             </div>
           )}
@@ -693,7 +809,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
         </>
       )}
       <PasswordHistoryDialog
-        open={passwordHistoryOpen}
+        open={passwordHistoryOpen && !repromptLocked}
         entries={passwordHistoryEntries}
         onClose={() => setPasswordHistoryOpen(false)}
       />

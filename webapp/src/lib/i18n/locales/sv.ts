@@ -1531,4 +1531,21 @@ Object.assign(sv, { "txt_password_security_show_all": "Show all", "txt_password_
   "txt_usage_tracking_failed": "Lösenordet kopierades, men kopieringen kunde inte registreras",
 });
 
+Object.assign(sv, {
+  "txt_generate_password": "Generera lösenord",
+  "txt_replace_password_message": "Objektet har redan ett lösenord. Ersätta det med det genererade?",
+  "txt_move_to_trash": "Flytta till papperskorgen",
+  "txt_move_item_to_trash": "Flytta objekt till papperskorgen",
+  "txt_move_item_to_trash_message": "Objektet flyttas till papperskorgen. Du kan återställa det därifrån.",
+  "txt_delete_item_permanently": "Ta bort objekt permanent",
+  "txt_delete_item_permanently_message": "Objektet tas bort permanent. Detta kan inte ångras.",
+  "txt_move_selected_items_to_trash": "Flytta valda objekt till papperskorgen",
+  "txt_move_selected_items_to_trash_message": "Flytta {count} valda objekt till papperskorgen? Du kan återställa dem därifrån.",
+  "txt_move_to_tag": "Flytta till tagg",
+  "txt_choose_destination_folder_item": "Välj en tagg för objektet.",
+  "txt_email_breach_disabled": "Övervakning av e-postläckor är inte aktiverad på den här servern.",
+  "txt_recent_30_days": "Senaste (30 dagar)",
+  "txt_multiple_select": "Välj flera",
+});
+
 export default sv;

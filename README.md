@@ -67,7 +67,9 @@ The Web Vault follows Proton Pass’s layout and visual language. The desktop va
 
 Login and autofill fields remain in separate cards without visible group headings; screen readers retain the group names.
 
-Searching from a filtered list switches to All Items so matches across the active vault are visible. Create and edit show the title and main fields first, then Notes; Type and Tags follow in a metadata card. Creating an item focuses its title.
+Desktop search and Create share the workspace toolbar; mobile keeps search in the list and a floating Create button. Searching switches to All Items. The list offers a 30-day Recent filter, multiple selection, and day markers when sorted by last edit. Login editing puts Save/Cancel at the top, keeps Websites separate, and generates passwords inline using saved generator settings; replacing a password asks first. Card, bank-account, and password-history secrets are masked until individually revealed. Moving an active item to Trash is recoverable; only deleting an item already in Trash is permanent. Tags organize items; they are not separate vaults.
+
+Password Health runs only when started manually. Before a check, risk totals are unknown; incomplete breach lookups remain unchecked rather than safe. The report stays in browser memory across in-app navigation and clears on refresh, vault changes, or lock/logout. Email-breach monitoring reports disabled and failed states explicitly; it does not infer whether a website supports two-factor authentication.
 
 The colour system uses a violet interaction colour across both light and dark themes, with a navy-violet dark background, hairline borders and flat surfaces instead of heavy shadows. The filter rail marks the selected entry with a left edge marker, and the selected item in the list keeps a tinted fill.
 
@@ -122,7 +124,6 @@ A new client is often just a new phone or a new browser, and a lockout is often 
 > Web SSO signs in with a freshly generated client identifier every time, so a successful web SSO login is reported as a new client (subject to the cooldown below).
 
 **What a message contains**
-
 - the hostname the request was served on (your Worker or custom domain)
 - the event kind
 - the account ID, first 8 characters only, or `unknown` when no account could be resolved
@@ -249,4 +250,3 @@ LGPL-3.0 License
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=shuaiplus/NodeWarden&type=timeline&legend=top-left&sealed_token=ck0AMqR8EFMjJ6tMbnGDHT5QwMpO85IUuN7i8e82zRRNPtjoLsAAFwVzxmSZwaid97wLUwy56EEiVE9M-OY0cf16bQKBrU9GaauFoOFXGq-vMqcOyk0tIc4b3o1ZGfDw9IH8o6NUxC125TJkjKSLn9fxhFUUeNr1f1El0UcAUcjsMPl_LX80qQrlvQqp" />
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=shuaiplus/NodeWarden&type=timeline&legend=top-left&sealed_token=ck0AMqR8EFMjJ6tMbnGDHT5QwMpO85IUuN7i8e82zRRNPtjoLsAAFwVzxmSZwaid97wLUwy56EEiVE9M-OY0cf16bQKBrU9GaauFoOFXGq-vMqcOyk0tIc4b3o1ZGfDw9IH8o6NUxC125TJkjKSLn9fxhFUUeNr1f1El0UcAUcjsMPl_LX80qQrlvQqp" />
  </picture>
-</a>
