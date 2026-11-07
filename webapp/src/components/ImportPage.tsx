@@ -1,11 +1,22 @@
-﻿import { useState } from 'preact/hooks';
+﻿import { useEffect, useState } from 'preact/hooks';
 import { argon2idAsync } from '@noble/hashes/argon2.js';
 import { createPortal } from 'preact/compat';
 import { strFromU8, unzipSync, type UnzipFileInfo } from 'fflate';
 import { BlobReader, Uint8ArrayWriter, ZipReader, configure as configureZipJs } from '@zip.js/zip.js';
 import { Download, FileUp } from 'lucide-preact';
 import ConfirmDialog, { useDialogLifecycle } from '@/components/ConfirmDialog';
-import type { CiphersImportPayload } from '@/lib/api/vault';
+import { getFolderById, updateFolder, type CiphersImportPayload } from '@/lib/api/vault';
+import type { AuthedFetch } from '@/lib/api/shared';
+import {
+  convertPlaintextFolderNames,
+  decideFolderRewrite,
+  inspectFolderNames,
+  selectPlainTextFolders,
+  type FolderConversionResult,
+  type FolderNameEntry,
+  type FolderNameState,
+  type FolderSkipReason,
+} from '@/lib/folder-legacy-encryption';
 import {
   type EncryptedJsonMode,
   EXPORT_FORMATS,
@@ -23,9 +34,21 @@ import {
 } from '@/lib/import-formats-bitwarden';
 import { base64ToBytes, decryptStr, hkdfExpand, pbkdf2 } from '@/lib/crypto';
 import { t } from '@/lib/i18n';
-import type { Folder } from '@/lib/types';
+import type { Folder, SessionState } from '@/lib/types';
 
 configureZipJs({ useWebWorkers: false });
+
+// Why a folder is listed but not rewritten, and why a rewrite was skipped.
+const FOLDER_STATE_LABEL_KEYS: Partial<Record<FolderNameState, string>> = {
+  too_long: 'txt_folder_legacy_state_too_long',
+  padded: 'txt_folder_legacy_state_padded',
+};
+
+const FOLDER_SKIP_REASON_KEYS: Record<FolderSkipReason, string> = {
+  padded: 'txt_folder_legacy_state_padded',
+  too_long: 'txt_folder_legacy_state_too_long',
+  tag_mismatch: 'txt_folder_legacy_state_tag_mismatch',
+};
 
 export interface ImportAttachmentFile {
   sourceCipherId: string | null;
@@ -49,6 +72,9 @@ interface ImportPageProps {
   onNotify: (type: 'success' | 'error', text: string) => void;
   folders: Folder[];
   onExport: (request: ExportRequest) => Promise<void>;
+  authedFetch?: AuthedFetch | null;
+  session?: SessionState | null;
+  onRefreshVault?: () => Promise<void>;
 }
 
 export interface ImportResultSummary {
@@ -420,7 +446,7 @@ function parseNodeWardenAttachmentArray(raw: unknown): ImportAttachmentFile[] {
   return out;
 }
 
-export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys, onNotify, folders, onExport }: ImportPageProps) {
+export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys, onNotify, folders, onExport, authedFetch, session, onRefreshVault }: ImportPageProps) {
   const [source, setSource] = useState<ImportSourceId>('bitwarden_json');
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -442,11 +468,115 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
   const [exportAuthDialogOpen, setExportAuthDialogOpen] = useState(false);
   const [exportAuthPassword, setExportAuthPassword] = useState('');
   const [importSummary, setImportSummary] = useState<ImportResultSummary | null>(null);
+  const [folderInventory, setFolderInventory] = useState<FolderNameEntry[]>([]);
+  const [folderInventoryReady, setFolderInventoryReady] = useState(false);
+  const [folderBackupAcknowledged, setFolderBackupAcknowledged] = useState(false);
+  const [folderConvertDialogOpen, setFolderConvertDialogOpen] = useState(false);
+  const [isConvertingFolders, setIsConvertingFolders] = useState(false);
+  const [folderConversionResult, setFolderConversionResult] = useState<FolderConversionResult | null>(null);
 
   useDialogLifecycle(!!importSummary, importSummary ? () => setImportSummary(null) : null);
   const commonSourceSet = new Set<ImportSourceId>(COMMON_IMPORT_SOURCE_IDS);
   const commonSources = IMPORT_SOURCES.filter((item) => commonSourceSet.has(item.id as ImportSourceId));
   const otherSources = IMPORT_SOURCES.filter((item) => !commonSourceSet.has(item.id as ImportSourceId));
+  const convertibleFolderCount = folderInventory.filter((entry) => entry.state === 'plaintext').length;
+
+  // Inventory of the folders whose stored name is still plain text. It reads
+  // the raw server name, so a name that is already encrypted is never listed.
+  const accountEncKey = accountKeys?.encB64 || '';
+  const accountMacKey = accountKeys?.macB64 || '';
+  useEffect(() => {
+    let active = true;
+    setFolderInventoryReady(false);
+    void inspectFolderNames(folders, { encB64: accountEncKey, macB64: accountMacKey }).then((entries) => {
+      if (!active) return;
+      setFolderInventory(selectPlainTextFolders(entries));
+      setFolderInventoryReady(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [folders, accountEncKey, accountMacKey]);
+
+  async function handleConvertLegacyFolderNames(): Promise<void> {
+    // Writes need a live session: an offline vault is read-only.
+    const activeSession = session;
+    const activeFetch = authedFetch;
+    if (!activeSession?.accessToken) {
+      onNotify('error', t('txt_offline_vault_readonly'));
+      setFolderConvertDialogOpen(false);
+      return;
+    }
+    if (!activeFetch || !activeSession.symEncKey || !activeSession.symMacKey) {
+      onNotify('error', t('txt_vault_key_unavailable'));
+      setFolderConvertDialogOpen(false);
+      return;
+    }
+
+    setIsConvertingFolders(true);
+    const convertedIds = new Set<string>();
+    try {
+      const result = await convertPlaintextFolderNames(folderInventory, async (entry) => {
+        // Read the folder again: another client may have renamed it since the
+        // inventory was taken, and that rename must not be overwritten.
+        let fresh: Folder;
+        try {
+          fresh = await getFolderById(activeFetch, entry.id);
+        } catch (error) {
+          const status = (error as { status?: number } | null)?.status;
+          throw new Error(
+            status === 404
+              ? t('txt_folder_not_found')
+              : error instanceof Error
+                ? error.message
+                : String(error || '')
+          );
+        }
+        const storedName = String(fresh.name || '');
+        if (storedName !== entry.name) {
+          throw new Error(t('txt_folder_legacy_changed'));
+        }
+        const decision = decideFolderRewrite(storedName, fresh.tagName ?? null);
+        if (decision.action === 'skip') {
+          return { status: 'skipped', reason: t(FOLDER_SKIP_REASON_KEYS[decision.reason]) };
+        }
+        // Conditional write: the server compares the folder revision with the
+        // one that was read and refuses the update (409) when the folder was
+        // changed in the meantime, so a rename in another client is never
+        // overwritten.
+        const revision = String(fresh.revisionDate || '');
+        if (!revision) {
+          throw new Error(t('txt_folder_legacy_changed'));
+        }
+        const folderWriteFetch: AuthedFetch = async (input, init) => {
+          const headers = new Headers(init?.headers || {});
+          headers.set('If-Match', revision);
+          const response = await activeFetch(input, { ...init, headers });
+          if (response.status === 409) {
+            // The folder changed after the read: nothing was overwritten.
+            throw new Error(t('txt_folder_legacy_changed'));
+          }
+          return response;
+        };
+        // The server keeps the folder id and its tag; only the stored name is
+        // replaced by the encrypted one.
+        await updateFolder(folderWriteFetch, activeSession, entry.id, storedName);
+        convertedIds.add(entry.id);
+        return { status: 'converted' };
+      });
+      setFolderConversionResult(result);
+      setFolderInventory((prev) => prev.filter((entry) => !convertedIds.has(entry.id)));
+      setFolderBackupAcknowledged(false);
+      try {
+        await onRefreshVault?.();
+      } catch {
+        // The panel already lists what changed; the vault refresh is best effort.
+      }
+    } finally {
+      setIsConvertingFolders(false);
+      setFolderConvertDialogOpen(false);
+    }
+  }
 
   async function runBitwardenJsonImport(parsed: unknown, attachments: ImportAttachmentFile[] = []): Promise<ImportResultSummary> {
     if (isRecord(parsed) && parsed.encrypted === true) {
@@ -860,7 +990,98 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
           </button>
         </div>
       </section>
+
+      <section className="card import-export-panel">
+        <h3>{t('txt_folder_legacy_title')}</h3>
+        <p className="backup-inline-note">{t('txt_folder_legacy_hint')}</p>
+        {!folderInventoryReady ? (
+          <p className="backup-inline-note">{t('txt_loading')}</p>
+        ) : folderInventory.length === 0 ? (
+          <p className="backup-inline-note">{t('txt_folder_legacy_none')}</p>
+        ) : (
+          <>
+            <p>{t('txt_folder_legacy_detected', { count: String(folderInventory.length) })}</p>
+            <ul className="field-help">
+              {folderInventory.map((entry) => {
+                const labelKey = FOLDER_STATE_LABEL_KEYS[entry.state];
+                return (
+                  <li key={entry.id}>
+                    {entry.name}
+                    {labelKey ? ` - ${t(labelKey)}` : ''}
+                  </li>
+                );
+              })}
+            </ul>
+            <label className="checkbox-inline">
+              <input
+                type="checkbox"
+                checked={folderBackupAcknowledged}
+                disabled={isConvertingFolders}
+                onInput={(e) => setFolderBackupAcknowledged((e.currentTarget as HTMLInputElement).checked)}
+              />
+              <span>{t('txt_folder_legacy_backup_ack')}</span>
+            </label>
+            <div className="actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!folderBackupAcknowledged || isConvertingFolders}
+                onClick={() => setFolderConvertDialogOpen(true)}
+              >
+                {isConvertingFolders ? t('txt_loading') : t('txt_folder_legacy_convert')}
+              </button>
+            </div>
+          </>
+        )}
+        {folderConversionResult && (
+          <div className="field-help">
+            <p>
+              {t('txt_folder_legacy_result', {
+                converted: String(folderConversionResult.converted),
+                skipped: String(folderConversionResult.skipped.length),
+                failed: String(folderConversionResult.failed.length),
+              })}
+            </p>
+            {folderConversionResult.skipped.length > 0 && (
+              <>
+                <p>{t('txt_folder_legacy_skipped_title', { count: String(folderConversionResult.skipped.length) })}</p>
+                <ul>
+                  {folderConversionResult.skipped.map((skip) => (
+                    <li key={skip.id}>{skip.name}: {skip.reason}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {folderConversionResult.failed.length > 0 && (
+              <>
+                <p>{t('txt_folder_legacy_failed_title', { count: String(folderConversionResult.failed.length) })}</p>
+                <ul>
+                  {folderConversionResult.failed.map((failure) => (
+                    <li key={failure.id}>{failure.name}: {failure.reason}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
+      </section>
       </div>
+
+      <ConfirmDialog
+        open={folderConvertDialogOpen}
+        title={t('txt_folder_legacy_confirm_title')}
+        message={t('txt_folder_legacy_confirm_message', { count: String(convertibleFolderCount) })}
+        confirmText={isConvertingFolders ? t('txt_loading') : t('txt_folder_legacy_convert')}
+        cancelText={t('txt_cancel')}
+        showIcon={false}
+        confirmDisabled={isConvertingFolders}
+        cancelDisabled={isConvertingFolders}
+        onConfirm={() => void handleConvertLegacyFolderNames()}
+        onCancel={() => {
+          if (isConvertingFolders) return;
+          setFolderConvertDialogOpen(false);
+        }}
+      />
 
       <ConfirmDialog
         open={exportAuthDialogOpen}

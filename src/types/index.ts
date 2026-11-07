@@ -299,6 +299,7 @@ export interface Folder {
   id: string;
   userId: string;
   name: string;
+  tagName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -657,6 +658,7 @@ export interface CipherPermissions {
 export interface FolderResponse {
   id: string;
   name: string;
+  tagName?: string | null;
   revisionDate: string;
   creationDate: string;
   object: string;

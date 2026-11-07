@@ -74,6 +74,7 @@ interface CiphersImportRequest {
   }>;
   folders: Array<{
     name: string;
+    tagName?: string;
   }>;
   folderRelationships: Array<{
     key: number;   // cipher index
@@ -145,6 +146,7 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
       id: folderId,
       userId: userId,
       name: typeof importedFolder?.name === 'string' && importedFolder.name ? importedFolder.name : 'Folder',
+      tagName: typeof importedFolder?.tagName === 'string' ? importedFolder.tagName.trim().slice(0, 64) || null : null,
       createdAt: now,
       updatedAt: now,
     };
@@ -156,10 +158,10 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
     const folderStatements = folderRows.map(folder =>
       env.DB
         .prepare(
-          'INSERT INTO folders(id, user_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?) ' +
-          'ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, name=excluded.name, updated_at=excluded.updated_at'
+          'INSERT INTO folders(id, user_id, name, tag_name, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?) ' +
+          'ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, name=excluded.name, tag_name=excluded.tag_name, updated_at=excluded.updated_at'
         )
-        .bind(folder.id, folder.userId, folder.name, folder.createdAt, folder.updatedAt)
+        .bind(folder.id, folder.userId, folder.name, folder.tagName ?? null, folder.createdAt, folder.updatedAt)
     );
     await runBatchInChunks(env.DB, folderStatements, batchChunkSize);
   }

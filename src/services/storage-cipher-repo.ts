@@ -394,37 +394,6 @@ export async function getCiphersByIds(
   return out;
 }
 
-export async function bulkMoveCiphers(
-  db: D1Database,
-  sqlChunkSize: SqlChunkSize,
-  updateRevisionDate: UpdateRevisionDate,
-  ids: string[],
-  folderId: string | null,
-  userId: string
-): Promise<string | null> {
-  if (ids.length === 0) return null;
-  const now = new Date().toISOString();
-  const normalizedFolderId = normalizeOptionalId(folderId);
-  const uniqueIds = sanitizeIds(ids);
-  const chunkSize = sqlChunkSize(3);
-
-  for (let i = 0; i < uniqueIds.length; i += chunkSize) {
-    const chunk = uniqueIds.slice(i, i + chunkSize);
-    const placeholders = chunk.map(() => '?').join(',');
-    await db
-      .prepare(
-        `UPDATE ciphers
-         SET folder_id = ?, updated_at = ?,
-             data = json_remove(data, '$.folderId', '$.folder_id', '$.updatedAt', '$.revisionDate')
-         WHERE user_id = ? AND id IN (${placeholders})`
-      )
-      .bind(normalizedFolderId, now, userId, ...chunk)
-      .run();
-  }
-
-  return updateRevisionDate(userId);
-}
-
 export async function bulkArchiveCiphers(
   db: D1Database,
   sqlChunkSize: SqlChunkSize,

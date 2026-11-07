@@ -127,6 +127,7 @@ export async function decryptVaultCore(args: DecryptVaultCoreArgs): Promise<Decr
     }))
   );
 
+  const foldersById = new Map(folders.map((folder) => [folder.id, folder]));
   const ciphers = await Promise.all(
     args.ciphers.map(async (cipher) => {
       let itemEnc = userEnc;
@@ -152,6 +153,13 @@ export async function decryptVaultCore(args: DecryptVaultCoreArgs): Promise<Decr
         decName: await decryptCipherField(cipher.name || '', itemEnc, itemMac, userEnc, userMac, canFallbackToUserKey),
         decNotes: await decryptCipherField(cipher.notes || '', itemEnc, itemMac, userEnc, userMac, canFallbackToUserKey),
       };
+      const folder = cipher.folderId ? foldersById.get(cipher.folderId) : undefined;
+      const folderName = folder?.decName;
+      if (folderName && nextCipher.tags?.[0] !== folderName) {
+        const tags = nextCipher.tags || [];
+        const secondary = folder.tagName && tags[0]?.toLowerCase() === folder.tagName.toLowerCase() ? tags.slice(1) : tags;
+        nextCipher.tags = [folderName, ...secondary.filter((tag) => tag.toLowerCase() !== folderName.toLowerCase())];
+      }
 
       if (cipher.login) {
         nextCipher.login = {

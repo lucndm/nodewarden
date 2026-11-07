@@ -55,7 +55,6 @@ import {
 import {
   bulkArchiveCiphers as archiveStoredCiphers,
   bulkDeleteCiphers as deleteStoredCiphers,
-  bulkMoveCiphers as moveStoredCiphers,
   bulkRestoreCiphers as restoreStoredCiphers,
   bulkSoftDeleteCiphers as softDeleteStoredCiphers,
   bulkUnarchiveCiphers as unarchiveStoredCiphers,
@@ -184,7 +183,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-05-cipher-usage';
+const STORAGE_SCHEMA_VERSION = '2026-11-06-folder-tag-name';
 const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
 
 // D1-backed storage.
@@ -601,13 +600,20 @@ export class StorageService {
     return listStoredCiphersByIds(this.db, this.sqlChunkSize.bind(this), ids, userId);
   }
 
-  async bulkMoveCiphers(ids: string[], folderId: string | null, userId: string): Promise<string | null> {
+  async bulkMoveCiphers(ids: string[], folderId: string | null, userId: string): Promise<{ revisionDate: string | null; conflict: boolean }> {
     // The handler pre-verifies folder ownership; a folder vanishing mid-flight
     // makes this a no-op rather than a mass tag strip.
     const folder = folderId ? await this.getFolderForUser(folderId, userId) : null;
-    if (folderId && !folder) return null;
-    await applyStoredTagToCiphers(this.db, userId, ids, folder?.name ?? null);
-    return this.updateRevisionDate(userId);
+    if (folderId && !folder) return { revisionDate: null, conflict: false };
+    const encryptedFolder = folder && !folder.tagName && /^\d+\.[^|]+\|/.test(folder.name);
+    try {
+      const result = await applyStoredTagToCiphers(this.db, userId, ids, encryptedFolder ? undefined : folder ? folder.tagName || folder.name : null, encryptedFolder ? folder.id : undefined);
+      return { revisionDate: result.changed ? await this.updateRevisionDate(userId) : null, conflict: result.conflict };
+    } catch (error) {
+      // Earlier item writes may already have succeeded before a later D1 failure.
+      await this.updateRevisionDate(userId);
+      throw error;
+    }
   }
 
   // --- Folders (tag registry for official clients) ---

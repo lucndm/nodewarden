@@ -311,7 +311,7 @@ async function importPreparedBackupRows(db: D1Database, payload: BackupPayload['
       ...row,
       purpose: normalizeAccountPasskeyPurpose(row.purpose),
     })),
-    folders: cloneRows(payload.folders || []),
+    folders: cloneRows(payload.folders || []).map((row) => ({ ...row, tag_name: row.tag_name ?? null })),
     ciphers: cloneRows(payload.ciphers || []).map((row) => ({
       ...row,
       archived_at: row.archived_at ?? null,
@@ -677,7 +677,7 @@ async function importBackupRows(db: D1Database, payload: BackupPayload['db'], us
   await runInsertBatch(
     db,
     tableName('folders'),
-    buildInsertStatements(db, tableName('folders'), ['id', 'user_id', 'name', 'created_at', 'updated_at'], payload.folders || [])
+    buildInsertStatements(db, tableName('folders'), ['id', 'user_id', 'name', 'tag_name', 'created_at', 'updated_at'], payload.folders || [])
   );
   await runInsertBatch(
     db,

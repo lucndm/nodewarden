@@ -340,7 +340,7 @@ export function normalizeCipherTags(value: unknown): string[] | null {
 }
 
 interface CipherTagResolution {
-  kind: 'set' | 'keep';
+  kind: 'set' | 'keep' | 'folder';
   tags: string[] | null;
   folderIds: Map<string, string>;
   folderError: Response | null;
@@ -367,20 +367,29 @@ async function resolveCipherTags(
     folderId: string | null;
     folderIdPresent: boolean;
     currentTags: string[] | null;
+    currentFolderId?: string | null;
   }
 ): Promise<CipherTagResolution> {
   let tags: string[] | null;
   if (input.tagsPresent) {
     tags = normalizeCipherTags(input.rawTags);
   } else if (input.folderIdPresent) {
+    const previousFolder = input.currentFolderId ? await storage.getFolderForUser(input.currentFolderId, userId) : null;
+    const pendingFolderName = previousFolder && !previousFolder.tagName && isValidEncString(previousFolder.name);
+    const secondary = pendingFolderName ? input.currentTags || [] : (input.currentTags || []).slice(1);
     if (input.folderId) {
       const folder = await storage.getFolderForUser(input.folderId, userId);
       if (!folder) return { kind: 'set', tags: null, folderIds: new Map(), folderError: errorResponse('Folder not found', 404) };
       // The first tag mirrors the folder position: moving replaces it and
       // keeps the remaining (extra) tags in order.
-      tags = normalizeCipherTags([folder.name, ...(input.currentTags || []).slice(1)]);
+      // Official clients send only an encrypted folder name; keep their folder
+      // assignment without inventing a plaintext tag from ciphertext.
+      if (!folder.tagName && isValidEncString(folder.name)) {
+        return { kind: 'folder', tags: input.currentFolderId === input.folderId ? input.currentTags : normalizeCipherTags(secondary), folderIds: new Map(), folderError: null };
+      }
+      tags = normalizeCipherTags([folder.tagName || folder.name, ...secondary]);
     } else {
-      tags = normalizeCipherTags((input.currentTags || []).slice(1));
+      tags = normalizeCipherTags(secondary);
     }
   } else {
     return { kind: 'keep', tags: null, folderIds: new Map(), folderError: null };
@@ -1228,11 +1237,13 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
     folderId: updateFolderId,
     folderIdPresent: updateFolderIdPresent,
     currentTags: Array.isArray(existingCipher.tags) ? existingCipher.tags : null,
+    currentFolderId: existingCipher.folderId,
   });
   if (updateResolution.folderError) return updateResolution.folderError;
   if (updateResolution.kind === 'set') {
     applyResolvedTagsFolder(cipher, updateResolution);
   }
+  if (updateResolution.kind === 'folder') cipher.tags = updateResolution.tags;
   normalizeCipherForStorage(cipher);
   const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
   if (compatibilityError) return errorResponse(compatibilityError, 400);
@@ -1399,11 +1410,14 @@ export async function handlePartialUpdateCipher(request: Request, env: Env, user
 
   if (body.folderId !== undefined) {
     const folderId = normalizeOptionalId(body.folderId);
-    if (folderId) {
-      const folderOk = await verifyFolderOwnership(storage, folderId, userId);
-      if (!folderOk) return errorResponse('Folder not found', 404);
-    }
-    cipher.folderId = folderId;
+    const resolution = await resolveCipherTags(storage, userId, {
+      tagsPresent: false, rawTags: null, folderId, folderIdPresent: true,
+      currentTags: cipher.tags || null, currentFolderId: cipher.folderId,
+    });
+    if (resolution.folderError) return resolution.folderError;
+    if (resolution.kind === 'set') applyResolvedTagsFolder(cipher, resolution);
+    if (resolution.kind === 'folder') cipher.tags = resolution.tags;
+    if (resolution.kind === 'folder') cipher.folderId = folderId;
   }
   if (body.favorite !== undefined) {
     cipher.favorite = body.favorite;
@@ -1442,10 +1456,9 @@ export async function handleBulkMoveCiphers(request: Request, env: Env, userId: 
     if (!folderOk) return errorResponse('Folder not found', 404);
   }
 
-  const revisionDate = await storage.bulkMoveCiphers(body.ids, folderId, userId);
-  if (revisionDate) {
-    notifyVaultSyncForRequest(request, env, userId, revisionDate);
-  }
+  const { revisionDate, conflict } = await storage.bulkMoveCiphers(body.ids, folderId, userId);
+  if (revisionDate) notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  if (conflict) return errorResponse('Cipher changed during bulk move. Resync and try again.', 409);
 
   return new Response(null, { status: 204 });
 }

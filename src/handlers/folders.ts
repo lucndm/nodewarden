@@ -47,6 +47,7 @@ function folderToResponse(folder: Folder): FolderResponse {
   return {
     id: folder.id,
     name: folder.name,
+    tagName: folder.tagName ?? null,
     revisionDate: folder.updatedAt,
     creationDate: folder.createdAt,
     object: 'folder',
@@ -99,7 +100,7 @@ export async function handleGetFolder(request: Request, env: Env, userId: string
 export async function handleCreateFolder(request: Request, env: Env, userId: string): Promise<Response> {
   const storage = new StorageService(env.DB);
 
-  let body: { name?: string };
+  let body: { name?: string; tagName?: string };
   try {
     body = await request.json();
   } catch {
@@ -115,6 +116,7 @@ export async function handleCreateFolder(request: Request, env: Env, userId: str
     id: generateUUID(),
     userId: userId,
     name: body.name,
+    tagName: typeof body.tagName === 'string' ? body.tagName.trim().slice(0, 64) || null : null,
     createdAt: now,
     updatedAt: now,
   };
@@ -141,7 +143,7 @@ export async function handleUpdateFolder(request: Request, env: Env, userId: str
     return errorResponse('Folder not found', 404);
   }
 
-  let body: { name?: string };
+  let body: { name?: string; tagName?: string };
   try {
     body = await request.json();
   } catch {
@@ -149,13 +151,20 @@ export async function handleUpdateFolder(request: Request, env: Env, userId: str
   }
 
   if (body.name) {
-    const oldName = folder.name;
+    const oldName = folder.tagName || folder.name;
     folder.name = body.name;
+    if (typeof body.tagName === 'string') folder.tagName = body.tagName.trim().slice(0, 64) || null;
     folder.updatedAt = new Date().toISOString();
-    await storage.saveFolder(folder);
-    if (oldName !== folder.name) {
-      // The registry rename rewrites the tag on every cipher carrying it.
-      await storage.renameTagEverywhere(userId, oldName, folder.name);
+    const expectedRevision = request.headers.get('If-Match');
+    if (expectedRevision !== null) {
+      const result = await env.DB.prepare('UPDATE folders SET name = ?, tag_name = ?, updated_at = ? WHERE id = ? AND user_id = ? AND updated_at = ?')
+        .bind(folder.name, folder.tagName ?? null, folder.updatedAt, id, userId, expectedRevision).run();
+      if (result.meta.changes !== 1) return errorResponse('Folder changed. Reload the vault and try again.', 409);
+    } else {
+      await storage.saveFolder(folder);
+    }
+    if (oldName !== (folder.tagName || folder.name)) {
+      await storage.renameTagEverywhere(userId, oldName, folder.tagName || folder.name);
     }
   } else {
     folder.updatedAt = new Date().toISOString();
@@ -183,7 +192,7 @@ export async function handleDeleteFolder(request: Request, env: Env, userId: str
   }
 
   // Deleting the registry entry removes the tag from every cipher carrying it.
-  await storage.removeTagEverywhere(userId, folder.name);
+  await storage.removeTagEverywhere(userId, folder.tagName || folder.name);
   await storage.deleteFolder(id, userId);
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);

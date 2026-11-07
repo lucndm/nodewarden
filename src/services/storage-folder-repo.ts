@@ -6,6 +6,7 @@ function mapFolderRow(row: any): Folder {
     id: row.id,
     userId: row.user_id,
     name: row.name,
+    tagName: row.tag_name ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -46,7 +47,7 @@ function parseCipherData(raw: unknown): Record<string, unknown> {
 
 export async function getFolder(db: D1Database, id: string): Promise<Folder | null> {
   const row = await db
-    .prepare('SELECT id, user_id, name, created_at, updated_at FROM folders WHERE id = ?')
+    .prepare('SELECT id, user_id, name, tag_name, created_at, updated_at FROM folders WHERE id = ?')
     .bind(id)
     .first<any>();
   if (!row) return null;
@@ -55,7 +56,7 @@ export async function getFolder(db: D1Database, id: string): Promise<Folder | nu
 
 export async function getFolderForUser(db: D1Database, id: string, userId: string): Promise<Folder | null> {
   const row = await db
-    .prepare('SELECT id, user_id, name, created_at, updated_at FROM folders WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id, user_id, name, tag_name, created_at, updated_at FROM folders WHERE id = ? AND user_id = ?')
     .bind(id, userId)
     .first<any>();
   if (!row) return null;
@@ -65,14 +66,19 @@ export async function getFolderForUser(db: D1Database, id: string, userId: strin
 export async function saveFolder(db: D1Database, folder: Folder): Promise<void> {
   await db
     .prepare(
-      'INSERT INTO folders(id, user_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?) ' +
-      'ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at WHERE user_id=excluded.user_id'
+      'INSERT INTO folders(id, user_id, name, tag_name, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?) ' +
+      'ON CONFLICT(id) DO UPDATE SET name=excluded.name, tag_name=excluded.tag_name, updated_at=excluded.updated_at WHERE user_id=excluded.user_id'
     )
-    .bind(folder.id, folder.userId, folder.name, folder.createdAt, folder.updatedAt)
+    .bind(folder.id, folder.userId, folder.name, folder.tagName ?? null, folder.createdAt, folder.updatedAt)
     .run();
 }
 
 export async function deleteFolder(db: D1Database, id: string, userId: string): Promise<void> {
+  const folder = await getFolderForUser(db, id, userId);
+  if (folder && !folder.tagName && /^\d+\.[^|]+\|/.test(folder.name)) {
+    const rows = await db.prepare('SELECT id FROM ciphers WHERE user_id = ? AND folder_id = ?').bind(userId, id).all<{ id: string }>();
+    await applyTagToCiphers(db, userId, (rows.results || []).map((row) => row.id), null);
+  }
   await db.prepare('DELETE FROM folders WHERE id = ? AND user_id = ?').bind(id, userId).run();
 }
 
@@ -86,18 +92,19 @@ export async function ensureFoldersForTags(db: D1Database, userId: string, tags:
     const tag = normalizeTagName(rawTag);
     if (!tag || map.has(tag)) continue;
     const existing = await db
-      .prepare('SELECT id FROM folders WHERE user_id = ? AND name = ?')
+      .prepare('SELECT id FROM folders WHERE user_id = ? AND tag_name = ?')
       .bind(userId, tag)
       .first<{ id: string }>();
-    if (existing?.id) {
-      map.set(tag, existing.id);
+    const legacy = existing || await db.prepare('SELECT id FROM folders WHERE user_id = ? AND name = ? AND tag_name IS NULL').bind(userId, tag).first<{ id: string }>();
+    if (legacy?.id) {
+      map.set(tag, legacy.id);
       continue;
     }
     const id = generateUUID();
     const now = new Date().toISOString();
     await db
-      .prepare('INSERT INTO folders(id, user_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?)')
-      .bind(id, userId, tag, now, now)
+      .prepare('INSERT INTO folders(id, user_id, name, tag_name, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?)')
+      .bind(id, userId, tag, tag, now, now)
       .run();
     map.set(tag, id);
   }
@@ -118,7 +125,7 @@ interface MigratableCipherRow {
  */
 export async function migrateFolderCiphersToTags(db: D1Database, userId: string, now: string): Promise<boolean> {
   const folders = await getAllFolders(db, userId);
-  const nameById = new Map(folders.map((folder) => [folder.id, folder.name]));
+  const nameById = new Map(folders.map((folder) => [folder.id, folder.tagName || (/^\d+\.[^|]+\|/.test(folder.name) ? '' : folder.name)]));
   const res = await db
     .prepare('SELECT id, folder_id, data FROM ciphers WHERE user_id = ?')
     .bind(userId)
@@ -134,12 +141,8 @@ export async function migrateFolderCiphersToTags(db: D1Database, userId: string,
     delete data.folder_id;
 
     if (!folderName) {
-      // Orphaned folder reference: clear it, nothing to preserve.
-      if (!changed) changed = true;
-      await db
-        .prepare('UPDATE ciphers SET folder_id = ?, updated_at = ?, data = ? WHERE id = ?')
-        .bind(null, now, JSON.stringify(data), row.id)
-        .run();
+      // Without a plaintext tag name, an encrypted Bitwarden folder cannot be backfilled server-side.
+      // Keep the folder id and existing tags until the Web Vault supplies its decrypted name.
       continue;
     }
 
@@ -236,18 +239,18 @@ export async function removeTagFromCiphers(db: D1Database, userId: string, tagNa
 }
 
 /**
- * Bulk folder move (official clients) / bulk "apply first tag": setting
- * tagName prepends it as the cipher's first tag; null removes the current
- * folder-position tag.
+ * Bulk folder move replaces the first tag with the destination; null removes
+ * it and promotes the next tag to the Bitwarden folder position.
  */
 export async function applyTagToCiphers(
   db: D1Database,
   userId: string,
   ids: string[],
-  tagName: string | null
-): Promise<void> {
+  tagName: string | null | undefined,
+  encryptedFolderId?: string
+): Promise<{ changed: boolean; conflict: boolean }> {
   const sanitized = Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean)));
-  if (!sanitized.length) return;
+  if (!sanitized.length) return { changed: false, conflict: false };
   const now = new Date().toISOString();
 
   let folderIdForTag: string | null = null;
@@ -256,35 +259,41 @@ export async function applyTagToCiphers(
     folderIdForTag = ensured.get(tagName) || null;
   }
 
+  let changed = false;
   for (const id of sanitized) {
     const row = await db
-      .prepare('SELECT data FROM ciphers WHERE id = ? AND user_id = ?')
+      .prepare('SELECT data, folder_id, updated_at, name FROM ciphers WHERE id = ? AND user_id = ?')
       .bind(id, userId)
-      .first<{ data: unknown }>();
+      .first<{ data: string; folder_id: string | null; updated_at: string; name: string | null }>();
     if (!row) continue;
     const data = parseCipherData(row.data);
     const current = readCipherTags(data);
-    let next: string[];
-    if (tagName) {
-      const rest = current.filter((tag) => tag.toLowerCase() !== tagName.toLowerCase());
-      next = [tagName, ...rest];
-      data.tags = next;
-    } else {
-      next = current.slice(1);
-      if (next.length) data.tags = next;
-      else delete data.tags;
-    }
-    const positionFolderId = next.length ? folderIdForTag : null;
-    await db
-      .prepare('UPDATE ciphers SET folder_id = ?, updated_at = ?, data = ? WHERE id = ?')
-      .bind(positionFolderId, now, JSON.stringify(data), id)
+    const previousFolder = row.folder_id ? await getFolderForUser(db, row.folder_id, userId) : null;
+    const pendingFolderName = previousFolder && !previousFolder.tagName && /^\d+\.[^|]+\|/.test(previousFolder.name);
+    const secondary = pendingFolderName ? current : current.slice(1);
+    const next = tagName === undefined
+      ? (row.folder_id === encryptedFolderId ? current : secondary)
+      : tagName
+        ? [tagName, ...secondary.filter((tag) => tag.toLowerCase() !== tagName.toLowerCase())]
+        : secondary;
+    if (next.length) data.tags = next;
+    else delete data.tags;
+    const positionFolderId = tagName === undefined ? encryptedFolderId! : next.length
+      ? (tagName ? folderIdForTag : (await ensureFoldersForTags(db, userId, [next[0]])).get(next[0]) ?? null)
+      : null;
+    const result = await db
+      .prepare('UPDATE ciphers SET folder_id = ?, updated_at = ?, data = ? WHERE id = ? AND user_id = ? AND data = ? AND updated_at = ? AND folder_id IS ? AND name IS ?')
+      .bind(positionFolderId, now, JSON.stringify(data), id, userId, row.data, row.updated_at, row.folder_id, row.name)
       .run();
+    if (result.meta.changes !== 1) return { changed, conflict: true };
+    changed = true;
   }
+  return { changed, conflict: false };
 }
 
 export async function getAllFolders(db: D1Database, userId: string): Promise<Folder[]> {
   const res = await db
-    .prepare('SELECT id, user_id, name, created_at, updated_at FROM folders WHERE user_id = ? ORDER BY updated_at DESC')
+    .prepare('SELECT id, user_id, name, tag_name, created_at, updated_at FROM folders WHERE user_id = ? ORDER BY updated_at DESC')
     .bind(userId)
     .all<any>();
   return (res.results || []).map((row) => mapFolderRow(row));
@@ -292,7 +301,7 @@ export async function getAllFolders(db: D1Database, userId: string): Promise<Fol
 
 export async function getFoldersPage(db: D1Database, userId: string, limit: number, offset: number): Promise<Folder[]> {
   const res = await db
-    .prepare('SELECT id, user_id, name, created_at, updated_at FROM folders WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?')
+    .prepare('SELECT id, user_id, name, tag_name, created_at, updated_at FROM folders WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?')
     .bind(userId, limit, offset)
     .all<any>();
   return (res.results || []).map((row) => mapFolderRow(row));
@@ -309,7 +318,7 @@ export async function bulkDeleteFolders(
   for (const id of uniqueIds) {
     const folder = await getFolderForUser(db, id, userId);
     if (!folder) continue;
-    await removeTagFromCiphers(db, userId, folder.name);
+    await removeTagFromCiphers(db, userId, folder.tagName || folder.name);
     await deleteFolder(db, id, userId);
   }
 }

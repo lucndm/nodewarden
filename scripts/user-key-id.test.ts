@@ -54,7 +54,10 @@ async function fixture() {
   const sqlite = new DatabaseSync(':memory:');
   const db = sqliteD1(sqlite);
   await ensureStorageSchema(db);
-  const env = { DB: db, JWT_SECRET: 'test-secret-0123456789' } as unknown as Env;
+  const env = {
+    DB: db, JWT_SECRET: 'test-secret-0123456789',
+    NOTIFICATIONS_HUB: { idFromName: (id: string) => id, get: () => ({ fetch: async () => new Response(null, { status: 204 }) }) },
+  } as unknown as Env;
   const storage = new StorageService(db);
   await storage.saveUser({
     id: USER_ID,
@@ -164,4 +167,41 @@ test('a request without a body is refused', async () => {
   const response = await handleAuthenticatedRoute(request, f.env, USER_ID, user, PATH, 'POST');
   assert.ok(response, 'the route must be handled');
   assert.equal(response.status, 400);
+});
+
+test('bulk folder move survives sync and promotes the remaining tag to the client folder', async () => {
+  const f = await fixture();
+  const id = '00000000-0000-4000-8000-000000000043';
+  const work = '00000000-0000-4000-8000-000000000044';
+  const personal = '00000000-0000-4000-8000-000000000045';
+  for (const [folderId, name] of [[work, 'Work'], [personal, 'Personal']] as const) {
+    await f.storage.saveFolder({ id: folderId, userId: USER_ID, name, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' });
+  }
+  await f.storage.saveCipher({
+    id, userId: USER_ID, type: 1, name: '4.YWJj', folderId: work, tags: ['Work', 'Shared'],
+    createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+  } as any);
+  const move = async (folderId: string | null) => {
+    const path = '/api/ciphers/move';
+    const request = new Request(`https://vault.example.test${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id], folderId }),
+    });
+    const user = await f.storage.getUserById(USER_ID);
+    assert.ok(user);
+    assert.equal((await handleAuthenticatedRoute(request, f.env, USER_ID, user, path, 'POST'))?.status, 204);
+  };
+  await move(personal);
+  let sync = await handleSync(new Request('https://vault.example.test/api/sync'), f.env, USER_ID);
+  assert.equal(sync.status, 200);
+  let body = await sync.json() as { ciphers: Array<{ id: string; folderId: string | null; tags: string[] }> };
+  assert.deepEqual(body.ciphers.find((cipher) => cipher.id === id)?.tags, ['Personal', 'Shared']);
+  assert.equal(body.ciphers.find((cipher) => cipher.id === id)?.folderId, personal);
+
+  await move(null);
+  sync = await handleSync(new Request('https://vault.example.test/api/sync'), f.env, USER_ID);
+  body = await sync.json() as typeof body;
+  const shared = (await f.storage.getAllFolders(USER_ID)).find((folder) => folder.name === 'Shared');
+  assert.ok(shared);
+  assert.deepEqual(body.ciphers.find((cipher) => cipher.id === id)?.tags, ['Shared']);
+  assert.equal(body.ciphers.find((cipher) => cipher.id === id)?.folderId, shared.id);
 });

@@ -77,11 +77,26 @@ For the feature-gap inventory and phased plans P0–P6, see [NodeWarden × Proto
 
 ## Tested clients
 
-- ✅ Windows desktop
-- ✅ Mobile app
-- ✅ Browser extension
-- ✅ Linux desktop
-- ⚠️ macOS desktop not fully verified yet
+- CLI 2025.1.0 and 2026.10.1: local same-vault login, decrypt, sync and Folder interoperability.
+- Browser extension 2026.10.2 and Linux desktop 2026.10.2: local same-vault Folder filtering and moves; desktop bulk move into encrypted folders also verified.
+- Android 2026.11.0: official APK on an isolated Android 14 emulator, HTTPS login/decrypt/sync, Folder filtering and move. No physical-device or iOS claim.
+- Windows and macOS: not reverified for the current P0 changes. See [P0 evidence and rollout limits](ROADMAP.md#p0--tính-đúng-tagfolder-trước-mọi-mở-rộng).
+
+## Bitwarden app and extension API compatibility
+
+When changing the Web Vault, keep these server routes and their request/response contracts compatible with Bitwarden apps and browser extensions:
+
+| Purpose | Endpoints |
+|---|---|
+| Server discovery | `GET /config` (`/api/config`), `GET /api/version` |
+| Authentication | `POST /identity/accounts/prelogin`, `POST /identity/connect/token`, `POST /identity/connect/revocation` |
+| Vault download | `GET /api/sync`, `GET /api/accounts/profile` |
+| Vault writes | `/api/ciphers`, `/api/ciphers/{id}`, `/api/folders`, `/api/folders/{id}` (including delete, restore, archive and attachment routes) |
+| Client features | `/api/settings/domains`, `GET /icons/{host}/icon.png`, `POST /notifications/hub/negotiate`, `GET /notifications/hub` |
+
+Routes live in `src/router-public.ts` and `src/router-authenticated.ts`; `/config` is built in `src/config-response.ts` and `/api/sync` in `src/handlers/sync.ts`. Web-only changes must not alter the shared API or encrypted vault format without checking official app/extension flows. Existing tests cover parts of this contract, not an end-to-end guarantee for every client version.
+
+Legacy plaintext Folder names can be encrypted in **Import & Export → Folder compatibility**. Back up the vault first; the panel requires acknowledgement and confirmation, preserves Folder IDs and item placement, and refuses stale revisions. Names that cannot be safely converted are reported instead of silently trimmed or overwritten. This is an explicit client-side operation, not an automatic production migration. Official clients only display one Folder per item; secondary Tags remain a Web Vault feature. Moving into a Folder whose name is encrypted does not require the server to decrypt it: Web derives its visible first Tag with the vault key.
 
 ---
 
