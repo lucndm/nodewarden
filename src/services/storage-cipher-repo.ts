@@ -25,6 +25,7 @@ interface CipherRow {
   updated_at: string;
   archived_at: string | null;
   deleted_at: string | null;
+  organization_id: string | null;
 }
 
 const CIPHER_SCALAR_DATA_KEYS = new Set([
@@ -90,6 +91,7 @@ function parseCipherRow(row: CipherRow | null | undefined): Cipher | null {
       updatedAt: row.updated_at,
       archivedAt: row.archived_at ?? parsed.archivedAt ?? parsed.archivedDate ?? null,
       deletedAt: row.deleted_at ?? parsed.deletedAt ?? parsed.deletedDate ?? null,
+      organizationId: row.organization_id ?? parsed.organizationId ?? null,
     };
   } catch {
     console.error('Corrupted cipher data, id:', row.id);
@@ -98,7 +100,7 @@ function parseCipherRow(row: CipherRow | null | undefined): Cipher | null {
 }
 
 function selectCipherColumns(): string {
-  return 'id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at';
+  return 'id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at, organization_id';
 }
 
 export async function getCipher(db: D1Database, id: string): Promise<Cipher | null> {
@@ -530,6 +532,42 @@ export async function getAllCiphers(db: D1Database, userId: string): Promise<Cip
   const res = await db
     .prepare(`SELECT ${selectCipherColumns()} FROM ciphers WHERE user_id = ? ORDER BY updated_at DESC`)
     .bind(userId)
+    .all<CipherRow>();
+  return (res.results || []).flatMap((row) => {
+    const cipher = parseCipherRow(row);
+    return cipher ? [cipher] : [];
+  });
+}
+
+/**
+ * The items a member may see: the ones they own, plus the ones they reach
+ * through a collection of an organization they belong to.
+ *
+ * An owned item has no organization; a shared item has one and is reached
+ * through a collection. The two are read apart in one query, the way the
+ * official server reads them, so an item in an organization is never handed
+ * out because the member happens to have created it.
+ *
+ * An owner or admin of an organization reaches every collection of it, which
+ * is what the official server does when the organization allows admin access
+ * to all collection items.
+ */
+export async function getVisibleCiphers(db: D1Database, userId: string): Promise<Cipher[]> {
+  const columns = selectCipherColumns();
+  const res = await db
+    .prepare(
+      `SELECT ${columns} FROM ciphers WHERE user_id = ? AND organization_id IS NULL ` +
+      'UNION ALL ' +
+      `SELECT ${columns.split(', ').map((name) => `C.${name}`).join(', ')} FROM ciphers C ` +
+      'INNER JOIN collection_ciphers CC ON CC.cipher_id = C.id ' +
+      'INNER JOIN collections COL ON COL.id = CC.collection_id ' +
+      'INNER JOIN organization_users OU ON OU.org_id = COL.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+      'LEFT JOIN collection_users CU ON CU.collection_id = COL.id AND CU.org_user_id = OU.id ' +
+      'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
+      'LEFT JOIN collection_groups CG ON CG.collection_id = COL.id AND CG.group_id = GU.group_id ' +
+      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1'
+    )
+    .bind(userId, userId)
     .all<CipherRow>();
   return (res.results || []).flatMap((row) => {
     const cipher = parseCipherRow(row);

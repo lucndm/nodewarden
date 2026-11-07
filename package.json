@@ -27,7 +27,7 @@
     "test:cipher-tags": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/cipher-tags.test.ts",
     "test:cipher-versions": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/cipher-versions.test.ts",
     "test:collection-access": "tsx --test scripts/collection-access.test.ts scripts/collection-access-sql.test.ts",
-    "test:local": "npm run test:local-cli && npm run test:local-api && npm run test:local-ui && npm run test:collection-access && npm run test:prod-vault-audit",
+    "test:local": "npm run test:local-cli && npm run test:local-api && npm run test:local-ui && npm run test:collection-access && npm run test:collection-storage && npm run test:prod-vault-audit",
     "test:local-cli": "tsx --tsconfig webapp/tsconfig.json scripts/local-cli-e2e.mts",
     "test:local-api": "node scripts/local-api-e2e.mjs",
     "test:local-ui": "tsx --tsconfig webapp/tsconfig.json scripts/local-ui-e2e.mts",
@@ -55,7 +55,8 @@
     "deploy:demo": "npm run build:demo && wrangler pages deploy dist --project-name nw-demo",
     "audit:prod-vault": "node scripts/prod-vault-audit.mjs",
     "test:prod-vault-audit": "node scripts/prod-vault-audit.test.mjs",
-    "digest:backup": "node scripts/backup-archive-digest.mjs"
+    "digest:backup": "node scripts/backup-archive-digest.mjs",
+    "test:collection-storage": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/collection-storage.test.ts scripts/collection-sync-filter.test.ts"
   },
   "keywords": [
     "bitwarden",

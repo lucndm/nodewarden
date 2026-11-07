@@ -32,7 +32,15 @@ type BackupTableName =
   | 'folders'
   | 'ciphers'
   | 'cipher_versions'
-  | 'attachments';
+  | 'attachments'
+  | 'organizations'
+  | 'organization_users'
+  | 'collections'
+  | 'groups'
+  | 'group_users'
+  | 'collection_users'
+  | 'collection_groups'
+  | 'collection_ciphers';
 
 const BACKUP_TABLES: BackupTableName[] = [
   'config',
@@ -41,9 +49,17 @@ const BACKUP_TABLES: BackupTableName[] = [
   'user_revisions',
   'webauthn_credentials',
   'folders',
+  'organizations',
+  'organization_users',
+  'collections',
+  'groups',
   'ciphers',
   'cipher_versions',
   'attachments',
+  'group_users',
+  'collection_users',
+  'collection_groups',
+  'collection_ciphers',
 ];
 
 function shadowTableName(table: BackupTableName): string {
@@ -327,6 +343,28 @@ async function importPreparedBackupRows(db: D1Database, payload: BackupPayload['
       last_used_at: row.last_used_at == null || row.last_used_at === '' ? null : String(row.last_used_at),
     })),
     attachments: cloneRows(payload.attachments || []),
+    organizations: cloneRows(payload.organizations || []),
+    organization_users: cloneRows(payload.organization_users || []).map((row) => ({
+      ...row,
+      type: row.type == null || row.type === '' ? 2 : Number(row.type),
+      status: row.status == null || row.status === '' ? 2 : Number(row.status),
+    })),
+    collections: cloneRows(payload.collections || []),
+    groups: cloneRows(payload.groups || []),
+    group_users: cloneRows(payload.group_users || []),
+    collection_users: cloneRows(payload.collection_users || []).map((row) => ({
+      ...row,
+      read_only: row.read_only == null || row.read_only === '' ? 0 : Number(row.read_only),
+      hide_passwords: row.hide_passwords == null || row.hide_passwords === '' ? 0 : Number(row.hide_passwords),
+      manage: row.manage == null || row.manage === '' ? 0 : Number(row.manage),
+    })),
+    collection_groups: cloneRows(payload.collection_groups || []).map((row) => ({
+      ...row,
+      read_only: row.read_only == null || row.read_only === '' ? 0 : Number(row.read_only),
+      hide_passwords: row.hide_passwords == null || row.hide_passwords === '' ? 0 : Number(row.hide_passwords),
+      manage: row.manage == null || row.manage === '' ? 0 : Number(row.manage),
+    })),
+    collection_ciphers: cloneRows(payload.collection_ciphers || []),
   };
   await importBackupRows(db, preparedDb, true);
   return preparedDb;
@@ -690,7 +728,7 @@ async function importBackupRows(db: D1Database, payload: BackupPayload['db'], us
     buildInsertStatements(
       db,
       tableName('ciphers'),
-      ['id', 'user_id', 'type', 'folder_id', 'name', 'notes', 'favorite', 'data', 'reprompt', 'key', 'created_at', 'updated_at', 'archived_at', 'deleted_at', 'usage_count', 'last_used_at'],
+      ['id', 'user_id', 'type', 'folder_id', 'name', 'notes', 'favorite', 'data', 'reprompt', 'key', 'created_at', 'updated_at', 'archived_at', 'deleted_at', 'usage_count', 'last_used_at', 'organization_id'],
       payload.ciphers || []
     )
   );
@@ -708,6 +746,46 @@ async function importBackupRows(db: D1Database, payload: BackupPayload['db'], us
     db,
     tableName('attachments'),
     buildInsertStatements(db, tableName('attachments'), ['id', 'cipher_id', 'file_name', 'size', 'size_name', 'key'], payload.attachments || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('organizations'),
+    buildInsertStatements(db, tableName('organizations'), ['id', 'name', 'key', 'created_at', 'updated_at'], payload.organizations || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('organization_users'),
+    buildInsertStatements(db, tableName('organization_users'), ['id', 'user_id', 'org_id', 'type', 'status', 'created_at', 'updated_at'], payload.organization_users || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('collections'),
+    buildInsertStatements(db, tableName('collections'), ['id', 'org_id', 'name', 'created_at', 'updated_at'], payload.collections || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('groups'),
+    buildInsertStatements(db, tableName('groups'), ['id', 'org_id', 'name', 'created_at', 'updated_at'], payload.groups || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('group_users'),
+    buildInsertStatements(db, tableName('group_users'), ['group_id', 'org_user_id'], payload.group_users || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('collection_users'),
+    buildInsertStatements(db, tableName('collection_users'), ['collection_id', 'org_user_id', 'read_only', 'hide_passwords', 'manage'], payload.collection_users || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('collection_groups'),
+    buildInsertStatements(db, tableName('collection_groups'), ['collection_id', 'group_id', 'read_only', 'hide_passwords', 'manage'], payload.collection_groups || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('collection_ciphers'),
+    buildInsertStatements(db, tableName('collection_ciphers'), ['cipher_id', 'collection_id'], payload.collection_ciphers || [])
   );
 }
 

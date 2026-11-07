@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS ciphers (
   deleted_at TEXT,
   usage_count INTEGER NOT NULL DEFAULT 0,
   last_used_at TEXT,
+  organization_id TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_ciphers_user_updated ON ciphers(user_id, updated_at);
@@ -112,6 +113,92 @@ CREATE TABLE IF NOT EXISTS folders (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_folders_user_updated ON folders(user_id, updated_at);
+
+-- The Bitwarden model of sharing: an organization holds collections, a member
+-- reaches a collection directly or through a group, and an item belongs to an
+-- organization and sits in one or more collections. How the rights combine for
+-- an item is in src/services/collection-access.ts.
+CREATE TABLE IF NOT EXISTS organizations (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  key TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS organization_users (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  org_id TEXT NOT NULL,
+  type INTEGER NOT NULL DEFAULT 2,
+  status INTEGER NOT NULL DEFAULT 2,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_org_users_user_org ON organization_users(user_id, org_id);
+CREATE INDEX IF NOT EXISTS idx_org_users_org ON organization_users(org_id);
+
+CREATE TABLE IF NOT EXISTS collections (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_collections_org ON collections(org_id);
+
+CREATE TABLE IF NOT EXISTS groups (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_groups_org ON groups(org_id);
+
+CREATE TABLE IF NOT EXISTS group_users (
+  group_id TEXT NOT NULL,
+  org_user_id TEXT NOT NULL,
+  PRIMARY KEY (group_id, org_user_id),
+  FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (org_user_id) REFERENCES organization_users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS collection_users (
+  collection_id TEXT NOT NULL,
+  org_user_id TEXT NOT NULL,
+  read_only INTEGER NOT NULL DEFAULT 0,
+  hide_passwords INTEGER NOT NULL DEFAULT 0,
+  manage INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (collection_id, org_user_id),
+  FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+  FOREIGN KEY (org_user_id) REFERENCES organization_users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS collection_groups (
+  collection_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  read_only INTEGER NOT NULL DEFAULT 0,
+  hide_passwords INTEGER NOT NULL DEFAULT 0,
+  manage INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (collection_id, group_id),
+  FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+  FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS collection_ciphers (
+  cipher_id TEXT NOT NULL,
+  collection_id TEXT NOT NULL,
+  PRIMARY KEY (cipher_id, collection_id),
+  FOREIGN KEY (cipher_id) REFERENCES ciphers(id) ON DELETE CASCADE,
+  FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_collection_ciphers_collection ON collection_ciphers(collection_id);
+CREATE INDEX IF NOT EXISTS idx_ciphers_org ON ciphers(organization_id);
 
 CREATE TABLE IF NOT EXISTS attachments (
   id TEXT PRIMARY KEY,

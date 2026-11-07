@@ -108,6 +108,11 @@ import {
   handleListPendingAuthRequests,
   handleUpdateAuthRequest,
 } from './handlers/auth-requests';
+import {
+  handleGetCollections,
+  handleGetOrganizations,
+  handleUnsupportedCollectionRoute,
+} from './handlers/organizations';
 
 export async function handleAuthenticatedRoute(
   request: Request,
@@ -441,17 +446,17 @@ export async function handleAuthenticatedRoute(
   }
 
   if (path === '/api/collections' || path.startsWith('/api/collections/')) {
-    if (method === 'GET') {
-      return jsonResponse({ data: [], object: 'list', continuationToken: null });
+    if (path === '/api/collections' && method === 'GET') {
+      return handleGetCollections(request, env, userId);
     }
-    return null;
+    return handleUnsupportedCollectionRoute();
   }
 
   if (path === '/api/organizations' || path.startsWith('/api/organizations/')) {
-    if (method === 'GET') {
-      return jsonResponse({ data: [], object: 'list', continuationToken: null });
+    if (path === '/api/organizations' && method === 'GET') {
+      return handleGetOrganizations(request, env, userId);
     }
-    return null;
+    return handleUnsupportedCollectionRoute();
   }
 
   if (path === '/api/sends') {
