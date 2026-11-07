@@ -294,6 +294,28 @@ export interface CipherUsage {
   lastUsedAt: string | null;
 }
 
+// Item history: one superseded state of a cipher.
+// The snapshot holds the encrypted payload as it was, so the server stores
+// ciphertext only; the client decrypts and compares it.
+export interface CipherVersion {
+  id: string;
+  cipherId: string;
+  userId: string;
+  /** 'created' for the state the item was created in, 'modified' for later ones. */
+  kind: 'created' | 'modified';
+  /** Vault revision the version was recorded in. */
+  revisionDate: string;
+  /** When the recorded state was written (the superseded cipher revision). */
+  createdAt: string;
+  type: CipherType;
+  name: string | null;
+  notes: string | null;
+  key: string | null;
+  reprompt: number;
+  /** Encrypted payload without the organization tags. */
+  data: string;
+}
+
 // Folder model
 export interface Folder {
   id: string;

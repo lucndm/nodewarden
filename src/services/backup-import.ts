@@ -31,6 +31,7 @@ type BackupTableName =
   | 'webauthn_credentials'
   | 'folders'
   | 'ciphers'
+  | 'cipher_versions'
   | 'attachments';
 
 const BACKUP_TABLES: BackupTableName[] = [
@@ -41,6 +42,7 @@ const BACKUP_TABLES: BackupTableName[] = [
   'webauthn_credentials',
   'folders',
   'ciphers',
+  'cipher_versions',
   'attachments',
 ];
 
@@ -58,6 +60,7 @@ export interface BackupImportResultBody {
     webauthnCredentials: number;
     folders: number;
     ciphers: number;
+    cipherVersions: number;
     attachments: number;
     attachmentFiles: number;
   };
@@ -173,6 +176,7 @@ async function ensureImportTargetIsFresh(db: D1Database): Promise<void> {
 function buildResetImportTargetStatements(db: D1Database): D1PreparedStatement[] {
   return [
     'DELETE FROM attachments',
+    'DELETE FROM cipher_versions',
     'DELETE FROM ciphers',
     'DELETE FROM folders',
     'DELETE FROM webauthn_credentials',
@@ -312,6 +316,7 @@ async function importPreparedBackupRows(db: D1Database, payload: BackupPayload['
       purpose: normalizeAccountPasskeyPurpose(row.purpose),
     })),
     folders: cloneRows(payload.folders || []).map((row) => ({ ...row, tag_name: row.tag_name ?? null })),
+    cipher_versions: cloneRows(payload.cipher_versions || []),
     ciphers: cloneRows(payload.ciphers || []).map((row) => ({
       ...row,
       archived_at: row.archived_at ?? null,
@@ -691,6 +696,16 @@ async function importBackupRows(db: D1Database, payload: BackupPayload['db'], us
   );
   await runInsertBatch(
     db,
+    tableName('cipher_versions'),
+    buildInsertStatements(
+      db,
+      tableName('cipher_versions'),
+      ['id', 'cipher_id', 'user_id', 'kind', 'revision_date', 'created_at', 'type', 'name', 'notes', 'key', 'reprompt', 'data'],
+      payload.cipher_versions || []
+    )
+  );
+  await runInsertBatch(
+    db,
     tableName('attachments'),
     buildInsertStatements(db, tableName('attachments'), ['id', 'cipher_id', 'file_name', 'size', 'size_name', 'key'], payload.attachments || [])
   );
@@ -745,6 +760,7 @@ export async function importBackupArchiveBytes(
       webauthn_credentials: (db.webauthn_credentials || []).length,
       folders: (db.folders || []).length,
       ciphers: (db.ciphers || []).length,
+      cipher_versions: (db.cipher_versions || []).length,
       attachments: (db.attachments || []).length,
     });
 
@@ -809,6 +825,7 @@ export async function importBackupArchiveBytes(
           webauthnCredentials: (db.webauthn_credentials || []).length,
           folders: (db.folders || []).length,
           ciphers: (db.ciphers || []).length,
+          cipherVersions: (db.cipher_versions || []).length,
           attachments: restored.restoredAttachments.length,
           attachmentFiles: restored.imported,
         },
@@ -886,6 +903,7 @@ export async function importRemoteBackupArchiveBytes(
       webauthn_credentials: (db.webauthn_credentials || []).length,
       folders: (db.folders || []).length,
       ciphers: (db.ciphers || []).length,
+      cipher_versions: (db.cipher_versions || []).length,
       attachments: (db.attachments || []).length,
     });
 
@@ -956,6 +974,7 @@ export async function importRemoteBackupArchiveBytes(
           webauthnCredentials: (db.webauthn_credentials || []).length,
           folders: (db.folders || []).length,
           ciphers: (db.ciphers || []).length,
+          cipherVersions: (db.cipher_versions || []).length,
           attachments: restored.restoredAttachments.length,
           attachmentFiles: restored.imported,
         },

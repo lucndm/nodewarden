@@ -33,6 +33,9 @@ async function fixture(ctx: TestContext) {
       folder_id TEXT, name TEXT, notes TEXT, favorite INTEGER, data TEXT,
       reprompt INTEGER, key TEXT, created_at TEXT, updated_at TEXT,
       archived_at TEXT, deleted_at TEXT);
+    CREATE TABLE cipher_versions(id TEXT PRIMARY KEY, cipher_id TEXT, user_id TEXT,
+      kind TEXT, revision_date TEXT, created_at TEXT, type INTEGER, name TEXT,
+      notes TEXT, key TEXT, reprompt INTEGER, data TEXT);
     CREATE TABLE attachments(id TEXT PRIMARY KEY, cipher_id TEXT,
       file_name TEXT, size INTEGER, size_name TEXT, key TEXT);
     CREATE TABLE folders(id TEXT PRIMARY KEY, user_id TEXT, name TEXT, tag_name TEXT, created_at TEXT, updated_at TEXT);
@@ -48,6 +51,14 @@ async function fixture(ctx: TestContext) {
         async first() { return sqlite.prepare(sql).get(...values) ?? null; },
       };
       return statement;
+    },
+    // D1 runs a batch as one unit; the statements run in order here.
+    async batch(statements: any[]) {
+      const results: any[] = [];
+      for (const statement of statements) {
+        results.push(await statement.run());
+      }
+      return results;
     },
   };
   let revisionBumps = 0;

@@ -71,6 +71,7 @@ export interface BackupPayload {
     user_revisions: SqlRow[];
     folders: SqlRow[];
     ciphers: SqlRow[];
+    cipher_versions: SqlRow[];
     attachments: SqlRow[];
     webauthn_credentials?: SqlRow[];
   };
@@ -277,6 +278,7 @@ function normalizeParsedBackupDb(value: unknown): BackupPayload['db'] {
     user_revisions: source.user_revisions as SqlRow[],
     folders: source.folders as SqlRow[],
     ciphers: source.ciphers as SqlRow[],
+    cipher_versions: (source.cipher_versions ?? []) as SqlRow[],
     attachments: source.attachments as SqlRow[],
     webauthn_credentials: source.webauthn_credentials as SqlRow[] | undefined,
   };
@@ -381,6 +383,7 @@ export function validateBackupPayloadContents(
   const domainSettingsRows = ensureRowArray(payload.db.domain_settings || [], 'domain_settings');
   const folderRows = ensureRowArray(payload.db.folders, 'folders');
   const cipherRows = ensureRowArray(payload.db.ciphers, 'ciphers');
+  const cipherVersionRows = ensureRowArray(payload.db.cipher_versions || [], 'cipher_versions');
   const attachmentRows = ensureRowArray(payload.db.attachments, 'attachments');
   const accountPasskeyRows = ensureRowArray(payload.db.webauthn_credentials || [], 'webauthn_credentials');
   const externalAttachmentKeys = new Set<string>(
@@ -457,6 +460,20 @@ export function validateBackupPayloadContents(
     }
   }
 
+  // Item history rows are optional: archives from before the feature have
+  // none. A row that is there must belong to an item in the archive.
+  const cipherVersionIds = new Set<string>();
+  for (const row of cipherVersionRows) {
+    const id = String(row.id || '').trim();
+    const cipherId = String(row.cipher_id || '').trim();
+    const userId = String(row.user_id || '').trim();
+    if (!id || !cipherId || !userIds.has(userId) || !cipherIds.has(cipherId)) {
+      throw new Error('Backup archive contains an invalid cipher version row');
+    }
+    if (cipherVersionIds.has(id)) throw new Error(`Backup archive contains duplicate cipher version id: ${id}`);
+    cipherVersionIds.add(id);
+  }
+
   for (const row of attachmentRows) {
     const id = String(row.id || '').trim();
     const cipherId = String(row.cipher_id || '').trim();
@@ -504,13 +521,14 @@ export async function buildBackupArchive(
     includeAttachments,
   });
   const encoder = new TextEncoder();
-  const [configRows, userRows, domainSettingsRows, revisionRows, folderRows, cipherRows, attachmentRows, accountPasskeyRows] = await Promise.all([
+  const [configRows, userRows, domainSettingsRows, revisionRows, folderRows, cipherRows, cipherVersionRows, attachmentRows, accountPasskeyRows] = await Promise.all([
     queryRows(env.DB, 'SELECT key, value FROM config ORDER BY key ASC'),
     queryRows(env.DB, 'SELECT id, email, name, master_password_hint, master_password_hash, key, private_key, public_key, kdf_type, kdf_iterations, kdf_memory, kdf_parallelism, security_stamp, role, status, verify_devices, totp_secret, totp_recovery_code, yubikey_key1, yubikey_key2, yubikey_key3, yubikey_key4, yubikey_key5, yubikey_nfc, created_at, updated_at FROM users ORDER BY created_at ASC'),
     queryRows(env.DB, 'SELECT user_id, equivalent_domains, custom_equivalent_domains, excluded_global_equivalent_domains, updated_at FROM domain_settings ORDER BY user_id ASC'),
     queryRows(env.DB, 'SELECT user_id, revision_date FROM user_revisions ORDER BY user_id ASC'),
     queryRows(env.DB, 'SELECT id, user_id, name, tag_name, created_at, updated_at FROM folders ORDER BY created_at ASC'),
     queryRows(env.DB, 'SELECT id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at, usage_count, last_used_at FROM ciphers ORDER BY created_at ASC'),
+    queryRows(env.DB, 'SELECT id, cipher_id, user_id, kind, revision_date, created_at, type, name, notes, key, reprompt, data FROM cipher_versions ORDER BY cipher_id ASC, created_at ASC'),
     queryRows(env.DB, 'SELECT id, cipher_id, file_name, size, size_name, key FROM attachments ORDER BY cipher_id ASC, id ASC'),
     queryRows(env.DB, 'SELECT id, user_id, purpose, name, public_key, credential_id, counter, type, aa_guid, transports, encrypted_user_key, encrypted_public_key, encrypted_private_key, supports_prf, created_at, updated_at FROM webauthn_credentials ORDER BY created_at ASC'),
   ]);
@@ -539,6 +557,7 @@ export async function buildBackupArchive(
       user_revisions: revisionRows.length,
       folders: folderRows.length,
       ciphers: cipherRows.length,
+      cipher_versions: cipherVersionRows.length,
       attachments: exportedAttachmentRows.length,
       webauthn_credentials: accountPasskeyRows.length,
     },
@@ -562,6 +581,7 @@ export async function buildBackupArchive(
       user_revisions: revisionRows,
       folders: folderRows,
       ciphers: cipherRows,
+      cipher_versions: cipherVersionRows,
       attachments: exportedAttachmentRows,
       webauthn_credentials: accountPasskeyRows,
     }, null, BACKUP_JSON_INDENT)),
