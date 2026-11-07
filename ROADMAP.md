@@ -79,6 +79,8 @@ flowchart LR
 5. **UI:** `View Item History` trong card Item Information → timeline (Current Version trước, rồi từng mốc) → bấm một mốc để xem nội dung đã giải mã và so sánh từng trường với bản hiện tại (name, username, password, website, notes, TOTP) → xác nhận Restore. Password History giữ tên và vị trí riêng.
 6. **Test:** `scripts/cipher-versions.test.ts` 8/8: ghi version khi sửa nội dung, no-op và đổi Folder không tạo version, ghi thua race không tạo version, quyền sai, item bị xóa, retention 20 mốc, Restore (nội dung cũ về, trạng thái bị thay giữ lại, ID giữ nguyên, revision chạy) và Restore với revision cũ bị từ chối.
 
+**Kế hoạch kiểm thử local (trước khi deploy):** `npm run test:local-cli` chạy CLI Bitwarden chính thức (2026.10.1) với Worker local + D1 cô lập: CLI đăng nhập, tạo item, đọc lại, sửa item (bản ghi cũ được ghi thành version), sync và đọc lại item sau khi Restore — 18/18 đạt. `npm run test:local-api` chạy cùng luồng qua HTTP để kiểm các đường client không đi tới (quyền sai, revision cũ, payload sync). `npm run test:local-ui` chạy Web Vault trong Chromium (timeline, so sánh, Restore) — 7/7 đạt. Mỗi lần chạy tự bật Worker riêng (`wrangler dev --local`) với D1 tạm và xoá sau đó; CLI chính thức từ chối http nên Worker được phục vụ qua https với chứng thư tạm mà CLI tin (`NODE_EXTRA_CA_CERTS`). Deploy chỉ là bước cuối, không phải nơi kiểm thử.
+
 **Còn mở:** app Bitwarden chính thức chưa dùng được API này (client chỉ hiển thị Folder, không có timeline); `Last autofill` (F-40–45) chưa làm; dữ liệu có sẵn không hoàn lịch sử quá khứ.
 
 ## P3 — Sharing (F-05, F-80–81)

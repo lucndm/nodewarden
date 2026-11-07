@@ -70,6 +70,20 @@ The server keeps every stored state as ciphertext, exactly like the item itself,
 
 Official Bitwarden apps and extensions ignore these endpoints and keep showing the item as it is now.
 
+## Local verification before a deploy
+
+Vault changes are checked against a local Worker with its own D1, never against production:
+
+| Command | What it covers |
+|---|---|
+| `npm run test:local-cli` | The official Bitwarden CLI against the local Worker: log in, create an item, read it back, edit it, sync and read the restored item. The item history endpoints are called over HTTP because no official client has them. |
+| `npm run test:local-api` | The same flow over HTTP, including the paths a client cannot reach: a foreign account, a stale revision, the sync payload. |
+| `npm run test:local-ui` | The Web Vault in Chromium: the item history timeline, the comparison against the current version and the restore. |
+
+`npm run test:local` runs all three. Every check boots its own Worker (`wrangler dev --local`) with a throwaway D1 directory that is removed afterwards, so nothing reaches a remote database. The official CLI refuses plain http, so the Worker is served over https with a throwaway certificate the CLI is told to trust (`NODE_EXTRA_CA_CERTS`); that needs `openssl` on the machine.
+
+The CLI check needs a Bitwarden CLI: `npm i -D @bitwarden/cli`, or point `NODEWARDEN_BW_CLI` at a binary. The browser check needs Chromium: point `NODEWARDEN_CHROMIUM` at a binary. A check whose tool is missing says so and passes, so the others still run.
+
 ## Web Vault design
 
 The Web Vault follows Proton Pass’s layout and visual language. The desktop vault is a three-pane layout: one navigation rail combining vault filters (all items, favorites, archive, trash, duplicates and item types) with app links, an item list, and a detail pane. Item actions sit next to the item title, and the detail pane ends with a metadata group showing last copied, last edited, created and password-updated times above the password history entry point.
