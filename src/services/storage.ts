@@ -204,7 +204,18 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
 const STORAGE_SCHEMA_VERSION = '2026-11-07-organization-collections';
-const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
+const REQUIRED_SCHEMA_TABLES = [
+  'webauthn_credentials',
+  'webauthn_challenges',
+  'auth_requests',
+  'totp_login_replays',
+  // The sharing model: an install that claims this schema version but is
+  // missing these tables was upgraded only halfway, so the bootstrap runs
+  // again instead of failing on the first query.
+  'organizations',
+  'collections',
+  'collection_ciphers',
+] as const;
 
 // D1-backed storage.
 // Contract:
