@@ -7,6 +7,7 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import assert from 'node:assert/strict';
+import { vaultDigest } from './prod-vault-audit.mjs';
 
 function encryptedName(seed) {
   // The shape of an encrypted string: a type, then base64 parts joined by '|'.
@@ -149,6 +150,28 @@ function parseSummary(stdout) {
   assert.equal(summary.foldersWithPlainTextName, 1);
   assert.match(result.stderr, /plain-text folder names/);
   console.log('ok   a plain-text folder name is reported');
+}
+
+{
+  // The digest is what ties an archive to the live vault, so it must depend
+  // on the rows and on nothing else: the same rows in another order give the
+  // same digest, and one changed row gives a different one.
+  const vault = cleanVault();
+  const digest = vaultDigest(vault);
+  const reordered = {
+    folders: [...vault.folders].reverse(),
+    ciphers: [...vault.ciphers].reverse(),
+    users: [...vault.users],
+    revisions: [...vault.revisions],
+  };
+  assert.equal(vaultDigest(reordered), digest, 'the row order must not change the digest');
+  const changed = cleanVault();
+  changed.folders[0].tag_name = 'Work';
+  assert.notEqual(vaultDigest(changed), digest, 'a changed folder must change the digest');
+  const moved = cleanVault();
+  moved.ciphers[0].folder_id = null;
+  assert.notEqual(vaultDigest(moved), digest, 'an item moved out of its folder must change the digest');
+  console.log('ok   the digest follows the rows that decide the layout');
 }
 
 console.log('\nall checks passed');
