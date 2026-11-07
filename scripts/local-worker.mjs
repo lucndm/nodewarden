@@ -177,6 +177,7 @@ export async function startLocalWorker({ label = 'local' } = {}) {
   return {
     baseUrl,
     port,
+    persistDir,
     log: () => log,
     async stop() {
       child.kill('SIGTERM');

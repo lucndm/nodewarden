@@ -30,6 +30,7 @@
     "test:local-cli": "tsx --tsconfig webapp/tsconfig.json scripts/local-cli-e2e.mts",
     "test:local-api": "node scripts/local-api-e2e.mjs",
     "test:local-ui": "tsx --tsconfig webapp/tsconfig.json scripts/local-ui-e2e.mts",
+    "test:local-restore": "tsx --tsconfig webapp/tsconfig.json scripts/local-restore-rehearsal.mts",
     "test:web-crypto": "tsx --test scripts/web-crypto-availability.test.ts",
     "test:authed-fetch-retry": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/authed-fetch-retry.test.ts",
     "test:user-key-id": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/user-key-id.test.ts",
