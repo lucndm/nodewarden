@@ -1,43 +1,45 @@
 // Checks the production vault audit against a stand-in Cloudflare API.
 //
 // The audit reads production D1 over the Cloudflare API, so it is exercised
-// here against a local server that answers with rows from a real backup
-// archive: the clean archive must report clean, the archive that still holds
-// the ciphertext-shaped tags must report them.
+// here against a local server that answers with vault rows: a clean vault must
+// report clean, and a vault that still holds the ciphertext-shaped tags must
+// report them.
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { unzipSync } from 'fflate';
 import assert from 'node:assert/strict';
 
-const CLEAN_ARCHIVE = '/tmp/nodewarden_backup_20261107_084308_5124e.zip';
-const DIRTY_ARCHIVE = '/tmp/nodewarden_backup_20261107_082540_4596d.zip';
+function encryptedName(seed) {
+  // The shape of an encrypted string: a type, then base64 parts joined by '|'.
+  const part = (text) => Buffer.from(text, 'utf8').toString('base64').replace(/=+$/, '');
+  return `2.${part(seed)}|${part(`${seed}-mac`)}|${part(`${seed}-iv`)}`;
+}
 
-function readArchive(path) {
-  const zip = unzipSync(new Uint8Array(readFileSync(path)));
-  const db = JSON.parse(Buffer.from(zip['db.json']).toString());
-  const marker = (db.config || []).find((row) => String(row.key || '').startsWith('tags.legacy-repair.v1:'));
+/** A vault that the audit has to accept. */
+function cleanVault() {
+  const userId = 'user-1';
+  const folderId = 'folder-1';
   return {
-    folders: (db.folders || []).map((row) => ({
-      id: row.id,
-      user_id: row.user_id,
-      name: row.name,
-      tag_name: row.tag_name ?? null,
-    })),
-    ciphers: (db.ciphers || []).map((row) => ({
-      id: row.id,
-      user_id: row.user_id,
-      folder_id: row.folder_id ?? null,
-      data: row.data,
-    })),
-    users: (db.users || []).map((row) => ({ id: row.id, email: row.email, role: row.role, status: row.status })),
-    revisions: db.user_revisions || [],
-    markers: marker ? [{ key: marker.key, value: marker.value }] : [],
+    folders: [{ id: folderId, user_id: userId, name: encryptedName('folder'), tag_name: null }],
+    ciphers: [
+      { id: 'cipher-1', user_id: userId, folder_id: folderId, data: JSON.stringify({ login: {} }) },
+      { id: 'cipher-2', user_id: userId, folder_id: null, data: JSON.stringify({ login: {} }) },
+    ],
+    users: [{ id: userId, email: 'owner@example.test', role: 'admin', status: 'active' }],
+    revisions: [{ user_id: userId, revision_date: '2026-11-07T08:37:20.457Z' }],
+    markers: [{ key: `tags.legacy-repair.v1:${userId}`, value: 'done' }],
   };
 }
 
-/** Serves the rows of one archive behind the small part of the API the audit uses. */
-function startStandIn(archive) {
+/** The same vault with the residue the old folder-to-tag backfill left behind. */
+function dirtyVault() {
+  const vault = cleanVault();
+  vault.ciphers[0].data = JSON.stringify({ login: {}, tags: [encryptedName('folder')] });
+  vault.markers = [];
+  return vault;
+}
+
+/** Serves the rows of one vault behind the small part of the API the audit uses. */
+async function startStandIn(vault) {
   const server = createServer((request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const send = (payload) => {
@@ -56,14 +58,14 @@ function startStandIn(archive) {
       request.on('end', () => {
         const sql = JSON.parse(body || '{}').sql || '';
         const rows = sql.includes('FROM folders')
-          ? archive.folders
+          ? vault.folders
           : sql.includes('FROM ciphers')
-            ? archive.ciphers
+            ? vault.ciphers
             : sql.includes('FROM users')
-              ? archive.users
+              ? vault.users
               : sql.includes('FROM user_revisions')
-                ? archive.revisions
-                : archive.markers;
+                ? vault.revisions
+                : vault.markers;
         // The audit pages with LIMIT/OFFSET, so the stand-in has to page too.
         const limit = Number(/LIMIT\s+(\d+)/i.exec(sql)?.[1] || rows.length);
         const offset = Number(/OFFSET\s+(\d+)/i.exec(sql)?.[1] || 0);
@@ -74,9 +76,8 @@ function startStandIn(archive) {
     response.writeHead(404);
     response.end('{}');
   });
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve(server));
-  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return server;
 }
 
 function runAudit(port) {
@@ -98,39 +99,56 @@ function runAudit(port) {
   });
 }
 
-const cleanArchive = readArchive(CLEAN_ARCHIVE);
-const dirtyArchive = readArchive(DIRTY_ARCHIVE);
+function parseSummary(stdout) {
+  const end = stdout.indexOf('\nCLEAN');
+  return JSON.parse(end >= 0 ? stdout.slice(0, end) : stdout);
+}
 
 {
-  const server = await startStandIn(cleanArchive);
-  const port = server.address().port;
-  const result = await runAudit(port);
+  const server = await startStandIn(cleanVault());
+  const result = await runAudit(server.address().port);
   server.close();
   server.closeAllConnections?.();
-  const summary = JSON.parse(result.stdout.slice(0, result.stdout.indexOf('\nCLEAN') >= 0 ? result.stdout.indexOf('\nCLEAN') : undefined));
-  assert.equal(result.code, 0, `clean archive must pass: ${result.stderr}`);
-  assert.equal(summary.folders, cleanArchive.folders.length);
-  assert.equal(summary.items, cleanArchive.ciphers.length);
+  const summary = parseSummary(result.stdout);
+  assert.equal(result.code, 0, `a clean vault must pass: ${result.stderr}`);
+  assert.equal(summary.accounts, 1);
+  assert.equal(summary.folders, 1);
+  assert.equal(summary.items, 2);
+  assert.equal(summary.itemsInAFolder, 1);
   assert.equal(summary.foldersWithPlainTextName, 0);
   assert.equal(summary.itemsWithCiphertextShapedTag, 0);
   assert.equal(summary.itemsWithoutFolder, 0);
-  assert.equal(summary.itemsWithUnparsablePayload, 0);
   assert.equal(summary.legacyTagRepairMarker, 'done');
   console.log('ok   a clean vault reports clean');
 }
 
 {
-  const server = await startStandIn(dirtyArchive);
-  const port = server.address().port;
-  const result = await runAudit(port);
+  const server = await startStandIn(dirtyVault());
+  const result = await runAudit(server.address().port);
   server.close();
   server.closeAllConnections?.();
-  const summary = JSON.parse(result.stdout.slice(0, result.stdout.indexOf('\nCLEAN') >= 0 ? result.stdout.indexOf('\nCLEAN') : undefined));
+  const summary = parseSummary(result.stdout);
   assert.equal(result.code, 1, 'a vault with ciphertext-shaped tags must fail');
-  assert.equal(summary.itemsWithCiphertextShapedTag, 822);
-  assert.equal(summary.foldersWithPlainTextName, 0);
+  assert.equal(summary.itemsWithCiphertextShapedTag, 1);
   assert.match(result.stderr, /ciphertext-shaped tags/);
+  assert.match(result.stderr, /legacy tag repair has not run/);
   console.log('ok   a vault with ciphertext-shaped tags is reported');
+}
+
+{
+  // A folder name that is not an encrypted string is plain text: the server
+  // can see that without the account key.
+  const vault = cleanVault();
+  vault.folders[0].name = 'Work';
+  const server = await startStandIn(vault);
+  const result = await runAudit(server.address().port);
+  server.close();
+  server.closeAllConnections?.();
+  const summary = parseSummary(result.stdout);
+  assert.equal(result.code, 1, 'a plain-text folder name must fail');
+  assert.equal(summary.foldersWithPlainTextName, 1);
+  assert.match(result.stderr, /plain-text folder names/);
+  console.log('ok   a plain-text folder name is reported');
 }
 
 console.log('\nall checks passed');
