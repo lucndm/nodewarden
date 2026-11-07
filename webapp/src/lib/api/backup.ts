@@ -106,6 +106,7 @@ export interface AdminBackupImportCounts {
   webauthnCredentials?: number;
   folders: number;
   ciphers: number;
+  cipherVersions?: number;
   attachments: number;
   attachmentFiles: number;
 }

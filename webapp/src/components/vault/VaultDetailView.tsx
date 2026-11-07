@@ -3,10 +3,12 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { AlertTriangle, Archive, BookOpen, CalendarPlus, Clipboard, Contact, CreditCard, Download, Eye, EyeOff, ExternalLink, Globe, History, IdCard, KeyRound, Landmark, List, Lock, MoreVertical, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, StickyNote, Tag, Terminal, Trash2, User, X } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
+import ItemHistoryDialog from '@/components/vault/ItemHistoryDialog';
 import { looksLikeCipherString } from '@/lib/app-support';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
 import type { CipherUsageEntry } from '@/lib/api/vault';
+import type { ItemHistoryEntry, ItemHistoryVersion } from '@/lib/item-history';
 import type { Cipher } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import {
@@ -48,6 +50,9 @@ interface VaultDetailViewProps {
   onToggleShowPassword: () => void;
   onToggleHiddenField: (index: number) => void;
   onDownloadAttachment: (cipher: Cipher, attachmentId: string) => void;
+  onLoadItemHistory: (cipherId: string) => Promise<ItemHistoryEntry[]>;
+  onLoadItemHistoryVersion: (cipherId: string, versionId: string) => Promise<ItemHistoryVersion>;
+  onRestoreItemHistoryVersion: (cipherId: string, versionId: string, expectedRevisionDate: string) => Promise<void>;
   onStartEdit: () => void;
   onDelete: (cipher: Cipher) => void;
   onMoveItem?: (cipher: Cipher) => void;
@@ -153,7 +158,15 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
   const [revealedFields, setRevealedFields] = useState<Record<string, boolean>>({});
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement | null>(null);
+  const itemHistoryRequestRef = useRef(0);
   const [passwordHistoryOpen, setPasswordHistoryOpen] = useState(false);
+  const [itemHistoryOpen, setItemHistoryOpen] = useState(false);
+  const [itemHistoryEntries, setItemHistoryEntries] = useState<ItemHistoryEntry[]>([]);
+  const [itemHistoryVersion, setItemHistoryVersion] = useState<ItemHistoryVersion | null>(null);
+  const [itemHistoryLoading, setItemHistoryLoading] = useState(false);
+  const [itemHistoryVersionLoading, setItemHistoryVersionLoading] = useState(false);
+  const [itemHistoryRestoring, setItemHistoryRestoring] = useState(false);
+  const [itemHistoryError, setItemHistoryError] = useState('');
   const [breachResult, setBreachResult] = useState<PasswordBreachResult | null>(null);
   const [checkingBreach, setCheckingBreach] = useState(false);
   const breachControllerRef = useRef<AbortController | null>(null);
@@ -182,6 +195,11 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     setRevealedFields({});
     setOverflowOpen(false);
     setPasswordHistoryOpen(false);
+    setItemHistoryOpen(false);
+    setItemHistoryEntries([]);
+    setItemHistoryVersion(null);
+    setItemHistoryError('');
+    itemHistoryRequestRef.current += 1;
     setBreachResult(null);
     setCheckingBreach(false);
     return () => {
@@ -236,6 +254,61 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     return props.attachmentDownloadPercent == null
       ? t('txt_downloading')
       : t('txt_downloading_percent', { percent: props.attachmentDownloadPercent });
+  };
+
+  // The versions are fetched and decrypted by the action layer, the view only
+  // shows them and hands the restore back with the revision date it shows.
+  const openItemHistory = async () => {
+    const token = ++itemHistoryRequestRef.current;
+    setItemHistoryOpen(true);
+    setItemHistoryEntries([]);
+    setItemHistoryVersion(null);
+    setItemHistoryError('');
+    setItemHistoryLoading(true);
+    try {
+      const entries = await props.onLoadItemHistory(props.selectedCipher.id);
+      // A newer request or a different item won: the answer is stale.
+      if (itemHistoryRequestRef.current !== token) return;
+      setItemHistoryEntries(entries);
+    } catch (error) {
+      if (itemHistoryRequestRef.current !== token) return;
+      setItemHistoryError(error instanceof Error ? error.message : t('txt_load_vault_failed'));
+    } finally {
+      if (itemHistoryRequestRef.current === token) setItemHistoryLoading(false);
+    }
+  };
+
+  const selectItemHistoryVersion = async (versionId: string) => {
+    const token = ++itemHistoryRequestRef.current;
+    setItemHistoryVersion(null);
+    setItemHistoryVersionLoading(false);
+    if (!versionId) return;
+    setItemHistoryVersionLoading(true);
+    setItemHistoryError('');
+    try {
+      const loaded = await props.onLoadItemHistoryVersion(props.selectedCipher.id, versionId);
+      // A newer selection won the race: the late answer belongs to a version
+      // the user already moved away from.
+      if (itemHistoryRequestRef.current !== token) return;
+      setItemHistoryVersion(loaded);
+    } catch (error) {
+      if (itemHistoryRequestRef.current !== token) return;
+      setItemHistoryError(error instanceof Error ? error.message : t('txt_load_vault_failed'));
+    } finally {
+      if (itemHistoryRequestRef.current === token) setItemHistoryVersionLoading(false);
+    }
+  };
+
+  const restoreItemHistoryVersion = async (versionId: string) => {
+    setItemHistoryRestoring(true);
+    try {
+      await props.onRestoreItemHistoryVersion(props.selectedCipher.id, versionId, props.selectedCipher.revisionDate || '');
+      setItemHistoryOpen(false);
+    } catch (error) {
+      setItemHistoryError(error instanceof Error ? error.message : t('txt_load_vault_failed'));
+    } finally {
+      setItemHistoryRestoring(false);
+    }
   };
 
   // Only a copy that really reached the clipboard counts as a use. The reprompt
@@ -781,7 +854,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
           {(props.selectedCipher.creationDate || props.selectedCipher.revisionDate) && (
             <div className="card detail-meta-card">
-              <DetailSectionHead icon={<History size={15} />} title={t('txt_item_history')} />
+              <DetailSectionHead icon={<History size={15} />} title={t('txt_item_information')} />
               <div className="detail-meta-group">
                 {props.usageAvailable && (
                   <div className="detail-meta-row">
@@ -816,8 +889,11 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </div>
                 )}
               </div>
+              <button type="button" className="detail-meta-link" onClick={() => void openItemHistory()}>
+                {t('txt_item_history_view')}
+              </button>
               {passwordHistoryEntries.length > 0 && (
-                <button type="button" className="password-history-link" onClick={() => setPasswordHistoryOpen(true)}>
+                <button type="button" className="detail-meta-link" onClick={() => setPasswordHistoryOpen(true)}>
                   {t('txt_password_history')}
                 </button>
               )}
@@ -837,6 +913,19 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
         open={passwordHistoryOpen && !repromptLocked}
         entries={passwordHistoryEntries}
         onClose={() => setPasswordHistoryOpen(false)}
+      />
+      <ItemHistoryDialog
+        open={itemHistoryOpen && !repromptLocked}
+        cipher={props.selectedCipher}
+        entries={itemHistoryEntries}
+        version={itemHistoryVersion}
+        loading={itemHistoryLoading}
+        versionLoading={itemHistoryVersionLoading}
+        restoring={itemHistoryRestoring}
+        error={itemHistoryError}
+        onSelectVersion={(versionId) => void selectItemHistoryVersion(versionId)}
+        onRestore={(versionId) => void restoreItemHistoryVersion(versionId)}
+        onClose={() => setItemHistoryOpen(false)}
       />
     </>
   );

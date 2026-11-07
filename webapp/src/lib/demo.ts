@@ -1393,6 +1393,13 @@ export function createDemoMainRoutesProps(base: AppMainRoutesProps, notify: Noti
     onDownloadVaultAttachment: async () => {
       notify('success', t('txt_demo_download_prepared'));
     },
+    onLoadItemHistory: async () => [],
+    onLoadItemHistoryVersion: async () => {
+      throw new Error(t('txt_demo_readonly_message'));
+    },
+    onRestoreItemHistoryVersion: async () => {
+      notify('warning', t('txt_demo_readonly_message'));
+    },
     onRefreshVault: async () => {
       resetDemoVaultState(state);
       notify('success', t('txt_demo_data_reset'));

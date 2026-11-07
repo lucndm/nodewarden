@@ -931,7 +931,7 @@ select.input.duplicate-mode-toolbar-select {
   color: var(--muted);
 }
 
-.password-history-link {
+.detail-meta-link {
   @apply mt-2.5 cursor-pointer p-0 font-bold;
   border: none;
   background: transparent;
@@ -939,7 +939,7 @@ select.input.duplicate-mode-toolbar-select {
   font: inherit;
 }
 
-.password-history-link:hover {
+.detail-meta-link:hover {
   color: var(--primary-hover);
   text-decoration: underline;
 }
@@ -1033,6 +1033,124 @@ select.input.duplicate-mode-toolbar-select {
 
 .password-history-copy-btn {
   @apply h-9 w-9 min-w-9 p-0;
+}
+
+/* Item history: the version timeline next to the selected snapshot. */
+.item-history-dialog {
+  @apply w-[min(900px,calc(100vw-32px))] text-left;
+}
+
+.item-history-head {
+  @apply mb-3 flex items-center justify-between gap-3;
+}
+
+.item-history-head .dialog-title {
+  @apply m-0 text-xl;
+}
+
+.item-history-close {
+  @apply inline-flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-full border-0;
+  border: none;
+  background: transparent;
+  color: var(--muted-strong);
+}
+
+.item-history-close:hover {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.item-history-body {
+  @apply grid gap-4;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+}
+
+.item-history-timeline,
+.item-history-detail {
+  @apply grid content-start gap-2;
+  max-height: min(62vh, 540px);
+  overflow-y: auto;
+}
+
+.item-history-row {
+  @apply grid cursor-pointer gap-0.5 rounded-xl border p-3 text-left;
+  border-color: var(--line);
+  background: var(--panel-soft);
+}
+
+.item-history-row.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, var(--panel-soft));
+}
+
+.item-history-row-kind {
+  font-size: var(--font-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.item-history-row-name {
+  @apply font-semibold;
+}
+
+.item-history-row-time {
+  font-size: var(--font-sm);
+  color: var(--muted);
+}
+
+.item-history-empty {
+  @apply m-0;
+  color: var(--muted);
+}
+
+.item-history-error {
+  @apply m-0 rounded-xl p-3;
+  background: color-mix(in srgb, #dc2626 12%, transparent);
+  color: var(--text);
+}
+
+.item-history-fields {
+  @apply grid;
+}
+
+.item-history-fields .kv-line strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.item-history-diff {
+  @apply grid gap-2 rounded-xl border p-3;
+  border-color: var(--line);
+  background: var(--panel-soft);
+}
+
+.item-history-diff-label {
+  font-size: var(--font-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.item-history-diff-row {
+  @apply grid gap-1;
+  grid-template-columns: 80px minmax(0, 1fr);
+}
+
+.item-history-diff-value {
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+.item-history-actions {
+  @apply grid gap-2;
+}
+
+.item-history-action-row {
+  @apply flex flex-wrap gap-2;
 }
 
 .kv-label {
