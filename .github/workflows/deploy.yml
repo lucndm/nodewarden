@@ -26,12 +26,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The worker is deployed first and the secret is written afterwards.
+      # Cloudflare refuses a secret edit while the newest version of the worker
+      # is not the deployed one, so writing the secret first makes the deploy
+      # fail whenever a previous run left a newer undeployed version behind.
       - name: Deploy worker
         run: |
+          npx wrangler deploy
           if [ -n "$TELEGRAM_CHAT_ID" ]; then
             printf '%s' "$TELEGRAM_CHAT_ID" | npx wrangler secret put TELEGRAM_CHAT_ID
           fi
-          npx wrangler deploy
           npx wrangler secret list
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
