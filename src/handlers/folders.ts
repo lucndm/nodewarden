@@ -10,6 +10,7 @@ import { jsonResponse, errorResponse } from '../utils/response';
 import { readActingDeviceIdentifier } from '../utils/device';
 import { generateUUID } from '../utils/uuid';
 import { parsePagination, encodeContinuationToken } from '../utils/pagination';
+import { isValidEncString } from '../utils/enc-string';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
 
 function notifyVaultSyncForRequest(
@@ -154,6 +155,14 @@ export async function handleUpdateFolder(request: Request, env: Env, userId: str
     const oldName = folder.tagName || folder.name;
     folder.name = body.name;
     if (typeof body.tagName === 'string') folder.tagName = body.tagName.trim().slice(0, 64) || null;
+    // Encrypting a legacy plain-text folder name is not a rename. Without a
+    // tag_name the previous name *was* the tag, and /sync backfills it onto the
+    // items in this folder; treating the new ciphertext as the new tag would
+    // rewrite every one of those tags to ciphertext, which no client can undo.
+    const previousNameWasEncrypted = Boolean(isValidEncString(oldName));
+    if (!folder.tagName && oldName.length <= 64 && !previousNameWasEncrypted && isValidEncString(folder.name)) {
+      folder.tagName = oldName;
+    }
     folder.updatedAt = new Date().toISOString();
     const expectedRevision = request.headers.get('If-Match');
     if (expectedRevision !== null) {

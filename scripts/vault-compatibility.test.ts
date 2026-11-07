@@ -418,6 +418,29 @@ test('Web encrypted folder move keeps plaintext tags and stable Bitwarden folder
   assert.equal((await f.storage.getFolderForUser(folder.id, owner))?.name, encryptedName);
 });
 
+test('converting a legacy plain-text folder name keeps the tag instead of writing ciphertext into it', async (ctx) => {
+  const f = await fixture(ctx);
+  // A Bitwarden JSON import stores the folder name unencrypted and carries no
+  // tag_name; /sync then backfills that name as the first tag of its items.
+  const folderId = '00000000-0000-4000-8000-0000000000f9';
+  const legacyId = '00000000-0000-4000-8000-0000000000c9';
+  await f.storage.saveFolder({
+    id: folderId, userId: owner, name: 'Legacy JSON Folder', tagName: null, createdAt: revision, updatedAt: revision,
+  });
+  await f.storage.saveCipher({ ...f.base, id: legacyId, folderId, tags: ['Legacy JSON Folder'] });
+
+  // The Web Vault conversion: encrypt the stored name and send the revision.
+  const encryptedName = await encrypt('Legacy JSON Folder');
+  assert.equal((await f.route(`/api/folders/${folderId}`, 'PUT', { name: encryptedName })).status, 200);
+
+  const folder = await f.storage.getFolderForUser(folderId, owner);
+  assert.equal(folder?.name, encryptedName, 'official clients need the encrypted name');
+  assert.equal(folder?.tagName, 'Legacy JSON Folder', 'the tag keeps the plain text it already had');
+  const cipher = await f.storage.getCipherForUser(legacyId, owner);
+  assert.deepEqual(cipher?.tags, ['Legacy JSON Folder'], 'item tags must never become ciphertext');
+  assert.equal(cipher?.folderId, folderId, 'the item stays in the same folder');
+});
+
 test('official encrypted folder writes retain folder identity without leaking ciphertext into tags', async (ctx) => {
   const f = await fixture(ctx);
   const name = await encrypt('Official folder');
