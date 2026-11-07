@@ -241,6 +241,75 @@ async function run(baseUrl, checks, cli, cliEnv) {
   });
   checks.equal('restore the old state', restored.status, 200, JSON.stringify(restored.body));
 
+  // The CLI knows folders, not tags: its move must place the item in the
+  // folder without turning the encrypted folder name into a tag.
+  const folderCreated = await runCli(
+    cli,
+    ['create', 'folder', Buffer.from(JSON.stringify({ name: 'CLI Folder' })).toString('base64')],
+    { env }
+  );
+  if (!checks.ok('the CLI creates a folder', folderCreated.code === 0, folderCreated.stderr.trim())) return;
+  // The CLI prints either the id or the whole folder, depending on the version.
+  const rawFolder = folderCreated.stdout.trim();
+  let folderId = rawFolder;
+  try {
+    const parsed = JSON.parse(rawFolder);
+    if (parsed?.id) folderId = String(parsed.id);
+  } catch {
+    folderId = rawFolder;
+  }
+  checks.ok('the CLI reports the new folder id', folderId.length > 0, folderCreated.stdout);
+  const serverFolders = (await api(baseUrl, '/api/folders', { token })).body?.data || [];
+  checks.ok(
+    'the server knows the folder the CLI created',
+    serverFolders.some((folder) => folder.id === folderId),
+    JSON.stringify(serverFolders).slice(0, 300)
+  );
+
+  await runCli(cli, ['sync'], { env });
+  const cipherBefore = (await api(baseUrl, `/api/ciphers/${itemId}`, { token })).body;
+  const usernameBeforeMove = await decryptField(
+    cipherBefore?.login?.username,
+    cipherBefore?.key,
+    account.vaultKey
+  );
+  // The CLI edits from the item it holds, so the move sends the whole item
+  // with the new folder, exactly like the official client would.
+  const currentItem = JSON.parse((await runCli(cli, ['get', 'item', itemId, '--raw'], { env })).stdout || '{}');
+  const moved = await runCli(
+    cli,
+    [
+      'edit',
+      'item',
+      itemId,
+      Buffer.from(JSON.stringify({ ...currentItem, folderId })).toString('base64'),
+    ],
+    { env }
+  );
+  if (!checks.ok('the CLI moves the item into the folder', moved.code === 0, moved.stderr.trim())) return;
+
+  const movedItem = JSON.parse((await runCli(cli, ['get', 'item', itemId, '--raw'], { env })).stdout || '{}');
+  checks.equal('the CLI shows the item in the new folder', movedItem.folderId, folderId);
+
+  const movedCipher = (await api(baseUrl, `/api/ciphers/${itemId}`, { token })).body;
+  checks.equal('the server keeps the folder position', movedCipher?.folderId, folderId);
+  const tagList = Array.isArray(movedCipher?.tags) ? movedCipher.tags : [];
+  checks.ok(
+    'the encrypted folder name never lands in the tags',
+    tagList.every((tag) => !/^\d+\.[^|]*\|[^|]*\|[^|]*$/.test(String(tag))),
+    JSON.stringify(tagList)
+  );
+  // The official CLI re-encrypts the whole item on every edit, so the stored
+  // ciphertext changes even though the content does not. What matters is that
+  // the item still holds the same values and sits in the new folder.
+  const usernameAfterMove = await decryptField(
+    movedCipher?.login?.username,
+    movedCipher?.key,
+    account.vaultKey
+  );
+  checks.equal('the folder move leaves the content alone', usernameAfterMove, usernameBeforeMove);
+  checks.equal('the folder move leaves the username alone', usernameAfterMove, 'cli-user-v1');
+
   const synced = await runCli(cli, ['sync'], { env });
   checks.equal('the CLI syncs', synced.code, 0, synced.stderr.trim());
   const afterRestore = await runCli(cli, ['get', 'item', itemId, '--raw'], { env });

@@ -66,7 +66,7 @@ Counters start at zero when this feature is enabled and are stored per item in t
 
 **View Item History** in an item's *Item Information* card opens a timeline: the current version first, then every earlier state of that item. Pick a point in the timeline to see its decrypted content and to compare it field by field with the current version (name, username, password, website, notes, TOTP). Restoring asks for a confirmation, keeps the item ID, and first stores the state it replaces as a new version so a restore can be undone.
 
-The server keeps every stored state as ciphertext, exactly like the item itself, so no plaintext history leaves the browser. A version is written only when a content change really lands; folder moves, favorites and no-op saves write nothing. Each item keeps its 20 newest states, and the timeline covers the time since this feature was enabled - earlier history is not reconstructed. Password History stays a separate, per-password list.
+The server keeps every stored state as ciphertext, exactly like the item itself, so no plaintext history leaves the browser. A version is written when a write lands and the stored encrypted payload changed. The server never sees plaintext, so it cannot tell whether the content really changed: the Web Vault keeps the item key and re-encrypts only the fields it edited, so a folder move or a no-op save writes nothing, while the official CLI re-encrypts the whole item on every edit and therefore adds an entry each time - the comparison then reports no differences. Each item keeps its 20 newest states, and the timeline covers the time since this feature was enabled - earlier history is not reconstructed. Password History stays a separate, per-password list.
 
 Official Bitwarden apps and extensions ignore these endpoints and keep showing the item as it is now.
 
@@ -76,7 +76,7 @@ Vault changes are checked against a local Worker with its own D1, never against 
 
 | Command | What it covers |
 |---|---|
-| `npm run test:local-cli` | The official Bitwarden CLI against the local Worker: log in, create an item, read it back, edit it, sync and read the restored item. The item history endpoints are called over HTTP because no official client has them. |
+| `npm run test:local-cli` | The official Bitwarden CLI against the local Worker: log in, create an item, read it back, edit it, create a folder, move the item into it, sync and read the restored item. The item history endpoints are called over HTTP because no official client has them. |
 | `npm run test:local-api` | The same flow over HTTP, including the paths a client cannot reach: a foreign account, a stale revision, the sync payload. |
 | `npm run test:local-ui` | The Web Vault in Chromium: the item history timeline, the comparison against the current version and the restore. |
 
