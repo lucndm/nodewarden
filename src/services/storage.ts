@@ -164,11 +164,17 @@ import {
   saveStoredGeneratorSettings,
 } from './storage-generator-settings-repo';
 import {
+  addOrganizationUser as addStoredOrganizationUser,
+  confirmOrganizationUser as confirmStoredOrganizationUser,
+  createOrganizationWithOwner as createStoredOrganizationWithOwner,
   getCollectionRights as listStoredCollectionRights,
   getCollectionsForUser as listStoredCollectionsForUser,
   getGroupsForUser as listStoredGroupsForUser,
   getItemAccess as getStoredItemAccess,
   getItemGrants as listStoredItemGrants,
+  getMemberPublicKeys as listStoredMemberPublicKeys,
+  getOrganizationUserForUser as findStoredOrganizationUserForUser,
+  getOrganizationUsers as listStoredOrganizationUsers,
   getOrganizationsForUser as listStoredOrganizationsForUser,
   getOrganizationUsersForUser as listStoredOrganizationUsersForUser,
   getSharedCipherIdsForUser as listStoredSharedCipherIdsForUser,
@@ -652,6 +658,30 @@ export class StorageService {
 
   async getOrganizationUsersForUser(userId: string): Promise<OrganizationUser[]> {
     return listStoredOrganizationUsersForUser(this.db, userId);
+  }
+
+  async getOrganizationUsers(orgId: string): Promise<OrganizationUser[]> {
+    return listStoredOrganizationUsers(this.db, orgId);
+  }
+
+  async getOrganizationUserForUser(orgId: string, userId: string): Promise<OrganizationUser | null> {
+    return findStoredOrganizationUserForUser(this.db, orgId, userId);
+  }
+
+  async getMemberPublicKeys(userIds: string[]): Promise<Map<string, string | null>> {
+    return listStoredMemberPublicKeys(this.db, userIds);
+  }
+
+  async createOrganizationWithOwner(input: Parameters<typeof createStoredOrganizationWithOwner>[1]): Promise<void> {
+    return createStoredOrganizationWithOwner(this.db, input);
+  }
+
+  async addOrganizationUser(input: Parameters<typeof addStoredOrganizationUser>[1]): Promise<void> {
+    return addStoredOrganizationUser(this.db, input);
+  }
+
+  async confirmOrganizationUser(input: Parameters<typeof confirmStoredOrganizationUser>[1]): Promise<boolean> {
+    return confirmStoredOrganizationUser(this.db, input);
   }
 
   async getCollectionsForUser(userId: string): Promise<Collection[]> {

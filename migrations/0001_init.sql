@@ -118,10 +118,15 @@ CREATE INDEX IF NOT EXISTS idx_folders_user_updated ON folders(user_id, updated_
 -- reaches a collection directly or through a group, and an item belongs to an
 -- organization and sits in one or more collections. How the rights combine for
 -- an item is in src/services/collection-access.ts.
+-- The organization holds an RSA key pair the owner generates: the public key
+-- lets an admin wrap the organization key for a new member, and the private
+-- key is stored encrypted with that same organization key. The symmetric key
+-- itself belongs to the membership, wrapped for each member.
 CREATE TABLE IF NOT EXISTS organizations (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  key TEXT,
+  private_key TEXT,
+  public_key TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -132,6 +137,7 @@ CREATE TABLE IF NOT EXISTS organization_users (
   org_id TEXT NOT NULL,
   type INTEGER NOT NULL DEFAULT 2,
   status INTEGER NOT NULL DEFAULT 2,
+  key TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

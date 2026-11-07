@@ -77,15 +77,25 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   // The rights a member holds on a collection are read_only, hide_passwords
   // and manage. How they combine for an item is in
   // src/services/collection-access.ts, which matches the official server.
+  // The organization holds an RSA key pair the owner generates: the public
+  // key lets an admin wrap the organization key for a new member, and the
+  // private key is stored encrypted with that same organization key. The
+  // symmetric key itself belongs to the membership, wrapped for each member.
   'CREATE TABLE IF NOT EXISTS organizations (' +
-  'id TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT, ' +
+  'id TEXT PRIMARY KEY, name TEXT NOT NULL, private_key TEXT, public_key TEXT, ' +
   'created_at TEXT NOT NULL, updated_at TEXT NOT NULL)',
+  'ALTER TABLE organizations ADD COLUMN private_key TEXT',
+  'ALTER TABLE organizations ADD COLUMN public_key TEXT',
+  // The first version of this table kept the organization key here, which is
+  // wrong: the key is per member. Nothing ever wrote it.
+  'ALTER TABLE organizations DROP COLUMN key',
   'CREATE TABLE IF NOT EXISTS organization_users (' +
   'id TEXT PRIMARY KEY, user_id TEXT NOT NULL, org_id TEXT NOT NULL, ' +
-  'type INTEGER NOT NULL DEFAULT 2, status INTEGER NOT NULL DEFAULT 2, ' +
+  'type INTEGER NOT NULL DEFAULT 2, status INTEGER NOT NULL DEFAULT 2, key TEXT, ' +
   'created_at TEXT NOT NULL, updated_at TEXT NOT NULL, ' +
   'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, ' +
   'FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE)',
+  'ALTER TABLE organization_users ADD COLUMN key TEXT',
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_org_users_user_org ON organization_users(user_id, org_id)',
   'CREATE INDEX IF NOT EXISTS idx_org_users_org ON organization_users(org_id)',
 
@@ -271,6 +281,11 @@ async function executeSchemaStatement(db: D1Database, statement: string): Promis
   } catch (error) {
     const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
     if (msg.includes('already exists') || msg.includes('duplicate column name')) {
+      return;
+    }
+    // Dropping a column that is already gone is what a bootstrap rerun looks
+    // like once the drop has been applied.
+    if (/^alter table .+ drop column/i.test(statement.trim()) && msg.includes('no such column')) {
       return;
     }
     throw error;

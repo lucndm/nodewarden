@@ -109,9 +109,13 @@ import {
   handleUpdateAuthRequest,
 } from './handlers/auth-requests';
 import {
+  handleConfirmOrganizationUser,
+  handleCreateOrganization,
   handleGetCollections,
+  handleGetMemberPublicKeys,
   handleGetOrganizations,
-  handleUnsupportedCollectionRoute,
+  handleInviteOrganizationUser,
+  handleUnsupportedOrganizationAction,
 } from './handlers/organizations';
 
 export async function handleAuthenticatedRoute(
@@ -449,14 +453,53 @@ export async function handleAuthenticatedRoute(
     if (path === '/api/collections' && method === 'GET') {
       return handleGetCollections(request, env, userId);
     }
-    return handleUnsupportedCollectionRoute();
+    return handleUnsupportedOrganizationAction();
   }
 
   if (path === '/api/organizations' || path.startsWith('/api/organizations/')) {
-    if (path === '/api/organizations' && method === 'GET') {
-      return handleGetOrganizations(request, env, userId);
+    if (path === '/api/organizations') {
+      if (method === 'GET') return handleGetOrganizations(request, env, userId);
+      if (method === 'POST') return handleCreateOrganization(request, env, userId);
+      return handleUnsupportedOrganizationAction();
     }
-    return handleUnsupportedCollectionRoute();
+
+    // POST /api/organizations/:orgId/users — invite one or more members.
+    const inviteMatch = path.match(/^\/api\/organizations\/([^/]+)\/users$/i);
+    if (inviteMatch) {
+      if (method === 'POST') return handleInviteOrganizationUser(request, env, userId, inviteMatch[1]);
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // POST /api/organizations/:orgId/users/:membershipId/confirm — store the
+    // organization key wrapped for that member and confirm the membership.
+    const confirmMatch = path.match(/^\/api\/organizations\/([^/]+)\/users\/([^/]+)\/confirm$/i);
+    if (confirmMatch) {
+      if (method === 'POST') {
+        return handleConfirmOrganizationUser(request, env, userId, confirmMatch[1], confirmMatch[2]);
+      }
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // POST /api/organizations/:orgId/users/public-key — the public keys an
+    // admin's client needs in order to wrap the organization key.
+    const publicKeyMatch = path.match(/^\/api\/organizations\/([^/]+)\/users\/public-key$/i);
+    if (publicKeyMatch) {
+      if (method === 'POST') {
+        let ids: string[] = [];
+        try {
+          const body = (await request.clone().json()) as { userIds?: unknown };
+          if (Array.isArray(body.userIds)) {
+            ids = body.userIds.filter((value): value is string => typeof value === 'string');
+          }
+        } catch {
+          ids = [];
+        }
+        return handleGetMemberPublicKeys(request, env, userId, publicKeyMatch[1], ids);
+      }
+      return handleUnsupportedOrganizationAction();
+    }
+
+    return handleUnsupportedOrganizationAction();
   }
 
   if (path === '/api/sends') {

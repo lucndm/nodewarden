@@ -79,8 +79,8 @@ async function fixture(): Promise<{ env: Env; org: string; otherOrg: string }> {
     [org, 'Acme'],
     [otherOrg, 'Other'],
   ]) {
-    await env.DB.prepare('INSERT INTO organizations (id, name, key, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, name, 'org-key', NOW, NOW)
+    await env.DB.prepare('INSERT INTO organizations (id, name, private_key, public_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(id, name, 'enc-private-key', 'public-key', NOW, NOW)
       .run();
   }
   await env.DB.prepare(
@@ -141,7 +141,7 @@ async function sync(env: Env, userId: string) {
   return (await response.json()) as {
     ciphers: Array<{ id: string }>;
     collections: Array<{ id: string; readOnly: boolean; hidePasswords: boolean; manage: boolean }>;
-    organizations?: Array<{ id: string }>;
+    profile: { organizations: Array<{ id: string }> };
   };
 }
 
@@ -178,9 +178,9 @@ test('the collections and organizations of the member come back with their right
   assert.equal(body.collections[0].hidePasswords, false);
   assert.equal(body.collections[0].manage, false);
 
-  assert.ok(body.organizations);
-  assert.equal(body.organizations.length, 1);
-  assert.equal(body.organizations[0].id, org);
+  assert.ok(body.profile.organizations);
+  assert.equal(body.profile.organizations.length, 1);
+  assert.equal(body.profile.organizations[0].id, org);
 });
 
 test('the collection and organization endpoints return the real lists', async () => {
@@ -224,9 +224,12 @@ test('the collection and organization endpoints return the real lists', async ()
   assert.equal(organizations.data[0].name, 'Acme');
 });
 
-test('a route that would create an organization is refused, not faked', async () => {
+test('the organization routes that are not built answer 501, not success', async () => {
   const { env } = await fixture();
-  const response = await handleAuthenticatedRoute(
+
+  // Creating an organization is real, so a request without the wrapped key is
+  // rejected as bad input rather than answered with a fake id.
+  const creation = await handleAuthenticatedRoute(
     new Request('https://vault.example.test/api/organizations', { method: 'POST' }),
     env,
     MEMBER,
@@ -234,6 +237,18 @@ test('a route that would create an organization is refused, not faked', async ()
     '/api/organizations',
     'POST'
   );
-  assert.ok(response);
-  assert.equal(response.status, 501, 'a creation route must not answer success before it can do the job');
+  assert.ok(creation);
+  assert.equal(creation.status, 400);
+
+  // Deleting an organization is not built yet: the answer must say so.
+  const deletion = await handleAuthenticatedRoute(
+    new Request('https://vault.example.test/api/organizations/org-1', { method: 'DELETE' }),
+    env,
+    MEMBER,
+    { id: MEMBER } as never,
+    '/api/organizations/org-1',
+    'DELETE'
+  );
+  assert.ok(deletion);
+  assert.equal(deletion.status, 501, 'an unbuilt route must not answer success');
 });

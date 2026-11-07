@@ -348,6 +348,10 @@ async function importPreparedBackupRows(db: D1Database, payload: BackupPayload['
       ...row,
       type: row.type == null || row.type === '' ? 2 : Number(row.type),
       status: row.status == null || row.status === '' ? 2 : Number(row.status),
+      // An archive taken before the organization key was stored per member
+      // carries no key; that member simply cannot open shared items until an
+      // admin wraps the key for them.
+      key: row.key == null || row.key === '' ? null : String(row.key),
     })),
     collections: cloneRows(payload.collections || []),
     groups: cloneRows(payload.groups || []),
@@ -750,12 +754,12 @@ async function importBackupRows(db: D1Database, payload: BackupPayload['db'], us
   await runInsertBatch(
     db,
     tableName('organizations'),
-    buildInsertStatements(db, tableName('organizations'), ['id', 'name', 'key', 'created_at', 'updated_at'], payload.organizations || [])
+    buildInsertStatements(db, tableName('organizations'), ['id', 'name', 'private_key', 'public_key', 'created_at', 'updated_at'], payload.organizations || [])
   );
   await runInsertBatch(
     db,
     tableName('organization_users'),
-    buildInsertStatements(db, tableName('organization_users'), ['id', 'user_id', 'org_id', 'type', 'status', 'created_at', 'updated_at'], payload.organization_users || [])
+    buildInsertStatements(db, tableName('organization_users'), ['id', 'user_id', 'org_id', 'type', 'status', 'key', 'created_at', 'updated_at'], payload.organization_users || [])
   );
   await runInsertBatch(
     db,

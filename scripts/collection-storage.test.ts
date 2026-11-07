@@ -75,15 +75,15 @@ async function fixture(): Promise<{ env: Env; org: string; otherOrg: string }> {
 
   const org = 'org-1';
   await env.DB.prepare(
-    'INSERT INTO organizations (id, name, key, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO organizations (id, name, private_key, public_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
   )
-    .bind(org, 'Acme', 'org-key', NOW, NOW)
+    .bind(org, 'Acme', 'enc-private-key', 'public-key', NOW, NOW)
     .run();
   const otherOrg = 'org-2';
   await env.DB.prepare(
-    'INSERT INTO organizations (id, name, key, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO organizations (id, name, private_key, public_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
   )
-    .bind(otherOrg, 'Other', 'other-key', NOW, NOW)
+    .bind(otherOrg, 'Other', 'enc-private-key', 'public-key', NOW, NOW)
     .run();
 
   await env.DB.prepare(
