@@ -558,21 +558,33 @@ export async function getAllCiphers(db: D1Database, userId: string): Promise<Cip
  * is what the official server does when the organization allows admin access
  * to all collection items.
  */
+/**
+ * The items a member may read, as one set: their own plus the shared ones
+ * reachable through a collection of an organization they belong to.
+ *
+ * The same rule backs the list, the sync and the paged read, so the three can
+ * never disagree about what the member is allowed to see. Both placeholders
+ * take the user id.
+ */
+function visibleCiphersSql(columns: string): string {
+  const sharedColumns = columns.split(', ').map((name) => `C.${name}`).join(', ');
+  return (
+    `SELECT ${columns} FROM ciphers WHERE user_id = ? AND organization_id IS NULL ` +
+    'UNION ALL ' +
+    `SELECT ${sharedColumns} FROM ciphers C ` +
+    'INNER JOIN collection_ciphers CC ON CC.cipher_id = C.id ' +
+    'INNER JOIN collections COL ON COL.id = CC.collection_id ' +
+    'INNER JOIN organization_users OU ON OU.org_id = COL.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+    'LEFT JOIN collection_users CU ON CU.collection_id = COL.id AND CU.org_user_id = OU.id ' +
+    'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
+    'LEFT JOIN collection_groups CG ON CG.collection_id = COL.id AND CG.group_id = GU.group_id ' +
+    'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1'
+  );
+}
+
 export async function getVisibleCiphers(db: D1Database, userId: string): Promise<Cipher[]> {
-  const columns = selectCipherColumns();
   const res = await db
-    .prepare(
-      `SELECT ${columns} FROM ciphers WHERE user_id = ? AND organization_id IS NULL ` +
-      'UNION ALL ' +
-      `SELECT ${columns.split(', ').map((name) => `C.${name}`).join(', ')} FROM ciphers C ` +
-      'INNER JOIN collection_ciphers CC ON CC.cipher_id = C.id ' +
-      'INNER JOIN collections COL ON COL.id = CC.collection_id ' +
-      'INNER JOIN organization_users OU ON OU.org_id = COL.org_id AND OU.user_id = ? AND OU.status = 2 ' +
-      'LEFT JOIN collection_users CU ON CU.collection_id = COL.id AND CU.org_user_id = OU.id ' +
-      'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
-      'LEFT JOIN collection_groups CG ON CG.collection_id = COL.id AND CG.group_id = GU.group_id ' +
-      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1'
-    )
+    .prepare(`SELECT DISTINCT * FROM (${visibleCiphersSql(selectCipherColumns())})`)
     .bind(userId, userId)
     .all<CipherRow>();
   return (res.results || []).flatMap((row) => {
@@ -580,6 +592,7 @@ export async function getVisibleCiphers(db: D1Database, userId: string): Promise
     return cipher ? [cipher] : [];
   });
 }
+
 
 export async function getCiphersPage(
   db: D1Database,
@@ -590,16 +603,13 @@ export async function getCiphersPage(
 ): Promise<Cipher[]> {
   const whereDeleted = includeDeleted
     ? ''
-    : "AND deleted_at IS NULL AND json_extract(data, '$.deletedAt') IS NULL AND json_extract(data, '$.deletedDate') IS NULL";
+    : "WHERE deleted_at IS NULL AND json_extract(data, '$.deletedAt') IS NULL AND json_extract(data, '$.deletedDate') IS NULL";
   const res = await db
     .prepare(
-      `SELECT ${selectCipherColumns()} FROM ciphers
-       WHERE user_id = ?
-       ${whereDeleted}
-       ORDER BY updated_at DESC
-       LIMIT ? OFFSET ?`
+      `SELECT DISTINCT * FROM (${visibleCiphersSql(selectCipherColumns())}) ${whereDeleted} ` +
+        'ORDER BY updated_at DESC LIMIT ? OFFSET ?'
     )
-    .bind(userId, limit, offset)
+    .bind(userId, userId, limit, offset)
     .all<CipherRow>();
   return (res.results || []).flatMap((row) => {
     const cipher = parseCipherRow(row);
