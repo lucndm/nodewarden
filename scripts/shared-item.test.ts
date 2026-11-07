@@ -465,3 +465,57 @@ test('single-item actions follow the same rights as the bulk ones', async () => 
     404
   );
 });
+
+test('the paged read shows the shared items the member may read', async () => {
+  const { env } = await fixture();
+  const created = await createShared(env);
+
+  // The writer owns one personal item as well, so the page has both kinds.
+  const personal = await call(env, 'https://vault.example.test/api/ciphers', 'POST', WRITER, {
+    type: 1,
+    name: ENC('Personal login'),
+    login: { username: ENC('user'), password: ENC('pass'), uris: null, totp: null },
+  });
+  assert.equal(personal.status, 200);
+
+  const page = await call(env, 'https://vault.example.test/api/ciphers?pageSize=1&continuationToken=0', 'GET', WRITER);
+  assert.equal(page.status, 200);
+  const first = (await page.json()) as {
+    data: Array<{ id: string }>;
+    continuationToken: string | null;
+  };
+  assert.equal(first.data.length, 1, 'the page holds one item');
+  assert.ok(first.continuationToken, 'a page with more items carries a token');
+
+  // Reading the rest of the pages yields the shared item too.
+  const seen = new Set(first.data.map((entry) => entry.id));
+  let token: string | null = first.continuationToken;
+  for (let guard = 0; token && guard < 10; guard += 1) {
+    const next = await call(
+      env,
+      `https://vault.example.test/api/ciphers?pageSize=1&continuationToken=${encodeURIComponent(token)}`,
+      'GET',
+      WRITER
+    );
+    const body = (await next.json()) as { data: Array<{ id: string }>; continuationToken: string | null };
+    for (const entry of body.data) seen.add(entry.id);
+    token = body.continuationToken;
+  }
+  assert.ok(seen.has(created.id), 'the shared item appears in the paged read');
+  assert.equal(seen.size, 2, 'and the page holds exactly the two items the writer may read');
+
+  // The reader pages over the shared item only.
+  const readerPage = await call(env, 'https://vault.example.test/api/ciphers?pageSize=10&continuationToken=0', 'GET', READER);
+  const readerBody = (await readerPage.json()) as { data: Array<{ id: string }> };
+  assert.deepEqual(readerBody.data.map((entry) => entry.id), [created.id]);
+
+  // The outsider pages over nothing.
+  const outsiderPage = await call(
+    env,
+    'https://vault.example.test/api/ciphers?pageSize=10&continuationToken=0',
+    'GET',
+    OUTSIDER
+  );
+  const outsiderBody = (await outsiderPage.json()) as { data: Array<{ id: string }> };
+  assert.equal(outsiderBody.data.length, 0);
+});
