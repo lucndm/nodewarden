@@ -110,7 +110,10 @@ import {
 } from './handlers/auth-requests';
 import {
   handleConfirmOrganizationUser,
+  handleCreateCollection,
   handleCreateOrganization,
+  handleRemoveOrganizationUser,
+  handleUpdateOrganizationUser,
   handleGetCollections,
   handleGetMemberPublicKeys,
   handleGetOrganizations,
@@ -463,6 +466,15 @@ export async function handleAuthenticatedRoute(
       return handleUnsupportedOrganizationAction();
     }
 
+    // POST /api/organizations/:orgId/collections — create a collection.
+    const collectionMatch = path.match(/^\/api\/organizations\/([^/]+)\/collections$/i);
+    if (collectionMatch) {
+      if (method === 'POST') {
+        return handleCreateCollection(request, env, userId, collectionMatch[1]);
+      }
+      return handleUnsupportedOrganizationAction();
+    }
+
     // POST /api/organizations/:orgId/users — invite one or more members.
     const inviteMatch = path.match(/^\/api\/organizations\/([^/]+)\/users$/i);
     if (inviteMatch) {
@@ -495,6 +507,18 @@ export async function handleAuthenticatedRoute(
           ids = [];
         }
         return handleGetMemberPublicKeys(request, env, userId, publicKeyMatch[1], ids);
+      }
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // PUT /api/organizations/:orgId/users/:membershipId — role and collection rights.
+    const memberMatch = path.match(/^\/api\/organizations\/([^/]+)\/users\/([^/]+)$/i);
+    if (memberMatch) {
+      if (method === 'PUT' || method === 'POST') {
+        return handleUpdateOrganizationUser(request, env, userId, memberMatch[1], memberMatch[2]);
+      }
+      if (method === 'DELETE') {
+        return handleRemoveOrganizationUser(request, env, userId, memberMatch[1], memberMatch[2]);
       }
       return handleUnsupportedOrganizationAction();
     }

@@ -168,7 +168,14 @@ import {
   addOrganizationUser as addStoredOrganizationUser,
   confirmOrganizationUser as confirmStoredOrganizationUser,
   createOrganizationWithOwner as createStoredOrganizationWithOwner,
+  createCollection as createStoredCollection,
   filterWritableCipherIds as filterStoredWritableCipherIds,
+  getMembershipCollections as listStoredMembershipCollections,
+  getOrganizationMembershipIds as listStoredOrganizationMembershipIds,
+  removeOrganizationUser as removeStoredOrganizationUser,
+  replaceMembershipCollections as replaceStoredMembershipCollections,
+  setOrganizationUserType as setStoredOrganizationUserType,
+  type CollectionAssignment,
   getCipherRankByCipherForUser as listStoredCipherRanks,
   getCollectionIdsByCipherIds as listStoredCollectionIdsByCipherIds,
   getCollectionIdsForCipher as listStoredCollectionIdsForCipher,
@@ -727,6 +734,30 @@ export class StorageService {
 
   async getCipherRankByCipherForUser(userId: string): Promise<Map<string, number>> {
     return listStoredCipherRanks(this.db, userId);
+  }
+
+  async createCollection(input: { id: string; orgId: string; name: string; now: string }): Promise<void> {
+    return createStoredCollection(this.db, input);
+  }
+
+  async replaceMembershipCollections(membershipId: string, assignments: CollectionAssignment[]): Promise<void> {
+    return replaceStoredMembershipCollections(this.db, membershipId, assignments);
+  }
+
+  async getMembershipCollections(membershipId: string): Promise<CollectionAssignment[]> {
+    return listStoredMembershipCollections(this.db, membershipId);
+  }
+
+  async removeOrganizationUser(orgId: string, membershipId: string): Promise<boolean> {
+    return removeStoredOrganizationUser(this.db, orgId, membershipId);
+  }
+
+  async setOrganizationUserType(orgId: string, membershipId: string, type: number): Promise<boolean> {
+    return setStoredOrganizationUserType(this.db, orgId, membershipId, type, new Date().toISOString());
+  }
+
+  async getOrganizationMembershipIds(orgId: string): Promise<Set<string>> {
+    return listStoredOrganizationMembershipIds(this.db, orgId);
   }
 
   /**

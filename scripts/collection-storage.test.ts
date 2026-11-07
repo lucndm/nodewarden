@@ -202,12 +202,19 @@ test('the rights of a collection come from the direct assignment, or the group',
   assert.equal(readOnly.readOnly, true);
   assert.equal(readOnly.hidePasswords, false);
 
-  // The owner has no group grant, so the direct assignment stands alone.
+  // The owner of the organization reaches every collection of it, and the
+  // direct assignment on the collection they were given stands as it is.
   const ownerRights = await storage.getCollectionRights(OWNER);
-  assert.equal(ownerRights.length, 1);
-  assert.equal(ownerRights[0].collectionId, 'col-open');
-  assert.equal(ownerRights[0].readOnly, false);
-  assert.equal(ownerRights[0].manage, false);
+  const ownerById = new Map(ownerRights.map((rights) => [rights.collectionId, rights]));
+  assert.deepEqual([...ownerById.keys()].sort(), ['col-open', 'col-readonly']);
+  const ownerOpen = ownerById.get('col-open');
+  assert.ok(ownerOpen);
+  assert.equal(ownerOpen.readOnly, false);
+  assert.equal(ownerOpen.manage, true, 'an owner manages the collections they were assigned too');
+  // The collection they were not assigned reaches them through the owner role.
+  const ownerOther = ownerById.get('col-readonly');
+  assert.ok(ownerOther);
+  assert.equal(ownerOther.manage, true, 'an owner manages every collection of the organization');
 });
 
 test('an item the member cannot reach is not in the shared item list', async () => {
