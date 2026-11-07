@@ -831,3 +831,53 @@ export async function getMembershipCollections(
     manage: !!row.manage,
   }));
 }
+
+export interface OrganizationKeyRotation {
+  orgId: string;
+  /** The organization private key, re-encrypted under the new key. */
+  privateKey?: string | null;
+  /** The new organization key, wrapped for each remaining member. */
+  memberKeys: Array<{ membershipId: string; key: string }>;
+  /** Each shared item, with its item key re-wrapped under the new key. */
+  cipherKeys: Array<{ cipherId: string; key: string | null; data: string }>;
+  now: string;
+}
+
+/**
+ * Applies a key rotation: the organization private key, the key wrapped for
+ * every remaining member and the item key of every shared item.
+ *
+ * The client does all of the cryptography; the server only stores the new
+ * blobs, and it stores them in one batch so a half-applied rotation cannot
+ * leave a member or an item behind. Every member's revision moves afterwards,
+ * which is what makes their client fetch the new blobs instead of the old ones
+ * it cached.
+ */
+export async function rotateOrganizationKey(
+  db: D1Database,
+  rotation: OrganizationKeyRotation
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [];
+  if (rotation.privateKey !== undefined) {
+    statements.push(
+      db
+        .prepare('UPDATE organizations SET private_key = ?, updated_at = ? WHERE id = ?')
+        .bind(rotation.privateKey, rotation.now, rotation.orgId)
+    );
+  }
+  for (const member of rotation.memberKeys) {
+    statements.push(
+      db
+        .prepare('UPDATE organization_users SET key = ?, updated_at = ? WHERE id = ? AND org_id = ?')
+        .bind(member.key, rotation.now, member.membershipId, rotation.orgId)
+    );
+  }
+  for (const cipher of rotation.cipherKeys) {
+    statements.push(
+      db
+        .prepare('UPDATE ciphers SET key = ?, data = ?, updated_at = ? WHERE id = ? AND organization_id = ?')
+        .bind(cipher.key, cipher.data, rotation.now, cipher.cipherId, rotation.orgId)
+    );
+  }
+  if (statements.length) await db.batch(statements);
+}

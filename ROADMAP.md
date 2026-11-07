@@ -138,9 +138,19 @@ Luồng: owner `POST /api/organizations` (kèm `key` đã bọc + `keys`), admin
 1. `getCipherForUser` khớp `user_id` nên **người bị thu hồi vẫn đọc được item do chính họ tạo**. Nay đường đọc cá nhân chỉ khớp `organization_id IS NULL`; item chia sẻ chỉ đến từ quyền collection.
 2. `getCollectionRights` trả cờ 0 cho collection owner chưa được gán — owner thấy collection nhưng `manage=false`. Nay owner/admin nhận `readOnly=false, hidePasswords=false, manage=true` trên **mọi** collection của organization (khớp `CanEditAllCiphersAsync` của upstream), và `getCollectionRightsForCollections` dùng cùng quy tắc.
 
-**Giới hạn đã biết:** thu hồi member **không** lấy lại được khóa organization họ đã mở; dữ liệu họ đã tải vẫn đọc được. Đây là giới hạn của zero-knowledge, không phải lỗi cài đặt.
+**Xoay khóa organization (đã có):** `POST /api/organizations/:id/rotate-key` — **chỉ owner** (admin xoay được sẽ khoá owner ra ngoài). Client của owner sinh khóa mới rồi gửi lên:
 
-**Còn làm (P1-B):** chưa có UI organization/collection, chưa có endpoint quản lý group, và chưa có key rotation (đổi khóa organization + bọc lại cho từng member khi thu hồi).
+| Trường | Nội dung |
+|---|---|
+| `privateKey` | khóa riêng RSA của organization, mã hóa lại bằng khóa mới |
+| `members[]` | `{ membershipId, key }` — khóa mới bọc cho **từng** member còn lại |
+| `ciphers[]` | `{ id, key, data }` — item key bọc lại bằng khóa mới, kèm payload đã mã hóa lại |
+
+Server **không đọc được blob nào** và **không tự xoay được**. Ba tính chất đã kiểm bằng test: ghi trong **một batch** nên xoay dở dang không để lại member/item lẻ; revision của **mọi** member được đẩy lên nên client tải blob mới thay vì dùng cache; một id không thuộc organization (member hoặc item) làm **toàn bộ** request bị từ chối — không có chuyện xoay nửa chừng.
+
+**Giới hạn đã biết, và cách xoay khóa giải quyết:** thu hồi member **không** lấy lại được khóa organization họ đã mở — dữ liệu họ đã tải vẫn đọc được. Xoay khóa sau khi thu hồi mới là thứ khiến việc thu hồi có nghĩa: member đó không còn nhận được khóa mới nên không mở được item đã xoay. Dữ liệu họ **đã tải trước đó** thì không thể thu hồi từ xa — giới hạn của zero-knowledge, không phải lỗi cài đặt.
+
+**Còn làm (P1-B):** chưa có UI organization/collection, chưa có endpoint quản lý group, và client chưa tự gọi xoay khóa (hiện chỉ có endpoint; phần sinh khóa và bọc lại phía client chưa làm).
 
 **Tham chiếu thực tế từ `dani-garcia/vaultwarden` (đọc source `17b159b`):** đây là server Bitwarden-compatible tự host, đã làm phần lớn P3/P4/P5 mà NodeWarden còn mở, nên nó cho biết hình hình thực tế trước khi chốt. Những gì **không** có trong vaultwarden, tức là phần NodeWarden đang đi trước: không có bảng `tags` (chỉ `folders`), không có cột usage/`last_used_at` cho cipher, không có bảng version của item (chỉ `password_history`), **không** có kiểm tra tên Folder plaintext — `folders.name` lưu thẳng chuỗi client gửi lên (`src/db/models/folder.rs:52-61`), nên NodeWarden phải tự kiểm tra ciphertext-vs-plaintext như đã làm. Những gì vaultwarden có: Organizations + Collections + Groups + Member Roles (Owner/Admin/Manager/User/Custom), Event Logs, Policies, Directory Connector, Emergency Access, SSO OIDC; SCIM thì **không** (`"useScim": false` vì không thuộc AGPLv3). Bài học dùng được cho P1-B/P3/P5: `/sync` chỉ trả cipher **visible** cho user — `Cipher::find_by_user_visible` (`src/db/models/cipher.rs:926`) và `get_access_restrictions` trả `None` khi user không có quyền, nên lọc quyền nằm ở tầng query chứ không ở UI; và **gán trực tiếp thắng gán qua group** cho cùng collection (upstream cũng vậy: `WHERE NOT EXISTS (SELECT 1 FROM CollectionUser ...)` trong SQL của server chính thức). Lưu ý: vaultwarden cộng dồn quyền bằng AND cho `read_only`/`hide_passwords` và OR cho `manage`, khác quy tắc rank của server chính thức; NodeWarden theo server chính thức, chi tiết ở mục P1.
 

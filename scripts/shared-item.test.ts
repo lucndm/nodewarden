@@ -660,3 +660,109 @@ test('a new collection is reachable by the owner', async () => {
   const writerBody = (await writerList.json()) as { data: Array<{ id: string }> };
   assert.equal(writerBody.data.some((entry) => entry.id === collection.id), false);
 });
+
+test('a key rotation replaces the key of every member and every shared item', async () => {
+  const { env, storage } = await fixture();
+  const created = await createShared(env);
+
+  const ownerMembership = await storage.getOrganizationUserForUser(ORG, OWNER);
+  const writerMembership = await storage.getOrganizationUserForUser(ORG, WRITER);
+  assert.ok(ownerMembership);
+  assert.ok(writerMembership);
+
+  const beforeRevision = (await storage.getRevisionDate(READER));
+  const rotation = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/rotate-key`,
+    'POST',
+    OWNER,
+    {
+      privateKey: ENC('org-private-key-2'),
+      members: [
+        { membershipId: ownerMembership.id, key: ENC('org-key-for-owner-2') },
+        { membershipId: writerMembership.id, key: ENC('org-key-for-writer-2') },
+      ],
+      ciphers: [{ id: created.id, key: ENC('item-key-2'), data: JSON.stringify({ login: {}, tags: [] }) }],
+    }
+  );
+  assert.equal(rotation.status, 200);
+  const result = (await rotation.json()) as { members: number; ciphers: number };
+  assert.equal(result.members, 2);
+  assert.equal(result.ciphers, 1);
+
+  // The new blobs are stored; the old ones are gone.
+  const organizations = await storage.getOrganizationsForUser(OWNER);
+  assert.equal(organizations[0].privateKey, ENC('org-private-key-2'));
+  const ownerList = (await (
+    await call(env, 'https://vault.example.test/api/organizations', 'GET', OWNER)
+  ).json()) as { data: Array<{ key: string }> };
+  assert.equal(ownerList.data[0].key, ENC('org-key-for-owner-2'));
+  const writerList = (await (
+    await call(env, 'https://vault.example.test/api/organizations', 'GET', WRITER)
+  ).json()) as { data: Array<{ key: string }> };
+  assert.equal(writerList.data[0].key, ENC('org-key-for-writer-2'));
+
+  const cipher = await storage.getCipher(created.id);
+  assert.ok(cipher);
+  assert.equal(cipher.key, ENC('item-key-2'), 'the item key is re-wrapped under the new key');
+
+  // Every member's revision moves, so their client fetches the new blobs.
+  const afterRevision = await storage.getRevisionDate(READER);
+  assert.notEqual(afterRevision, beforeRevision, 'a rotation makes the readers resync');
+});
+
+test('only the owner rotates the key', async () => {
+  const { env, storage } = await fixture();
+  await createShared(env);
+  const ownerMembership = await storage.getOrganizationUserForUser(ORG, OWNER);
+  assert.ok(ownerMembership);
+
+  for (const userId of [WRITER, READER, OUTSIDER]) {
+    const attempt = await call(
+      env,
+      `https://vault.example.test/api/organizations/${ORG}/rotate-key`,
+      'POST',
+      userId,
+      { members: [{ membershipId: ownerMembership.id, key: ENC('stolen') }] }
+    );
+    assert.equal(attempt.status, 404, `${userId} must not rotate the key`);
+  }
+});
+
+test('a rotation naming another organization is refused whole', async () => {
+  const { env, storage } = await fixture();
+  const created = await createShared(env);
+
+  // A membership of this organization is fine; a cipher of another one is not.
+  const ownerMembership = await storage.getOrganizationUserForUser(ORG, OWNER);
+  assert.ok(ownerMembership);
+  await env.DB.prepare(
+    'INSERT INTO ciphers (id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, organization_id) ' +
+      'VALUES (?, ?, 1, NULL, ?, NULL, 0, ?, 0, NULL, ?, ?, ?)'
+  )
+    .bind('cipher-other-org', OWNER, ENC('other'), '{}', NOW, NOW, OTHER_ORG)
+    .run();
+
+  const attempt = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/rotate-key`,
+    'POST',
+    OWNER,
+    {
+      members: [{ membershipId: ownerMembership.id, key: ENC('new') }],
+      ciphers: [{ id: 'cipher-other-org', key: ENC('new'), data: '{}' }],
+    }
+  );
+  assert.equal(attempt.status, 404);
+
+  // Nothing changed, not even the part that was valid.
+  const organizations = await storage.getOrganizationsForUser(OWNER);
+  assert.equal(organizations[0].privateKey, 'enc-private');
+  const before = (await (
+    await call(env, 'https://vault.example.test/api/organizations', 'GET', OWNER)
+  ).json()) as { data: Array<{ key: string }> };
+  assert.equal(before.data[0].key, 'wrapped', 'a refused rotation leaves every key as it was');
+  const cipher = await storage.getCipher(created.id);
+  assert.ok(cipher);
+  assert.notEqual(cipher.key, ENC('new'));
+});

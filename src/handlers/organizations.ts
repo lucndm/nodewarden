@@ -11,6 +11,7 @@
 // organization key in a form only their own private key opens. A member who has
 // no wrapped key yet (invited, not confirmed) gets nothing.
 import { StorageService } from '../services/storage';
+import { notifyVaultSyncForRequest } from './ciphers';
 import { errorResponse, jsonResponse } from '../utils/response';
 import type { Env } from '../types';
 
@@ -481,4 +482,115 @@ export async function handleRemoveOrganizationUser(
   const removed = await storage.removeOrganizationUser(orgId, membershipId);
   if (!removed) return errorResponse('Organization member not found', 404);
   return new Response(null, { status: 204 });
+}
+
+interface RotateKeyBody {
+  privateKey?: unknown;
+  members?: unknown;
+  ciphers?: unknown;
+}
+
+// POST /api/organizations/:orgId/rotate-key
+//
+// The owner's client generates a new organization key, wraps it for every
+// remaining member, and re-wraps the item key of every shared item under it.
+// The server stores the new blobs; it cannot read any of them, and it cannot
+// rotate anything on its own.
+//
+// Rotating is what makes a removal mean something: without it, a member who
+// left still holds the key they unwrapped and can open the items they kept.
+export async function handleRotateOrganizationKey(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+
+  // Only the owner rotates: an admin rotating could lock the owner out.
+  const requester = await storage.getOrganizationUserForUser(orgId, userId);
+  if (!requester || requester.status !== STATUS_CONFIRMED || requester.type !== OWNER_TYPE) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  let body: RotateKeyBody;
+  try {
+    body = (await request.json()) as RotateKeyBody;
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
+
+  const members = Array.isArray(body.members)
+    ? body.members
+        .map((entry) => entry as { membershipId?: unknown; key?: unknown })
+        .map((entry) => ({
+          membershipId: text(entry?.membershipId).trim(),
+          key: text(entry?.key, 4096).trim(),
+        }))
+        .filter((entry) => entry.membershipId && entry.key)
+    : [];
+  const ciphers = Array.isArray(body.ciphers)
+    ? body.ciphers
+        .map((entry) => entry as { id?: unknown; key?: unknown; data?: unknown })
+        .map((entry) => ({
+          cipherId: text(entry?.id).trim(),
+          key: text(entry?.key, 4096).trim() || null,
+          data: text(entry?.data, 1_000_000),
+        }))
+        .filter((entry) => entry.cipherId && entry.data)
+    : [];
+  const privateKey = body.privateKey === undefined ? undefined : text(body.privateKey, 8192) || null;
+
+  if (!members.length && !ciphers.length && privateKey === undefined) {
+    return errorResponse('Nothing to rotate', 400);
+  }
+
+  // Every membership must belong to this organization, and every item must be
+  // one of its own: a rotation naming anything else is refused whole.
+  const organizationMembers = await storage.getOrganizationMembershipIds(orgId);
+  for (const member of members) {
+    if (!organizationMembers.has(member.membershipId)) {
+      return errorResponse('Organization member not found', 404);
+    }
+  }
+  if (ciphers.length) {
+    const organizationCollections = await storage.getOrganizationCollectionIds(orgId, []);
+    void organizationCollections;
+    const ranks = await storage.getCipherRankByCipherForUser(userId);
+    for (const cipher of ciphers) {
+      const cipherRecord = await storage.getCipher(cipher.cipherId);
+      if (!cipherRecord || cipherRecord.organizationId !== orgId) {
+        return errorResponse('Cipher not found', 404);
+      }
+      void ranks;
+    }
+  }
+
+  const now = new Date().toISOString();
+  await storage.rotateOrganizationKey({
+    orgId,
+    privateKey,
+    memberKeys: members,
+    cipherKeys: ciphers,
+    now,
+  });
+
+  // Every member has to fetch the new blobs, so their revision moves.
+  const memberships = await storage.getOrganizationUsers(orgId);
+  let revisionDate: string | null = null;
+  for (const membership of memberships) {
+    const revision = await storage.updateRevisionDate(membership.userId, now);
+    if (revision) revisionDate = revision;
+  }
+  if (revisionDate) notifyVaultSyncForRequest(request, env, userId, revisionDate);
+
+  return jsonResponse(
+    {
+      object: 'organizationKeyRotation',
+      rotatedAt: now,
+      members: members.length,
+      ciphers: ciphers.length,
+    },
+    200
+  );
 }
