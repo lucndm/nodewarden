@@ -61,8 +61,12 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
 
   // Legacy/imported ciphers that only carry folder_id get their tag backfill
   // here; the folders table keeps its rows and ids, so official clients see
-  // no folder churn. Idempotent and cheap once migrated.
-  await storage.migrateFolderCiphersToTags(userId);
+  // no folder churn. Idempotent and cheap once migrated. The rewrite changes
+  // cipher payloads, so the account revision has to move: the sync cache is
+  // keyed by it and would otherwise keep serving the pre-repair bodies.
+  if (await storage.migrateFolderCiphersToTags(userId)) {
+    await storage.updateRevisionDate(userId);
+  }
 
   const [revisionDate, accountPasskeys] = await Promise.all([
     storage.getRevisionDate(userId),
