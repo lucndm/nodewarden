@@ -15,6 +15,8 @@
 //   CLOUDFLARE_API_TOKEN   Cloudflare API token with D1 read
 //   CLOUDFLARE_ACCOUNT_ID  Cloudflare account id
 //   CLOUDFLARE_D1_NAME     D1 database name (default: nodewarden-db)
+import { createHash } from 'node:crypto';
+
 const TOKEN = process.env.CLOUDFLARE_API_TOKEN || '';
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || '';
 const DB_NAME = process.env.CLOUDFLARE_D1_NAME || 'nodewarden-db';
@@ -74,6 +76,33 @@ function readTags(data) {
   return Array.isArray(tags) ? tags.map((tag) => String(tag)) : [];
 }
 
+/**
+ * A digest of the vault rows that decide the layout: the folders with their
+ * tag names, the items with their folder and payload, the accounts and the
+ * revision. Two vaults with the same digest hold the same vault, so an
+ * archive that passed the restore rehearsal can be tied to the live vault.
+ */
+export function vaultDigest(vault) {
+  const folders = (vault.folders || [])
+    .map((row) => [row.id, row.user_id, row.name, row.tag_name ?? null])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  const ciphers = (vault.ciphers || [])
+    .map((row) => [row.id, row.user_id, row.folder_id ?? null, row.data])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  const users = (vault.users || [])
+    .map((row) => [row.id, row.email, row.role, row.status])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  const payload = JSON.stringify({
+    folders,
+    ciphers,
+    users,
+    revisions: (vault.revisions || [])
+      .map((row) => [row.user_id, row.revision_date])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  });
+  return createHash('sha256').update(payload).digest('hex');
+}
+
 async function main() {
   if (!TOKEN || !ACCOUNT_ID) {
     console.error('CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required.');
@@ -126,6 +155,7 @@ async function main() {
 
   const summary = {
     database: DB_NAME,
+    vaultDigest: vaultDigest({ folders, ciphers, users, revisions }),
     accounts: users.length,
     folders: folders.length,
     foldersWithPlainTextName: plainTextFolders.length,
@@ -160,4 +190,6 @@ async function main() {
   console.log('CLEAN: no plain-text folder name, no ciphertext-shaped tag, repair applied.');
 }
 
-process.exitCode = await main();
+if (process.argv[1] && process.argv[1].endsWith('prod-vault-audit.mjs')) {
+  process.exitCode = await main();
+}
