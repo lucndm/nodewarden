@@ -271,6 +271,66 @@ export async function handleGetMemberPublicKeys(
   );
 }
 
+/**
+ * GET /api/organizations/:orgId/rotation-data
+ *
+ * Everything a key rotation needs, in one read: the organization's encrypted
+ * private key, the members who keep their access, and the items the rotation
+ * has to re-encrypt.
+ *
+ * Only the owner gets this. The rotation itself is the owner's job, and the
+ * private key would be handed out with it.
+ */
+export async function handleGetOrganizationRotationData(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const requester = await storage.getOrganizationUserForUser(orgId, userId);
+  if (!requester || requester.status !== STATUS_CONFIRMED || requester.type !== OWNER_TYPE) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  const organizations = await storage.getOrganizationsForUser(userId);
+  const organization = organizations.find((entry) => entry.id === orgId);
+  if (!organization) return errorResponse('Organization not found', 404);
+
+  // Only members who stay keep their access, and only they need the new key.
+  const memberships = (await storage.getOrganizationUsers(orgId)).filter(
+    (membership) => membership.status === STATUS_CONFIRMED
+  );
+  const publicKeys = await storage.getMemberPublicKeys(memberships.map((membership) => membership.userId));
+  const members = memberships.map((membership) => ({
+    membershipId: membership.id,
+    userId: membership.userId,
+    publicKey: publicKeys.get(membership.userId) ?? null,
+  }));
+
+  const ciphers = await storage.getOrganizationCiphersForRotation(orgId);
+
+  return jsonResponse(
+    {
+      object: 'organizationRotationData',
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        privateKey: organization.privateKey,
+      },
+      members,
+      ciphers: ciphers.map((cipher) => ({
+        id: cipher.id,
+        key: cipher.key,
+        name: cipher.name,
+        notes: cipher.notes,
+        data: cipher.data,
+      })),
+    },
+    200
+  );
+}
+
 export async function handleUnsupportedOrganizationAction(): Promise<Response> {
   return errorResponse('Not implemented', 501);
 }

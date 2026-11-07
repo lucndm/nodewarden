@@ -826,3 +826,52 @@ test('a rotation is bounded so one call cannot push an arbitrary body', async ()
   });
   assert.equal(tooBig.status, 413);
 });
+
+test('only the owner can read what a rotation needs', async () => {
+  const { env } = await fixture();
+  const created = await createShared(env);
+
+  const owner = await call(env, `https://vault.example.test/api/organizations/${ORG}/rotation-data`, 'GET', OWNER);
+  assert.equal(owner.status, 200, await owner.clone().text());
+  const data = (await owner.json()) as {
+    organization: { id: string; privateKey: string | null };
+    members: Array<{ membershipId: string; userId: string; publicKey: string | null }>;
+    ciphers: Array<{ id: string; key: string | null; name: string | null; data: unknown }>;
+  };
+  assert.equal(data.organization.id, ORG);
+  assert.equal(data.organization.privateKey, 'enc-private');
+  assert.equal(data.members.length, 3, 'the confirmed members come back');
+  assert.ok(data.members.every((member) => !!member.membershipId));
+
+  const cipher = data.ciphers.find((entry) => entry.id === created.id);
+  assert.ok(cipher, 'the shared item comes back');
+  assert.equal(cipher.key, ENC('item-key'), 'the item key comes back as stored');
+  assert.equal(cipher.name, ENC('Shared login'), 'the name comes back as stored');
+  // The payload comes back exactly as the server stores it, so a rotation
+  // re-encrypts what is there and not what the request said.
+  const payload = cipher.data as { login: { username: string; password: string } };
+  assert.equal(payload.login.username, sharedItem.login.username, 'the payload comes back as stored');
+  assert.equal(payload.login.password, sharedItem.login.password, 'the payload comes back as stored');
+
+  // A plain member has no say in a rotation, so they get nothing.
+  for (const memberId of [WRITER, READER]) {
+    const denied = await call(env, `https://vault.example.test/api/organizations/${ORG}/rotation-data`, 'GET', memberId);
+    assert.equal(denied.status, 404, `${memberId} must not read the rotation data`);
+  }
+
+  // Someone outside the organization gets nothing either.
+  const outsider = await call(env, `https://vault.example.test/api/organizations/${ORG}/rotation-data`, 'GET', OUTSIDER);
+  assert.equal(outsider.status, 404);
+});
+
+test('a removed member is not part of the rotation', async () => {
+  const { env, storage } = await fixture();
+  const writerMembership = await storage.getOrganizationUserForUser(ORG, WRITER);
+  assert.ok(writerMembership);
+  await call(env, `https://vault.example.test/api/organizations/${ORG}/users/${writerMembership.id}`, 'DELETE', OWNER);
+
+  const owner = await call(env, `https://vault.example.test/api/organizations/${ORG}/rotation-data`, 'GET', OWNER);
+  const data = (await owner.json()) as { members: Array<{ userId: string }> };
+  assert.equal(data.members.length, 2, 'the removed member is not in the rotation');
+  assert.ok(!data.members.some((member) => member.userId === WRITER), 'the removed member keeps no key');
+});

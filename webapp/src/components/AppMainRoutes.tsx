@@ -61,6 +61,8 @@ export interface AppMainRoutesProps {
   collections: import('@/lib/api/organizations').VaultCollection[];
   collectionsError: string;
   onTrackPasswordCopy: (cipherId: string) => void;
+  /** The owner replaces the key every member of the organization holds. */
+  onRotateOrganizationKey: (organizationId: string) => Promise<void>;
   users: AdminUser[];
   invites: AdminInvite[];
   adminLoading: boolean;
@@ -280,6 +282,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             collections={props.collections}
             collectionsError={props.collectionsError}
             onTrackPasswordCopy={props.onTrackPasswordCopy}
+            onRotateOrganizationKey={props.onRotateOrganizationKey}
             onRefresh={props.onRefreshVault}
             onCreate={props.onCreateVaultItem}
             onUpdate={props.onUpdateVaultItem}

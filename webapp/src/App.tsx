@@ -64,6 +64,7 @@ import useAccountSecurityActions from '@/hooks/useAccountSecurityActions';
 import useAdminActions from '@/hooks/useAdminActions';
 import useBackupActions from '@/hooks/useBackupActions';
 import useVaultSendActions from '@/hooks/useVaultSendActions';
+import useOrganizationActions from '@/hooks/useOrganizationActions';
 import { useToastManager } from '@/hooks/useToastManager';
 import { t } from '@/lib/i18n';
 import { APP_NOTIFY_EVENT, type AppNotifyDetail } from '@/lib/app-notify';
@@ -1968,6 +1969,20 @@ export default function App() {
     patchDecryptedSends: setDecryptedSends,
     refreshVaultRevisionStamp: refreshVaultCoreRevisionStamp,
   });
+  const organizationActions = useOrganizationActions({
+    authedFetch,
+    session,
+    profile,
+    organizations: organizationsQuery.data ?? [],
+    onNotify: pushToast,
+    onRotated: async () => {
+      // The members now hold a new key, so the vault and the organization list
+      // are read again.
+      await queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      await queryClient.invalidateQueries({ queryKey: ['collections'] });
+      await vaultSendActions.refreshVault();
+    },
+  });
   const accountSecurityActions = useAccountSecurityActions({
     authedFetch,
     profile,
@@ -2129,6 +2144,9 @@ export default function App() {
     collectionsError:
       organizationsQuery.isError || collectionsQuery.isError ? t('txt_collection_load_failed') : '',
     onTrackPasswordCopy: (cipherId: string) => { void trackPasswordCopy(cipherId); },
+    onRotateOrganizationKey: async (organizationId: string) => {
+      await organizationActions.rotateOrganizationKey(organizationId);
+    },
     users: usersQuery.data || [],
     invites: invitesQuery.data || [],
     adminLoading: (usersQuery.isFetching && !usersQuery.data) || (invitesQuery.isFetching && !invitesQuery.data),

@@ -36,6 +36,8 @@ export interface SidebarOrganization {
   count: number;
   /** The owner still has to rotate the key after a member left. */
   keyRotationRequired: boolean;
+  /** Only the owner may rotate the key, so only the owner gets the button. */
+  canRotateKey: boolean;
   collections: Array<{ id: string; name: string; count: number }>;
 }
 
@@ -50,6 +52,10 @@ interface VaultSidebarProps {
   onChangeFilter: (filter: SidebarFilter) => void;
   onOpenDeleteAllTags: () => void;
   onOpenCreateTag: () => void;
+  /** The owner asks to replace the key every member holds. */
+  onRotateOrganizationKey: (organizationId: string) => void;
+  /** The organization whose rotation is running, so its button can wait. */
+  rotatingOrganizationId: string;
   onOpenRenameTag: (tag: SidebarTag) => void;
   onOpenDeleteTag: (tag: SidebarTag) => void;
 }
@@ -116,6 +122,17 @@ export default function VaultSidebar(props: VaultSidebarProps) {
                 )}
                 <span className="tree-count">{organization.count}</span>
               </button>
+              {organization.canRotateKey && (
+                <button
+                  type="button"
+                  className="tree-btn tree-btn-child"
+                  onClick={() => props.onRotateOrganizationKey(organization.id)}
+                  disabled={props.rotatingOrganizationId === organization.id}
+                >
+                  <KeyRound size={13} className="tree-icon" />
+                  <span className="tree-label">{t('txt_rotate_organization_key')}</span>
+                </button>
+              )}
               {organization.collections.map((collection) => (
                 <button
                   key={collection.id}

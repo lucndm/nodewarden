@@ -117,6 +117,7 @@ import {
   handleUpdateOrganizationUser,
   handleGetCollections,
   handleGetMemberPublicKeys,
+  handleGetOrganizationRotationData,
   handleGetOrganizations,
   handleInviteOrganizationUser,
   handleUnsupportedOrganizationAction,
@@ -464,6 +465,13 @@ export async function handleAuthenticatedRoute(
     if (path === '/api/organizations') {
       if (method === 'GET') return handleGetOrganizations(request, env, userId);
       if (method === 'POST') return handleCreateOrganization(request, env, userId);
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // GET /api/organizations/:orgId/rotation-data — what a rotation needs.
+    const rotationDataMatch = path.match(/^\/api\/organizations\/([^/]+)\/rotation-data$/i);
+    if (rotationDataMatch) {
+      if (method === 'GET') return handleGetOrganizationRotationData(request, env, userId, rotationDataMatch[1]);
       return handleUnsupportedOrganizationAction();
     }
 
