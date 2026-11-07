@@ -690,6 +690,7 @@ export interface SyncResponse {
   profile: ProfileResponse;
   folders: FolderResponse[];
   collections: any[];
+  organizations?: any[];
   ciphers: CipherResponse[];
   domains: any;
   policies: any[];

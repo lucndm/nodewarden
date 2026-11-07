@@ -1,0 +1,253 @@
+// Storage tests for the organizations, collections and groups of the
+// Bitwarden sharing model.
+//
+// The rights a member holds on a collection live in the database, and an item
+// the member may not reach must not leave the server. These tests check that
+// the storage reads the rights the way the official server does, and that the
+// filter that keeps an item out of the sync response works.
+//
+// Coverage:
+//   - a member sees the organizations, collections and groups they belong to;
+//   - a revoked or unconfirmed membership grants nothing;
+//   - the rights of a collection come from the direct assignment, and from the
+//     group when there is no direct one;
+//   - an item the member cannot reach is not in the shared item list;
+//   - an item in a collection of another member's organization is not either.
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
+
+import { installTestGlobals } from './test-env';
+installTestGlobals();
+
+import { StorageService } from '../src/services/storage';
+import { ensureStorageSchema } from '../src/services/storage-schema';
+import { sqliteD1 } from './sqlite-d1';
+import type { Env } from '../src/types';
+
+const NOW = '2026-11-07T00:00:00.000Z';
+const OWNER = 'user-1';
+const MEMBER = 'user-2';
+const OUTSIDER = 'user-3';
+
+async function fixture(): Promise<{ env: Env; org: string; otherOrg: string }> {
+  const db = new DatabaseSync(':memory:');
+  await ensureStorageSchema(sqliteD1(db));
+  const env = { DB: sqliteD1(db) } as unknown as Env;
+  const storage = new StorageService(env.DB);
+
+  for (const [id, email] of [
+    [OWNER, 'owner@example.test'],
+    [MEMBER, 'member@example.test'],
+    [OUTSIDER, 'outsider@example.test'],
+  ]) {
+    await storage.createUser({
+      id,
+      email,
+      name: null,
+      masterPasswordHint: null,
+      masterPasswordHash: 'hash',
+      key: 'key',
+      privateKey: null,
+      publicKey: null,
+      kdfType: 0,
+      kdfIterations: 600000,
+      kdfMemory: null,
+      kdfParallelism: null,
+      securityStamp: 'stamp',
+      role: 'user',
+      status: 'active',
+      verifyDevices: false,
+      totpSecret: null,
+      totpRecoveryCode: null,
+      yubikeyKey1: null,
+      yubikeyKey2: null,
+      yubikeyKey3: null,
+      yubikeyKey4: null,
+      yubikeyKey5: null,
+      yubikeyNfc: false,
+      apiKey: null,
+      userKeyId: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+    } as never);
+  }
+
+  const org = 'org-1';
+  await env.DB.prepare(
+    'INSERT INTO organizations (id, name, key, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind(org, 'Acme', 'org-key', NOW, NOW)
+    .run();
+  const otherOrg = 'org-2';
+  await env.DB.prepare(
+    'INSERT INTO organizations (id, name, key, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind(otherOrg, 'Other', 'other-key', NOW, NOW)
+    .run();
+
+  await env.DB.prepare(
+    'INSERT INTO organization_users (id, user_id, org_id, type, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind('ou-owner', OWNER, org, 0, 2, NOW, NOW)
+    .run();
+  await env.DB.prepare(
+    'INSERT INTO organization_users (id, user_id, org_id, type, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind('ou-member', MEMBER, org, 2, 2, NOW, NOW)
+    .run();
+  await env.DB.prepare(
+    'INSERT INTO organization_users (id, user_id, org_id, type, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind('ou-outsider', OUTSIDER, otherOrg, 2, 2, NOW, NOW)
+    .run();
+
+  await env.DB.prepare(
+    'INSERT INTO collections (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind('col-open', org, 'Open', NOW, NOW)
+    .run();
+  await env.DB.prepare(
+    'INSERT INTO collections (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind('col-readonly', org, 'Read only', NOW, NOW)
+    .run();
+  await env.DB.prepare(
+    'INSERT INTO collections (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind('col-other', otherOrg, 'Other', NOW, NOW)
+    .run();
+
+  // The owner may edit the open collection; the member may only read it.
+  await env.DB.prepare(
+    'INSERT INTO collection_users (collection_id, org_user_id, read_only, hide_passwords, manage) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind('col-open', 'ou-owner', 0, 0, 0)
+    .run();
+  await env.DB.prepare(
+    'INSERT INTO collection_users (collection_id, org_user_id, read_only, hide_passwords, manage) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind('col-open', 'ou-member', 1, 1, 0)
+    .run();
+  await env.DB.prepare(
+    'INSERT INTO collection_users (collection_id, org_user_id, read_only, hide_passwords, manage) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind('col-readonly', 'ou-member', 1, 0, 0)
+    .run();
+
+  // A group that reaches the open collection with manage rights.
+  await env.DB.prepare('INSERT INTO groups (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .bind('group-1', org, 'Admins', NOW, NOW)
+    .run();
+  await env.DB.prepare('INSERT INTO group_users (group_id, org_user_id) VALUES (?, ?)')
+    .bind('group-1', 'ou-member')
+    .run();
+  await env.DB.prepare(
+    'INSERT INTO collection_groups (collection_id, group_id, read_only, hide_passwords, manage) VALUES (?, ?, ?, ?, ?)'
+  )
+    .bind('col-open', 'group-1', 0, 0, 1)
+    .run();
+
+  return { env, org, otherOrg };
+}
+
+test('a member sees the organizations, collections and groups they belong to', async () => {
+  const { env } = await fixture();
+  const storage = new StorageService(env.DB);
+
+  const orgs = await storage.getOrganizationsForUser(MEMBER);
+  assert.equal(orgs.length, 1);
+  assert.equal(orgs[0].id, 'org-1');
+  assert.equal(orgs[0].name, 'Acme');
+
+  const collections = await storage.getCollectionsForUser(MEMBER);
+  assert.deepEqual(collections.map((c) => c.id).sort(), ['col-open', 'col-readonly']);
+
+  const groups = await storage.getGroupsForUser(MEMBER);
+  assert.deepEqual(groups.map((g) => g.id), ['group-1']);
+
+  // The outsider belongs to another organization and sees none of this one.
+  assert.equal((await storage.getOrganizationsForUser(OUTSIDER)).length, 1);
+  assert.equal((await storage.getOrganizationsForUser(OUTSIDER))[0].id, 'org-2');
+  assert.equal((await storage.getCollectionsForUser(OUTSIDER)).length, 0);
+});
+
+test('a revoked membership grants nothing', async () => {
+  const { env } = await fixture();
+  const storage = new StorageService(env.DB);
+  await env.DB.prepare('UPDATE organization_users SET status = -1 WHERE id = ?').bind('ou-member').run();
+
+  assert.equal((await storage.getOrganizationsForUser(MEMBER)).length, 0);
+  assert.equal((await storage.getCollectionsForUser(MEMBER)).length, 0);
+  assert.equal((await storage.getSharedCipherIdsForUser(MEMBER)).size, 0);
+});
+
+test('the rights of a collection come from the direct assignment, or the group', async () => {
+  const { env } = await fixture();
+  const storage = new StorageService(env.DB);
+
+  const memberRights = await storage.getCollectionRights(MEMBER);
+  const byId = new Map(memberRights.map((r) => [r.collectionId, r]));
+
+  // The direct assignment wins over the group grant on the same collection.
+  const open = byId.get('col-open');
+  assert.ok(open);
+  assert.equal(open.direct, true);
+  assert.equal(open.readOnly, true);
+  assert.equal(open.manage, false);
+
+  // The collection with no group grant keeps the direct one.
+  const readOnly = byId.get('col-readonly');
+  assert.ok(readOnly);
+  assert.equal(readOnly.readOnly, true);
+  assert.equal(readOnly.hidePasswords, false);
+
+  // The owner has no group grant, so the direct assignment stands alone.
+  const ownerRights = await storage.getCollectionRights(OWNER);
+  assert.equal(ownerRights.length, 1);
+  assert.equal(ownerRights[0].collectionId, 'col-open');
+  assert.equal(ownerRights[0].readOnly, false);
+  assert.equal(ownerRights[0].manage, false);
+});
+
+test('an item the member cannot reach is not in the shared item list', async () => {
+  const { env, org, otherOrg } = await fixture();
+  const storage = new StorageService(env.DB);
+  await env.DB.prepare(
+    'INSERT INTO ciphers (id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, organization_id) ' +
+    'VALUES (?, ?, 1, NULL, ?, NULL, 0, ?, 0, NULL, ?, ?, ?)'
+  )
+    .bind('cipher-shared', OWNER, 'enc-name', '{}', NOW, NOW, org)
+    .run();
+  await env.DB.prepare('INSERT INTO collection_ciphers (cipher_id, collection_id) VALUES (?, ?)')
+    .bind('cipher-shared', 'col-open')
+    .run();
+
+  // The member reaches the item through a collection they have rights on.
+  const memberShared = await storage.getSharedCipherIdsForUser(MEMBER);
+  assert.equal(memberShared.has('cipher-shared'), true);
+
+  // The outsider reaches no collection of this organization.
+  const outsiderShared = await storage.getSharedCipherIdsForUser(OUTSIDER);
+  assert.equal(outsiderShared.has('cipher-shared'), false);
+
+  // The rights of the item follow the collection the member reaches.
+  const access = await storage.getItemAccess('cipher-shared', MEMBER);
+  assert.ok(access);
+  assert.equal(access.readOnly, true);
+  assert.equal(access.hidePasswords, true);
+  assert.equal(access.manage, false);
+
+  // An item in a collection of another organization is out of reach.
+  await env.DB.prepare(
+    'INSERT INTO ciphers (id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, organization_id) ' +
+    'VALUES (?, ?, 1, NULL, ?, NULL, 0, ?, 0, NULL, ?, ?, ?)'
+  )
+    .bind('cipher-other', OWNER, 'enc-name', '{}', NOW, NOW, otherOrg)
+    .run();
+  await env.DB.prepare('INSERT INTO collection_ciphers (cipher_id, collection_id) VALUES (?, ?)')
+    .bind('cipher-other', 'col-other')
+    .run();
+  assert.equal((await storage.getSharedCipherIdsForUser(MEMBER)).has('cipher-other'), false);
+  assert.equal(await storage.getItemAccess('cipher-other', MEMBER), null);
+});

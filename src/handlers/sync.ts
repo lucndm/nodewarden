@@ -86,12 +86,14 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     return cachedResponse;
   }
 
-  const [ciphers, folders, sends, attachmentsByCipher, domainSettings] = await Promise.all([
-    storage.getAllCiphers(userId),
+  const [ciphers, folders, sends, attachmentsByCipher, domainSettings, collections, organizations] = await Promise.all([
+    storage.getVisibleCiphers(userId),
     storage.getAllFolders(userId),
     excludeSends ? Promise.resolve([]) : storage.getAllSends(userId),
     storage.getAttachmentsByUserId(userId),
     excludeDomains ? Promise.resolve(null) : storage.getUserDomainSettings(userId),
+    storage.getCollectionsForUser(userId),
+    storage.getOrganizationsForUser(userId),
   ]);
   const webAuthnPrfOptions = accountPasskeys
     .map(buildWebAuthnPrfOption)
@@ -110,6 +112,9 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
 
   const cipherResponses: CipherResponse[] = [];
   for (const cipher of ciphers) {
+    // The items the member may not read were already left out by the query
+    // that reads the vault, so the interface hiding an item is never the only
+    // thing keeping it from the client.
     const response = cipherToResponse(cipher, attachmentsByCipher.get(cipher.id) || [], { preserveRepairableUris, validFolderIds });
     if (isCipherResponseSyncCompatible(response)) {
       cipherResponses.push(response);
@@ -129,10 +134,34 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
   }
 
   const sendResponses = sends.map(sendToResponse);
+  const collectionRights = await storage.getCollectionRights(userId);
+  const rightsByCollection = new Map(collectionRights.map((rights) => [rights.collectionId, rights]));
+  const collectionResponses = collections.map((collection) => {
+    const rights = rightsByCollection.get(collection.id);
+    return {
+      id: collection.id,
+      organizationId: collection.orgId,
+      name: collection.name,
+      externalId: null,
+      type: 0,
+      readOnly: rights?.readOnly ?? true,
+      hidePasswords: rights?.hidePasswords ?? true,
+      manage: rights?.manage ?? false,
+      object: 'collectionDetails',
+    };
+  });
+  const organizationResponses = organizations.map((organization) => ({
+    id: organization.id,
+    name: organization.name,
+    key: organization.key ?? null,
+    object: 'organization',
+  }));
+
   const syncResponse: SyncResponse = {
     profile,
     folders: folderResponses,
-    collections: [],
+    collections: collectionResponses,
+    organizations: organizationResponses,
     ciphers: cipherResponses,
     domains: excludeDomains
       ? null

@@ -59,6 +59,7 @@ import {
   bulkSoftDeleteCiphers as softDeleteStoredCiphers,
   bulkUnarchiveCiphers as unarchiveStoredCiphers,
   getAllCiphers as listStoredCiphers,
+  getVisibleCiphers as listStoredVisibleCiphers,
   getCipher as findStoredCipher,
   getCipherForUser as findStoredCipherForUser,
   getCiphersByIds as listStoredCiphersByIds,
@@ -163,6 +164,21 @@ import {
   saveStoredGeneratorSettings,
 } from './storage-generator-settings-repo';
 import {
+  getCollectionRights as listStoredCollectionRights,
+  getCollectionsForUser as listStoredCollectionsForUser,
+  getGroupsForUser as listStoredGroupsForUser,
+  getItemAccess as getStoredItemAccess,
+  getItemGrants as listStoredItemGrants,
+  getOrganizationsForUser as listStoredOrganizationsForUser,
+  getOrganizationUsersForUser as listStoredOrganizationUsersForUser,
+  getSharedCipherIdsForUser as listStoredSharedCipherIdsForUser,
+  type Collection,
+  type CollectionRights,
+  type Group,
+  type Organization,
+  type OrganizationUser,
+} from './storage-collection-repo';
+import {
   consumeSsoAuthorizationCode,
   getSsoAuthorizationCode,
   putSsoAuthorizationCode,
@@ -187,7 +203,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-07-cipher-versions';
+const STORAGE_SCHEMA_VERSION = '2026-11-07-organization-collections';
 const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
 
 // D1-backed storage.
@@ -610,6 +626,46 @@ export class StorageService {
 
   async getAllCiphers(userId: string): Promise<Cipher[]> {
     return listStoredCiphers(this.db, userId);
+  }
+
+  /** The items the member may see: their own, plus the shared ones they reach. */
+  async getVisibleCiphers(userId: string): Promise<Cipher[]> {
+    return listStoredVisibleCiphers(this.db, userId);
+  }
+
+  // --- Organizations, collections and groups ---
+
+  async getOrganizationsForUser(userId: string): Promise<Organization[]> {
+    return listStoredOrganizationsForUser(this.db, userId);
+  }
+
+  async getOrganizationUsersForUser(userId: string): Promise<OrganizationUser[]> {
+    return listStoredOrganizationUsersForUser(this.db, userId);
+  }
+
+  async getCollectionsForUser(userId: string): Promise<Collection[]> {
+    return listStoredCollectionsForUser(this.db, userId);
+  }
+
+  async getCollectionRights(userId: string): Promise<CollectionRights[]> {
+    return listStoredCollectionRights(this.db, userId);
+  }
+
+  async getGroupsForUser(userId: string): Promise<Group[]> {
+    return listStoredGroupsForUser(this.db, userId);
+  }
+
+  async getItemGrants(cipherId: string, userId: string) {
+    return listStoredItemGrants(this.db, cipherId, userId);
+  }
+
+  async getItemAccess(cipherId: string, userId: string) {
+    return getStoredItemAccess(this.db, cipherId, userId);
+  }
+
+  /** The shared items a member may see. */
+  async getSharedCipherIdsForUser(userId: string): Promise<Set<string>> {
+    return listStoredSharedCipherIdsForUser(this.db, userId);
   }
 
   async getCiphersPage(userId: string, includeDeleted: boolean, limit: number, offset: number): Promise<Cipher[]> {
