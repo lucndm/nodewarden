@@ -112,8 +112,13 @@ export async function getCipher(db: D1Database, id: string): Promise<Cipher | nu
 }
 
 export async function getCipherForUser(db: D1Database, id: string, userId: string): Promise<Cipher | null> {
+  // Personal items only. A shared item belongs to the organization, so the
+  // member who happened to create it must not keep reading it after their
+  // membership is gone; the caller checks the organization rights separately.
   const row = await db
-    .prepare(`SELECT ${selectCipherColumns()} FROM ciphers WHERE id = ? AND user_id = ?`)
+    .prepare(
+      `SELECT ${selectCipherColumns()} FROM ciphers WHERE id = ? AND user_id = ? AND organization_id IS NULL`
+    )
     .bind(id, userId)
     .first<CipherRow>();
   return parseCipherRow(row);

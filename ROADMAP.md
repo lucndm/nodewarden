@@ -119,7 +119,28 @@ Luồng: owner `POST /api/organizations` (kèm `key` đã bọc + `keys`), admin
 
 **Một quy tắc đọc cho cả ba đường:** `list`, `/sync` và **phân trang** dùng chung `visibleCiphersSql` trong `storage-cipher-repo.ts`. Trước đó phân trang chỉ đọc item cá nhân nên client chính thức (dùng phân trang khi vault lớn) không thấy item chia sẻ; nay cả ba trả cùng một tập. `scripts/shared-item.test.ts` có case đi hết các trang với `pageSize=1` và kiểm phần tử chia sẻ xuất hiện.
 
-**Còn làm (P1-B):** chưa có UI organization/collection, chưa có endpoint xoá/thu hồi thành viên hay đổi quyền collection, và chưa có key rotation. Các route đó trả 501 chứ không trả thành công giả.
+**Quản trị organization (đã có):**
+
+| Route | Việc |
+|---|---|
+| `POST /api/organizations/:id/collections` | owner/admin tạo collection |
+| `PUT /api/organizations/:id/users/:memberId` | owner/admin đổi role và **thay toàn bộ** quyền collection của member (`collections: [{id, readOnly, hidePasswords, manage}]`) |
+| `DELETE /api/organizations/:id/users/:memberId` | owner/admin thu hồi member |
+
+- Chỉ owner/admin (type ≤ 1) làm được; member thường nhận **404**, không phải 403.
+- Collection của organization khác → **404**.
+- Owner **không bị thu hồi** (400); không tự thu hồi mình; không tạo owner thứ hai.
+- Quyền thay đổi **có hiệu lực ngay** ở request kế tiếp (test: cấp quyền ghi → reader sửa được; thu về read-only → 403 ngay).
+- **Thu hồi member**: xoá membership + collection assignments + group memberships, nên mọi query quyền trả rỗng ngay. Test xác nhận member bị xoá không còn thấy organization, collection hay item.
+
+**Hai lỗ hổng phát hiện khi làm phần này:**
+
+1. `getCipherForUser` khớp `user_id` nên **người bị thu hồi vẫn đọc được item do chính họ tạo**. Nay đường đọc cá nhân chỉ khớp `organization_id IS NULL`; item chia sẻ chỉ đến từ quyền collection.
+2. `getCollectionRights` trả cờ 0 cho collection owner chưa được gán — owner thấy collection nhưng `manage=false`. Nay owner/admin nhận `readOnly=false, hidePasswords=false, manage=true` trên **mọi** collection của organization (khớp `CanEditAllCiphersAsync` của upstream), và `getCollectionRightsForCollections` dùng cùng quy tắc.
+
+**Giới hạn đã biết:** thu hồi member **không** lấy lại được khóa organization họ đã mở; dữ liệu họ đã tải vẫn đọc được. Đây là giới hạn của zero-knowledge, không phải lỗi cài đặt.
+
+**Còn làm (P1-B):** chưa có UI organization/collection, chưa có endpoint quản lý group, và chưa có key rotation (đổi khóa organization + bọc lại cho từng member khi thu hồi).
 
 **Tham chiếu thực tế từ `dani-garcia/vaultwarden` (đọc source `17b159b`):** đây là server Bitwarden-compatible tự host, đã làm phần lớn P3/P4/P5 mà NodeWarden còn mở, nên nó cho biết hình hình thực tế trước khi chốt. Những gì **không** có trong vaultwarden, tức là phần NodeWarden đang đi trước: không có bảng `tags` (chỉ `folders`), không có cột usage/`last_used_at` cho cipher, không có bảng version của item (chỉ `password_history`), **không** có kiểm tra tên Folder plaintext — `folders.name` lưu thẳng chuỗi client gửi lên (`src/db/models/folder.rs:52-61`), nên NodeWarden phải tự kiểm tra ciphertext-vs-plaintext như đã làm. Những gì vaultwarden có: Organizations + Collections + Groups + Member Roles (Owner/Admin/Manager/User/Custom), Event Logs, Policies, Directory Connector, Emergency Access, SSO OIDC; SCIM thì **không** (`"useScim": false` vì không thuộc AGPLv3). Bài học dùng được cho P1-B/P3/P5: `/sync` chỉ trả cipher **visible** cho user — `Cipher::find_by_user_visible` (`src/db/models/cipher.rs:926`) và `get_access_restrictions` trả `None` khi user không có quyền, nên lọc quyền nằm ở tầng query chứ không ở UI; và **gán trực tiếp thắng gán qua group** cho cùng collection (upstream cũng vậy: `WHERE NOT EXISTS (SELECT 1 FROM CollectionUser ...)` trong SQL của server chính thức). Lưu ý: vaultwarden cộng dồn quyền bằng AND cho `read_only`/`hide_passwords` và OR cho `manage`, khác quy tắc rank của server chính thức; NodeWarden theo server chính thức, chi tiết ở mục P1.
 

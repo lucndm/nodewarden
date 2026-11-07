@@ -325,3 +325,160 @@ export async function handleGetCollections(request: Request, env: Env, userId: s
     })
   );
 }
+
+/** The membership of an owner or admin, or null when the caller has no say. */
+async function requireOrgAdmin(storage: StorageService, orgId: string, userId: string) {
+  const membership = await storage.getOrganizationUserForUser(orgId, userId);
+  if (!membership || membership.status !== STATUS_CONFIRMED || membership.type > 1) return null;
+  return membership;
+}
+
+// POST /api/organizations/:orgId/collections
+export async function handleCreateCollection(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  let body: { name?: unknown };
+  try {
+    body = (await request.json()) as { name?: unknown };
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
+  const name = text(body.name).trim();
+  if (!name) return errorResponse('Collection name is required', 400);
+
+  const collectionId = crypto.randomUUID();
+  await storage.createCollection({ id: collectionId, orgId, name, now: new Date().toISOString() });
+  return jsonResponse(
+    {
+      id: collectionId,
+      organizationId: orgId,
+      name,
+      externalId: null,
+      type: 0,
+      readOnly: false,
+      hidePasswords: false,
+      manage: true,
+      object: 'collectionDetails',
+    },
+    200
+  );
+}
+
+interface MemberRightsBody {
+  type?: unknown;
+  collections?: unknown;
+}
+
+// PUT /api/organizations/:orgId/users/:membershipId
+//
+// The owner or an admin sets the role of a member and the rights that member
+// holds on each collection. The assignments replace the previous ones.
+export async function handleUpdateOrganizationUser(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string,
+  membershipId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  const members = await storage.getOrganizationMembershipIds(orgId);
+  if (!members.has(membershipId)) return errorResponse('Organization member not found', 404);
+
+  let body: MemberRightsBody;
+  try {
+    body = (await request.json()) as MemberRightsBody;
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
+
+  const now = new Date().toISOString();
+
+  if (body.type !== undefined) {
+    const type = Number(body.type);
+    if (![0, 1, 2].includes(type)) return errorResponse('Invalid role', 400);
+    // Nobody becomes an owner through this route, and the owner of the
+    // organization does not change here.
+    if (type === 0) return errorResponse('An organization has one owner', 400);
+    const target = (await storage.getOrganizationUsers(orgId)).find((entry) => entry.id === membershipId);
+    if (target?.type === 0) return errorResponse('The owner role does not change here', 400);
+    await storage.setOrganizationUserType(orgId, membershipId, type);
+  }
+
+  if (body.collections !== undefined) {
+    if (!Array.isArray(body.collections)) return errorResponse('collections must be an array', 400);
+    const requested = body.collections
+      .map((entry) => entry as { id?: unknown; readOnly?: unknown; hidePasswords?: unknown; manage?: unknown })
+      .filter((entry) => typeof entry?.id === 'string' && (entry.id as string).trim())
+      .map((entry) => ({
+        collectionId: String(entry.id).trim(),
+        readOnly: entry.readOnly === true,
+        hidePasswords: entry.hidePasswords === true,
+        manage: entry.manage === true,
+      }));
+
+    const ids = requested.map((entry) => entry.collectionId);
+    const owned = await storage.getOrganizationCollectionIds(orgId, ids);
+    if (owned.size !== new Set(ids).size) return errorResponse('Collection not found', 404);
+
+    await storage.replaceMembershipCollections(membershipId, requested);
+  }
+
+  const updated = (await storage.getOrganizationUsers(orgId)).find((entry) => entry.id === membershipId);
+  const assignments = await storage.getMembershipCollections(membershipId);
+  return jsonResponse(
+    {
+      id: membershipId,
+      organizationId: orgId,
+      userId: updated?.userId ?? null,
+      type: updated?.type ?? USER_TYPE,
+      status: updated?.status ?? STATUS_CONFIRMED,
+      collections: assignments.map((entry) => ({
+        id: entry.collectionId,
+        readOnly: entry.readOnly,
+        hidePasswords: entry.hidePasswords,
+        manage: entry.manage,
+      })),
+      object: 'organizationUserDetails',
+      updatedAt: now,
+    },
+    200
+  );
+}
+
+// DELETE /api/organizations/:orgId/users/:membershipId
+//
+// Removing a member takes their rights away at once: the queries that resolve
+// access join the membership, so every collection they reached stops counting.
+// It cannot take back the organization key they already unwrapped.
+export async function handleRemoveOrganizationUser(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string,
+  membershipId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const requester = await requireOrgAdmin(storage, orgId, userId);
+  if (!requester) return errorResponse('Organization not found', 404);
+
+  const target = (await storage.getOrganizationUsers(orgId)).find((entry) => entry.id === membershipId);
+  if (!target) return errorResponse('Organization member not found', 404);
+  if (target.type === 0) return errorResponse('The owner cannot be removed', 400);
+  if (target.userId === userId) return errorResponse('Remove yourself from another owner account', 400);
+
+  const removed = await storage.removeOrganizationUser(orgId, membershipId);
+  if (!removed) return errorResponse('Organization member not found', 404);
+  return new Response(null, { status: 204 });
+}

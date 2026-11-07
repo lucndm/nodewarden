@@ -145,16 +145,18 @@ export async function getCollectionRights(
   const rows = await db
     .prepare(
       'SELECT C.id AS collection_id, ' +
-      'COALESCE(CU.read_only, CG.read_only, 0) AS read_only, ' +
-      'COALESCE(CU.hide_passwords, CG.hide_passwords, 0) AS hide_passwords, ' +
-      'COALESCE(CU.manage, CG.manage, 0) AS manage, ' +
+      // An owner or admin of the organization manages every collection of it,
+      // whatever the assignment says.
+      'CASE WHEN OU.type <= 1 THEN 0 ELSE COALESCE(CU.read_only, CG.read_only, 0) END AS read_only, ' +
+      'CASE WHEN OU.type <= 1 THEN 0 ELSE COALESCE(CU.hide_passwords, CG.hide_passwords, 0) END AS hide_passwords, ' +
+      'CASE WHEN OU.type <= 1 THEN 1 ELSE COALESCE(CU.manage, CG.manage, 0) END AS manage, ' +
       'CASE WHEN CU.collection_id IS NOT NULL THEN 1 ELSE 0 END AS direct ' +
       'FROM collections C ' +
       'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
       'LEFT JOIN collection_users CU ON CU.collection_id = C.id AND CU.org_user_id = OU.id ' +
       'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
       'LEFT JOIN collection_groups CG ON CG.collection_id = C.id AND CG.group_id = GU.group_id ' +
-      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL'
+      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1'
     )
     .bind(userId)
     .all<GrantRow>();
@@ -217,7 +219,7 @@ export async function getCollectionsForUser(db: D1Database, userId: string): Pro
       'LEFT JOIN collection_users CU ON CU.collection_id = C.id AND CU.org_user_id = OU.id ' +
       'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
       'LEFT JOIN collection_groups CG ON CG.collection_id = C.id AND CG.group_id = GU.group_id ' +
-      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL ' +
+      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1 ' +
       'ORDER BY C.name ASC'
     )
     .bind(userId)
@@ -306,7 +308,7 @@ export async function getSharedCipherIdsForUser(
       'LEFT JOIN collection_users CU ON CU.collection_id = C.id AND CU.org_user_id = OU.id ' +
       'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
       'LEFT JOIN collection_groups CG ON CG.collection_id = C.id AND CG.group_id = GU.group_id ' +
-      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL'
+      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1'
     )
     .bind(userId)
     .all<{ cipher_id: string }>();
@@ -599,9 +601,9 @@ export async function getCollectionRightsForCollections(
   const rows = await db
     .prepare(
       'SELECT C.id AS collection_id, ' +
-        'COALESCE(CU.read_only, CG.read_only, 0) AS read_only, ' +
-        'COALESCE(CU.hide_passwords, CG.hide_passwords, 0) AS hide_passwords, ' +
-        'COALESCE(CU.manage, CG.manage, 0) AS manage, ' +
+        'CASE WHEN OU.type <= 1 THEN 0 ELSE COALESCE(CU.read_only, CG.read_only, 0) END AS read_only, ' +
+        'CASE WHEN OU.type <= 1 THEN 0 ELSE COALESCE(CU.hide_passwords, CG.hide_passwords, 0) END AS hide_passwords, ' +
+        'CASE WHEN OU.type <= 1 THEN 1 ELSE COALESCE(CU.manage, CG.manage, 0) END AS manage, ' +
         'CASE WHEN CU.collection_id IS NOT NULL THEN 1 ELSE 0 END AS direct ' +
         'FROM collections C ' +
         'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
@@ -705,4 +707,127 @@ export async function filterWritableCipherIds(
     if (rank !== undefined && rank >= minimumRank) allowed.add(id);
   }
   return unique.filter((id) => allowed.has(id));
+}
+
+export interface CollectionAssignment {
+  collectionId: string;
+  readOnly: boolean;
+  hidePasswords: boolean;
+  manage: boolean;
+}
+
+/** Creates a collection in an organization. */
+export async function createCollection(
+  db: D1Database,
+  input: { id: string; orgId: string; name: string; now: string }
+): Promise<void> {
+  await db
+    .prepare('INSERT INTO collections (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(input.id, input.orgId, input.name, input.now, input.now)
+    .run();
+}
+
+/**
+ * Replaces the collection assignments of one membership.
+ *
+ * The caller has already checked that every collection belongs to the
+ * organization and that this member may hand out rights on it.
+ */
+export async function replaceMembershipCollections(
+  db: D1Database,
+  membershipId: string,
+  assignments: CollectionAssignment[]
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [
+    db.prepare('DELETE FROM collection_users WHERE org_user_id = ?').bind(membershipId),
+  ];
+  for (const assignment of assignments) {
+    statements.push(
+      db
+        .prepare(
+          'INSERT INTO collection_users (collection_id, org_user_id, read_only, hide_passwords, manage) VALUES (?, ?, ?, ?, ?)'
+        )
+        .bind(
+          assignment.collectionId,
+          membershipId,
+          assignment.readOnly ? 1 : 0,
+          assignment.hidePasswords ? 1 : 0,
+          assignment.manage ? 1 : 0
+        )
+    );
+  }
+  await db.batch(statements);
+}
+
+/**
+ * Removes a member from an organization.
+ *
+ * Their collection assignments and group memberships go with them, so every
+ * query that asks for rights stops returning anything for that member. What
+ * this cannot do is take back the organization key they already unwrapped:
+ * anything they downloaded while they were a member stays readable to them.
+ */
+export async function removeOrganizationUser(
+  db: D1Database,
+  orgId: string,
+  membershipId: string
+): Promise<boolean> {
+  const existing = await db
+    .prepare('SELECT id FROM organization_users WHERE id = ? AND org_id = ?')
+    .bind(membershipId, orgId)
+    .first<{ id: string }>();
+  if (!existing) return false;
+  await db.batch([
+    db.prepare('DELETE FROM collection_users WHERE org_user_id = ?').bind(membershipId),
+    db.prepare('DELETE FROM group_users WHERE org_user_id = ?').bind(membershipId),
+    db.prepare('DELETE FROM organization_users WHERE id = ? AND org_id = ?').bind(membershipId, orgId),
+  ]);
+  return true;
+}
+
+/** Updates the role of a membership. */
+export async function setOrganizationUserType(
+  db: D1Database,
+  orgId: string,
+  membershipId: string,
+  type: number,
+  now: string
+): Promise<boolean> {
+  const result = await db
+    .prepare('UPDATE organization_users SET type = ?, updated_at = ? WHERE id = ? AND org_id = ?')
+    .bind(type, now, membershipId, orgId)
+    .run();
+  return (result.meta.changes ?? 0) === 1;
+}
+
+/** The membership ids of one organization, for the admin views. */
+export async function getOrganizationMembershipIds(
+  db: D1Database,
+  orgId: string
+): Promise<Set<string>> {
+  const res = await db
+    .prepare('SELECT id FROM organization_users WHERE org_id = ?')
+    .bind(orgId)
+    .all<{ id: string }>();
+  return new Set((res.results || []).map((row) => row.id));
+}
+
+/** The collection assignments of one membership. */
+export async function getMembershipCollections(
+  db: D1Database,
+  membershipId: string
+): Promise<CollectionAssignment[]> {
+  const res = await db
+    .prepare(
+      'SELECT collection_id, read_only, hide_passwords, manage FROM collection_users WHERE org_user_id = ? ' +
+        'ORDER BY collection_id ASC'
+    )
+    .bind(membershipId)
+    .all<{ collection_id: string; read_only: number; hide_passwords: number; manage: number }>();
+  return (res.results || []).map((row) => ({
+    collectionId: row.collection_id,
+    readOnly: !!row.read_only,
+    hidePasswords: !!row.hide_passwords,
+    manage: !!row.manage,
+  }));
 }

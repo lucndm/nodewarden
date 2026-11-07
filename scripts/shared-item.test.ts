@@ -519,3 +519,144 @@ test('the paged read shows the shared items the member may read', async () => {
   const outsiderBody = (await outsiderPage.json()) as { data: Array<{ id: string }> };
   assert.equal(outsiderBody.data.length, 0);
 });
+
+test('an admin grants a member the rights on a collection, and can take them back', async () => {
+  const { env, storage } = await fixture();
+  const created = await createShared(env);
+
+  const readerMembership = await storage.getOrganizationUserForUser(ORG, READER);
+  assert.ok(readerMembership, 'the reader is a member');
+
+  // Grant the reader write rights on the shared collection.
+  const granted = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${readerMembership.id}`,
+    'PUT',
+    OWNER,
+    { collections: [{ id: COL_SHARED, readOnly: false, hidePasswords: false, manage: false }] }
+  );
+  assert.equal(granted.status, 200);
+  const body = (await granted.json()) as { collections: Array<{ id: string; readOnly: boolean }> };
+  assert.deepEqual(body.collections, [
+    { id: COL_SHARED, readOnly: false, hidePasswords: false, manage: false },
+  ]);
+
+  // The reader may now change the item.
+  const update = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'PUT', READER, {
+    ...sharedItem,
+    name: ENC('Changed by reader'),
+  });
+  assert.equal(update.status, 200, 'the granted rights take effect at once');
+
+  // Taking the rights away refuses the next write.
+  const revoked = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${readerMembership.id}`,
+    'PUT',
+    OWNER,
+    { collections: [{ id: COL_SHARED, readOnly: true, hidePasswords: false, manage: false }] }
+  );
+  assert.equal(revoked.status, 200);
+  const denied = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'PUT', READER, {
+    ...sharedItem,
+    name: ENC('Changed again'),
+  });
+  assert.equal(denied.status, 403, 'withdrawn rights take effect at once');
+});
+
+test('only an owner or an admin may hand out rights', async () => {
+  const { env, storage } = await fixture();
+  await createShared(env);
+
+  const readerMembership = await storage.getOrganizationUserForUser(ORG, READER);
+  assert.ok(readerMembership);
+
+  const attempt = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${readerMembership.id}`,
+    'PUT',
+    WRITER,
+    { collections: [{ id: COL_SHARED, readOnly: false, manage: true }] }
+  );
+  assert.equal(attempt.status, 404, 'a plain member must not grant rights');
+
+  // A collection of another organization cannot be handed out either.
+  const crossOrg = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${readerMembership.id}`,
+    'PUT',
+    OWNER,
+    { collections: [{ id: COL_OTHER, readOnly: false }] }
+  );
+  assert.equal(crossOrg.status, 404);
+});
+
+test('removing a member takes their access away at once', async () => {
+  const { env, storage } = await fixture();
+  const created = await createShared(env);
+
+  const writerMembership = await storage.getOrganizationUserForUser(ORG, WRITER);
+  assert.ok(writerMembership);
+
+  const before = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER);
+  assert.equal(before.status, 200);
+
+  const removed = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${writerMembership.id}`,
+    'DELETE',
+    OWNER
+  );
+  assert.equal(removed.status, 204);
+
+  const after = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER);
+  assert.equal(after.status, 404, 'a removed member sees nothing of the organization');
+  assert.equal((await storage.getCollectionsForUser(WRITER)).length, 0);
+  assert.equal((await storage.getOrganizationsForUser(WRITER)).length, 0);
+});
+
+test('the owner cannot be removed, and nobody removes another member by guessing', async () => {
+  const { env, storage } = await fixture();
+  const ownerMembership = await storage.getOrganizationUserForUser(ORG, OWNER);
+  const readerMembership = await storage.getOrganizationUserForUser(ORG, READER);
+  assert.ok(ownerMembership);
+  assert.ok(readerMembership);
+
+  const removeOwner = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${ownerMembership.id}`,
+    'DELETE',
+    OWNER
+  );
+  assert.equal(removeOwner.status, 400);
+
+  // The reader is not an admin, so they may not remove anyone.
+  const readerAttempt = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${readerMembership.id}`,
+    'DELETE',
+    READER
+  );
+  assert.equal(readerAttempt.status, 404);
+});
+
+test('a new collection is reachable by the owner', async () => {
+  const { env } = await fixture();
+
+  const created = await call(env, `https://vault.example.test/api/organizations/${ORG}/collections`, 'POST', OWNER, {
+    name: 'Fresh',
+  });
+  assert.equal(created.status, 200);
+  const collection = (await created.json()) as { id: string; name: string; organizationId: string };
+  assert.equal(collection.name, 'Fresh');
+  assert.equal(collection.organizationId, ORG);
+
+  const list = await call(env, 'https://vault.example.test/api/collections', 'GET', OWNER);
+  const body = (await list.json()) as { data: Array<{ id: string }> };
+  assert.ok(body.data.some((entry) => entry.id === collection.id), 'the owner reaches the new collection');
+
+  // A plain member who was not given it does not.
+  const writerList = await call(env, 'https://vault.example.test/api/collections', 'GET', WRITER);
+  const writerBody = (await writerList.json()) as { data: Array<{ id: string }> };
+  assert.equal(writerBody.data.some((entry) => entry.id === collection.id), false);
+});
