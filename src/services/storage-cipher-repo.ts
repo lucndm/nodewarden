@@ -388,9 +388,13 @@ function sanitizeIds(ids: string[]): string[] {
 }
 
 export async function deleteCipher(db: D1Database, id: string, userId: string): Promise<void> {
+  // A shared item may be destroyed by any member who may manage it; the caller
+  // has already checked that, so the guard here only refuses another account's
+  // personal item.
   await db.batch([
     db.prepare('DELETE FROM cipher_versions WHERE cipher_id = ?').bind(id),
-    db.prepare('DELETE FROM ciphers WHERE id = ? AND user_id = ?').bind(id, userId),
+    db.prepare('DELETE FROM ciphers WHERE id = ? AND (user_id = ? OR organization_id IS NOT NULL)').bind(id, userId),
+    db.prepare('DELETE FROM collection_ciphers WHERE cipher_id = ?').bind(id),
   ]);
 }
 
@@ -466,9 +470,9 @@ export async function bulkSoftDeleteCiphers(
         `UPDATE ciphers
          SET deleted_at = ?, updated_at = ?,
              data = json_remove(data, '$.deletedAt', '$.deletedDate', '$.updatedAt', '$.revisionDate')
-         WHERE user_id = ? AND id IN (${placeholders})`
+         WHERE id IN (${placeholders}) AND (user_id = ? OR organization_id IS NOT NULL)`
       )
-      .bind(now, now, userId, ...chunk)
+      .bind(now, now, ...chunk, userId)
       .run();
   }
 
@@ -497,9 +501,9 @@ export async function bulkRestoreCiphers(
         `UPDATE ciphers
          SET deleted_at = NULL, updated_at = ?,
              data = json_remove(data, '$.deletedAt', '$.deletedDate', '$.updatedAt', '$.revisionDate')
-         WHERE user_id = ? AND id IN (${placeholders})`
+         WHERE id IN (${placeholders}) AND (user_id = ? OR organization_id IS NOT NULL)`
       )
-      .bind(now, userId, ...chunk)
+      .bind(now, ...chunk, userId)
       .run();
   }
 
@@ -523,7 +527,7 @@ export async function bulkDeleteCiphers(
     const placeholders = chunk.map(() => '?').join(',');
     await db.batch([
       db.prepare(`DELETE FROM cipher_versions WHERE cipher_id IN (${placeholders})`).bind(...chunk),
-      db.prepare(`DELETE FROM ciphers WHERE user_id = ? AND id IN (${placeholders})`).bind(userId, ...chunk),
+      db.prepare(`DELETE FROM ciphers WHERE id IN (${placeholders}) AND (user_id = ? OR organization_id IS NOT NULL)`).bind(...chunk, userId),
     ]);
   }
 
@@ -652,12 +656,12 @@ export async function bulkArchiveCiphers(
         `UPDATE ciphers
          SET archived_at = ?, updated_at = ?,
              data = json_remove(data, '$.archivedAt', '$.archivedDate', '$.updatedAt', '$.revisionDate')
-         WHERE user_id = ? AND id IN (${placeholders})
+         WHERE id IN (${placeholders}) AND (user_id = ? OR organization_id IS NOT NULL)
            AND deleted_at IS NULL
            AND json_extract(data, '$.deletedAt') IS NULL
            AND json_extract(data, '$.deletedDate') IS NULL`
       )
-      .bind(now, now, userId, ...chunk)
+      .bind(now, now, ...chunk, userId)
       .run();
   }
 
@@ -686,9 +690,9 @@ export async function bulkUnarchiveCiphers(
         `UPDATE ciphers
          SET archived_at = NULL, updated_at = ?,
              data = json_remove(data, '$.archivedAt', '$.archivedDate', '$.updatedAt', '$.revisionDate')
-         WHERE user_id = ? AND id IN (${placeholders})`
+         WHERE id IN (${placeholders}) AND (user_id = ? OR organization_id IS NOT NULL)`
       )
-      .bind(now, userId, ...chunk)
+      .bind(now, ...chunk, userId)
       .run();
   }
 

@@ -168,6 +168,8 @@ import {
   addOrganizationUser as addStoredOrganizationUser,
   confirmOrganizationUser as confirmStoredOrganizationUser,
   createOrganizationWithOwner as createStoredOrganizationWithOwner,
+  filterWritableCipherIds as filterStoredWritableCipherIds,
+  getCipherRankByCipherForUser as listStoredCipherRanks,
   getCollectionIdsByCipherIds as listStoredCollectionIdsByCipherIds,
   getCollectionIdsForCipher as listStoredCollectionIdsForCipher,
   getCollectionRights as listStoredCollectionRights,
@@ -712,6 +714,19 @@ export class StorageService {
 
   async setCipherCollections(cipherId: string, collectionIds: string[]): Promise<void> {
     return setStoredCipherCollections(this.db, cipherId, collectionIds);
+  }
+
+  /**
+   * The ids of the items the member may change. A bulk action filters its ids
+   * through here before touching anything: an item the member may only read,
+   * or cannot reach at all, is not theirs to move, archive or delete.
+   */
+  async filterWritableCipherIds(cipherIds: string[], userId: string, minimumRank = 2): Promise<string[]> {
+    return filterStoredWritableCipherIds(this.db, userId, cipherIds, minimumRank);
+  }
+
+  async getCipherRankByCipherForUser(userId: string): Promise<Map<string, number>> {
+    return listStoredCipherRanks(this.db, userId);
   }
 
   /**

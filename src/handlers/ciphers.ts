@@ -1408,8 +1408,17 @@ export async function handleDeleteCipher(request: Request, env: Env, userId: str
   const storage = new StorageService(env.DB);
   const cipher = await storage.getCipherForUser(id, userId);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher) {
     return errorResponse('Cipher not found', 404);
+  }
+  // A personal item belongs to the account that owns it; a shared item belongs
+  // to the organization, and any member who may write it may act on it.
+  const access = await storage.getCipherWriteAccess(cipher, userId);
+  if (access === null) {
+    return errorResponse('Cipher not found', 404);
+  }
+  if (!access) {
+    return errorResponse('You may not change this item', 403);
   }
 
   // Soft delete
@@ -1440,8 +1449,17 @@ export async function handleDeleteCipherCompat(request: Request, env: Env, userI
   const storage = new StorageService(env.DB);
   const cipher = await storage.getCipherForUser(id, userId);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher) {
     return errorResponse('Cipher not found', 404);
+  }
+  // A personal item belongs to the account that owns it; a shared item belongs
+  // to the organization, and any member who may write it may act on it.
+  const access = await storage.getCipherWriteAccess(cipher, userId);
+  if (access === null) {
+    return errorResponse('Cipher not found', 404);
+  }
+  if (!access) {
+    return errorResponse('You may not change this item', 403);
   }
 
   if (cipher.deletedAt) {
@@ -1467,8 +1485,26 @@ export async function handlePermanentDeleteCipher(request: Request, env: Env, us
   const storage = new StorageService(env.DB);
   const cipher = await storage.getCipherForUser(id, userId);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher) {
     return errorResponse('Cipher not found', 404);
+  }
+  // A personal item belongs to the account that owns it; a shared item belongs
+  // to the organization, and any member who may write it may act on it.
+  const access = await storage.getCipherWriteAccess(cipher, userId);
+  if (access === null) {
+    return errorResponse('Cipher not found', 404);
+  }
+  if (!access) {
+    return errorResponse('You may not change this item', 403);
+  }
+
+  // Destroying a shared item for everyone takes manage rights on its
+  // collection: an editor may change or move it, not erase it.
+  if (cipher.organizationId) {
+    const manageable = await storage.filterWritableCipherIds([cipher.id], userId, 4);
+    if (!manageable.length) {
+      return errorResponse('You may not delete this item for everyone', 403);
+    }
   }
 
   // Delete all attachments first
@@ -1492,8 +1528,17 @@ export async function handleRestoreCipher(request: Request, env: Env, userId: st
   const storage = new StorageService(env.DB);
   const cipher = await storage.getCipherForUser(id, userId);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher) {
     return errorResponse('Cipher not found', 404);
+  }
+  // A personal item belongs to the account that owns it; a shared item belongs
+  // to the organization, and any member who may write it may act on it.
+  const access = await storage.getCipherWriteAccess(cipher, userId);
+  if (access === null) {
+    return errorResponse('Cipher not found', 404);
+  }
+  if (!access) {
+    return errorResponse('You may not change this item', 403);
   }
 
   cipher.deletedAt = null;
@@ -1514,8 +1559,17 @@ export async function handlePartialUpdateCipher(request: Request, env: Env, user
   const storage = new StorageService(env.DB);
   const cipher = await storage.getCipherForUser(id, userId);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher) {
     return errorResponse('Cipher not found', 404);
+  }
+  // A personal item belongs to the account that owns it; a shared item belongs
+  // to the organization, and any member who may write it may act on it.
+  const access = await storage.getCipherWriteAccess(cipher, userId);
+  if (access === null) {
+    return errorResponse('Cipher not found', 404);
+  }
+  if (!access) {
+    return errorResponse('You may not change this item', 403);
   }
 
   let body: { folderId?: string | null; favorite?: boolean };
@@ -1573,7 +1627,12 @@ export async function handleBulkMoveCiphers(request: Request, env: Env, userId: 
     if (!folderOk) return errorResponse('Folder not found', 404);
   }
 
-  const { revisionDate, conflict } = await storage.bulkMoveCiphers(body.ids, folderId, userId);
+  // A bulk action only touches the items the member may change: an item they
+  // may only read, or cannot reach at all, is not theirs to move.
+  const ids = await storage.filterWritableCipherIds(body.ids, userId);
+  if (!ids.length) return new Response(null, { status: 204 });
+
+  const { revisionDate, conflict } = await storage.bulkMoveCiphers(ids, folderId, userId);
   if (revisionDate) notifyVaultSyncForRequest(request, env, userId, revisionDate);
   if (conflict) return errorResponse('Cipher changed during bulk move. Resync and try again.', 409);
 
@@ -1586,7 +1645,10 @@ async function buildCipherListResponse(
   userId: string,
   ids: string[]
 ): Promise<Response> {
-  const ciphers = await storage.getCiphersByIds(ids, userId);
+  // Read each item through the permission check instead of trusting the ids
+  // the client sent: an item the member may not reach is simply not returned.
+  const loaded = await Promise.all(ids.map((id) => storage.getCipherForUser(id, userId)));
+  const ciphers = loaded.filter((cipher): cipher is NonNullable<typeof cipher> => !!cipher);
   const attachmentsByCipher = await storage.getAttachmentsByCipherIds(ciphers.map((cipher) => cipher.id));
 
   return jsonResponse({
@@ -1608,8 +1670,17 @@ export async function handleArchiveCipher(request: Request, env: Env, userId: st
   const storage = new StorageService(env.DB);
   const cipher = await storage.getCipherForUser(id, userId);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher) {
     return errorResponse('Cipher not found', 404);
+  }
+  // A personal item belongs to the account that owns it; a shared item belongs
+  // to the organization, and any member who may write it may act on it.
+  const access = await storage.getCipherWriteAccess(cipher, userId);
+  if (access === null) {
+    return errorResponse('Cipher not found', 404);
+  }
+  if (!access) {
+    return errorResponse('You may not change this item', 403);
   }
   if (cipher.deletedAt) {
     return errorResponse('Cannot archive a deleted cipher', 400);
@@ -1634,8 +1705,17 @@ export async function handleUnarchiveCipher(request: Request, env: Env, userId: 
   const storage = new StorageService(env.DB);
   const cipher = await storage.getCipherForUser(id, userId);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher) {
     return errorResponse('Cipher not found', 404);
+  }
+  // A personal item belongs to the account that owns it; a shared item belongs
+  // to the organization, and any member who may write it may act on it.
+  const access = await storage.getCipherWriteAccess(cipher, userId);
+  if (access === null) {
+    return errorResponse('Cipher not found', 404);
+  }
+  if (!access) {
+    return errorResponse('You may not change this item', 403);
   }
 
   cipher.archivedAt = null;
@@ -1667,7 +1747,8 @@ export async function handleBulkArchiveCiphers(request: Request, env: Env, userI
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkArchiveCiphers(ids, userId);
+  const allowedIds = await storage.filterWritableCipherIds(ids, userId);
+  const revisionDate = await storage.bulkArchiveCiphers(allowedIds, userId);
   if (revisionDate) {
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
@@ -1692,7 +1773,8 @@ export async function handleBulkUnarchiveCiphers(request: Request, env: Env, use
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkUnarchiveCiphers(ids, userId);
+  const allowedIds = await storage.filterWritableCipherIds(ids, userId);
+  const revisionDate = await storage.bulkUnarchiveCiphers(allowedIds, userId);
   if (revisionDate) {
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
@@ -1716,7 +1798,10 @@ export async function handleBulkDeleteCiphers(request: Request, env: Env, userId
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkSoftDeleteCiphers(body.ids, userId);
+  const ids = await storage.filterWritableCipherIds(body.ids, userId);
+  if (!ids.length) return new Response(null, { status: 204 });
+
+  const revisionDate = await storage.bulkSoftDeleteCiphers(ids, userId);
   if (revisionDate) {
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
@@ -1743,7 +1828,10 @@ export async function handleBulkRestoreCiphers(request: Request, env: Env, userI
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkRestoreCiphers(body.ids, userId);
+  const ids = await storage.filterWritableCipherIds(body.ids, userId);
+  if (!ids.length) return new Response(null, { status: 204 });
+
+  const revisionDate = await storage.bulkRestoreCiphers(ids, userId);
   if (revisionDate) {
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
@@ -1772,8 +1860,10 @@ export async function handleBulkPermanentDeleteCiphers(request: Request, env: En
     return new Response(null, { status: 204 });
   }
 
-  const ownedCiphers = await storage.getCiphersByIds(ids, userId);
-  const ownedIds = ownedCiphers.map((cipher) => cipher.id);
+  // Permanent deletion of a shared item takes manage rights on its collection,
+  // not merely the right to edit it: an editor can move an item but must not
+  // be able to destroy it for everyone.
+  const ownedIds = await storage.filterWritableCipherIds(ids, userId, 4);
   if (!ownedIds.length) {
     return new Response(null, { status: 204 });
   }
