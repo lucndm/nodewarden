@@ -828,6 +828,7 @@ const zhCN: Record<string, string> = {
   "txt_shared_item": "共享",
   "txt_organization_load_failed": "无法加载组织",
   "txt_collection_load_failed": "无法加载集合",
+  "txt_key_rotation_required": "有成员离开：请轮换组织密钥",
   "txt_untagged": "未加标签",
   "txt_delete_all_tags": "删除所有标签",
   "txt_tags": "标签",

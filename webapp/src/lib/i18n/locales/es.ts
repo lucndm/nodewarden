@@ -825,6 +825,7 @@ const es: Record<string, string> = {
   "txt_shared_item": "Compartido",
   "txt_organization_load_failed": "No se pudieron cargar las organizaciones",
   "txt_collection_load_failed": "No se pudieron cargar las colecciones",
+  "txt_key_rotation_required": "Un miembro salió: rota la clave de la organización",
   "txt_untagged": "Sin etiquetas",
   "txt_delete_all_tags": "Eliminar todas las etiquetas",
   "txt_tags": "Etiquetas",

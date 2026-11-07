@@ -825,6 +825,7 @@ const ru: Record<string, string> = {
   "txt_shared_item": "Общий",
   "txt_organization_load_failed": "Не удалось загрузить организации",
   "txt_collection_load_failed": "Не удалось загрузить коллекции",
+  "txt_key_rotation_required": "Участник вышел: смените ключ организации",
   "txt_untagged": "Без меток",
   "txt_delete_all_tags": "Удалить все метки",
   "txt_tags": "Метки",

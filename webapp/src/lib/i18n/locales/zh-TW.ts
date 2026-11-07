@@ -879,6 +879,7 @@ const zhTW: Record<string, string> = {
   "txt_shared_item": "共用",
   "txt_organization_load_failed": "無法載入組織",
   "txt_collection_load_failed": "無法載入集合",
+  "txt_key_rotation_required": "有成員離開：請輪換組織金鑰",
   "txt_untagged": "未加標籤",
   "txt_delete_all_tags": "刪除所有標籤",
   "txt_tags": "標籤",

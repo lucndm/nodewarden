@@ -112,6 +112,7 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     id: organization.id,
     name: organization.name,
     key: membershipByOrg.get(organization.id)?.key ?? null,
+    keyRotationRequired: organization.keyRotationRequired,
     status: 2,
     type: membershipByOrg.get(organization.id)?.type ?? 2,
     enabled: true,

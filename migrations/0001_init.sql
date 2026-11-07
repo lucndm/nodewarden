@@ -127,6 +127,10 @@ CREATE TABLE IF NOT EXISTS organizations (
   name TEXT NOT NULL,
   private_key TEXT,
   public_key TEXT,
+  -- Set when a member leaves: the key they still hold has to be replaced
+  -- before their removal means anything. Cleared by a rotation.
+  key_rotation_required INTEGER NOT NULL DEFAULT 0,
+  key_rotated_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

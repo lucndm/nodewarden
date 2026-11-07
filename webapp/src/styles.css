@@ -1551,6 +1551,13 @@ input[type='file'].input::file-selector-button {
   font-size: 0.92em;
 }
 
+.tree-warning {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  color: var(--warning, #b45309);
+}
+
 .tree-count {
   margin-left: auto;
   padding-left: 8px;

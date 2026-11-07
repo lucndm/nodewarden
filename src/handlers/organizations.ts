@@ -20,6 +20,16 @@ const USER_TYPE = 2;
 const STATUS_INVITED = 0;
 const STATUS_CONFIRMED = 2;
 
+// A rotation is a bounded write. These caps keep one call from pushing an
+// arbitrarily large body into the database; the client batches instead.
+const ROTATION_KEY_MAX = 4096;
+const ROTATION_FIELD_MAX = 4096;
+const ROTATION_NOTES_MAX = 65_536;
+const ROTATION_DATA_MAX = 65_536;
+const ROTATION_MAX_CIPHERS = 200;
+const ROTATION_MAX_MEMBERS = 200;
+const ROTATION_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+
 interface CreateOrganizationBody {
   name?: unknown;
   billingEmail?: unknown;
@@ -88,6 +98,7 @@ export async function handleCreateOrganization(
       key: wrappedOrganizationKey,
       status: STATUS_CONFIRMED,
       type: OWNER_TYPE,
+      keyRotationRequired: false,
       enabled: true,
       usePolicies: false,
       useGroups: false,
@@ -287,6 +298,10 @@ export async function handleGetOrganizations(request: Request, env: Env, userId:
       key: membershipByOrg.get(organization.id)?.key ?? null,
       status: STATUS_CONFIRMED,
       type: membershipByOrg.get(organization.id)?.type ?? USER_TYPE,
+      // A member left while holding the key: the owner has to rotate before
+      // their removal actually keeps anything away from them.
+      keyRotationRequired: organization.keyRotationRequired,
+      keyRotatedAt: organization.keyRotatedAt,
       enabled: true,
       usePolicies: false,
       useGroups: false,
@@ -488,6 +503,9 @@ export async function handleRemoveOrganizationUser(
 
   const removed = await storage.removeOrganizationUser(orgId, membershipId);
   if (!removed) return errorResponse('Organization member not found', 404);
+  // 204 keeps the shape the clients expect; the organization now reports
+  // keyRotationRequired, which is what tells the owner the removal is not done
+  // until the key is replaced.
   return new Response(null, { status: 204 });
 }
 
@@ -536,24 +554,55 @@ export async function handleRotateOrganizationKey(
         }))
         .filter((entry) => entry.membershipId && entry.key)
     : [];
+  // Rotation fields are rejected when they are too long, never truncated: a
+  // shortened ciphertext is a broken item, and the client would never know.
+  let rotationFieldTooLong = false;
+  const strict = (value: unknown, max: number): string => {
+    const raw = typeof value === 'string' ? value : '';
+    if (raw.length > max) rotationFieldTooLong = true;
+    return raw;
+  };
   const ciphers = Array.isArray(body.ciphers)
     ? body.ciphers
         .map((entry) => entry as { id?: unknown; key?: unknown; name?: unknown; notes?: unknown; data?: unknown })
         .map((entry) => ({
           cipherId: text(entry?.id).trim(),
-          key: text(entry?.key, 4096).trim() || null,
+          key: strict(entry?.key, ROTATION_KEY_MAX).trim() || null,
           // The name and the notes live in their own columns, so they travel
           // beside the payload and are re-encrypted with it.
-          name: entry?.name === undefined ? undefined : text(entry.name, 4096) || null,
-          notes: entry?.notes === undefined ? undefined : text(entry.notes, 65_536) || null,
-          data: text(entry?.data, 1_000_000),
+          name: entry?.name === undefined ? undefined : strict(entry.name, ROTATION_FIELD_MAX) || null,
+          notes: entry?.notes === undefined ? undefined : strict(entry.notes, ROTATION_NOTES_MAX) || null,
+          data: strict(entry?.data, ROTATION_DATA_MAX),
         }))
         .filter((entry) => entry.cipherId && entry.data)
     : [];
+  const membersTooLong = Array.isArray(body.members)
+    ? body.members.some((entry) => {
+        const key = (entry as { key?: unknown })?.key;
+        return typeof key === 'string' && key.length > ROTATION_KEY_MAX;
+      })
+    : false;
+  if (rotationFieldTooLong || membersTooLong) {
+    return errorResponse('The rotated key material is too long', 413);
+  }
   const privateKey = body.privateKey === undefined ? undefined : text(body.privateKey, 8192) || null;
 
   if (!members.length && !ciphers.length && privateKey === undefined) {
     return errorResponse('Nothing to rotate', 400);
+  }
+
+  // A rotation is one bounded write. Without a ceiling an owner could use it to
+  // push an arbitrarily large body into the database in a single call; the
+  // client sends the organization in batches instead.
+  if (ciphers.length > ROTATION_MAX_CIPHERS || members.length > ROTATION_MAX_MEMBERS) {
+    return errorResponse('Rotate fewer items at a time', 413);
+  }
+  const totalBytes = ciphers.reduce(
+    (sum, entry) => sum + entry.data.length + (entry.name?.length ?? 0) + (entry.notes?.length ?? 0) + (entry.key?.length ?? 0),
+    members.reduce((sum, entry) => sum + entry.key.length, 0) + (privateKey?.length ?? 0)
+  );
+  if (totalBytes > ROTATION_MAX_TOTAL_BYTES) {
+    return errorResponse('Rotate fewer items at a time', 413);
   }
 
   // Every membership must belong to this organization, and every item must be

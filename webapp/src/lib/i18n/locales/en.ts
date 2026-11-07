@@ -878,6 +878,7 @@ const en: Record<string, string> = {
   "txt_shared_item": "Shared",
   "txt_organization_load_failed": "Could not load organizations",
   "txt_collection_load_failed": "Could not load collections",
+  "txt_key_rotation_required": "A member left: rotate the organization key",
   "txt_untagged": "Untagged",
   "txt_delete_all_tags": "Delete all tags",
   "txt_tags": "Tags",

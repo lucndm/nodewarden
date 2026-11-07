@@ -14,6 +14,8 @@ export interface VaultOrganization {
   key: string | null;
   status: number;
   type: number;
+  /** A member left while holding the key: the owner has to rotate it. */
+  keyRotationRequired: boolean;
 }
 
 export interface VaultCollection {
@@ -35,6 +37,7 @@ function normalizeOrganization(raw: Record<string, unknown>): VaultOrganization 
     key: typeof raw.key === 'string' && raw.key.trim() ? raw.key : null,
     status: Number(raw.status) || 0,
     type: Number(raw.type) || 2,
+    keyRotationRequired: raw?.keyRotationRequired === true,
   };
 }
 
