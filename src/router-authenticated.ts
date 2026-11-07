@@ -52,6 +52,11 @@ import {
   handleRecordCipherUsage,
 } from './handlers/ciphers';
 import {
+  handleGetCipherVersion,
+  handleGetCipherVersions,
+  handleRestoreCipherVersion,
+} from './handlers/cipher-versions';
+import {
   handleGetFolders,
   handleGetFolder,
   handleCreateFolder,
@@ -365,6 +370,16 @@ export async function handleAuthenticatedRoute(
     if (subPath === '/details' && method === 'GET') return handleGetCipher(request, env, userId, cipherId);
     if (subPath === '/attachment/v2' && method === 'POST') return handleCreateAttachment(request, env, userId, cipherId);
     if (subPath === '/attachment' && method === 'POST') return handleCreateAttachment(request, env, userId, cipherId);
+
+    if (subPath === '/versions' && method === 'GET') return handleGetCipherVersions(request, env, userId, cipherId);
+    const versionMatch = subPath.match(/^\/versions\/([a-f0-9-]+)(\/restore)?$/i);
+    if (versionMatch) {
+      const versionId = versionMatch[1];
+      if (versionMatch[2] && (method === 'POST' || method === 'PUT')) {
+        return handleRestoreCipherVersion(request, env, userId, cipherId, versionId);
+      }
+      if (!versionMatch[2] && method === 'GET') return handleGetCipherVersion(request, env, userId, cipherId, versionId);
+    }
 
     const attachmentMatch = subPath.match(/^\/attachment\/([a-f0-9-]+)$/i);
     if (attachmentMatch) {

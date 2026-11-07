@@ -14,7 +14,7 @@ import {
   PasswordHistory,
 } from '../types';
 import { StorageService } from '../services/storage';
-import { isCipherWriteUnchanged } from '../services/storage-cipher-repo';
+import { buildCipherVersionData, isCipherContentUnchanged, isCipherWriteUnchanged } from '../services/storage-cipher-repo';
 import {
   notifyUserCipherCreate,
   notifyUserCipherDelete,
@@ -45,7 +45,7 @@ export function shouldPreserveRepairableCipherUris(request: Request): boolean {
   return request.headers.get('X-NodeWarden-Web') === '1';
 }
 
-function cipherResponseOptionsForRequest(request: Request): CipherResponseOptions {
+export function cipherResponseOptionsForRequest(request: Request): CipherResponseOptions {
   return { preserveRepairableUris: shouldPreserveRepairableCipherUris(request) };
 }
 
@@ -77,7 +77,7 @@ function buildCipherPermissions(passthrough: Record<string, unknown>): { delete:
   };
 }
 
-function notifyVaultSyncForRequest(
+export function notifyVaultSyncForRequest(
   request: Request,
   env: Env,
   userId: string,
@@ -104,7 +104,7 @@ function notifyCipherCreateForRequest(
   });
 }
 
-function notifyCipherUpdateForRequest(
+export function notifyCipherUpdateForRequest(
   request: Request,
   env: Env,
   cipher: Cipher,
@@ -1245,14 +1245,36 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
 
   // Optimistic concurrency: reject a stale client copy instead of overwriting a
   // newer save (or resurrecting a row deleted between our read and this write).
-  if (!(await storage.updateCipherIfUnchanged(cipher, existingCipher.updatedAt))) {
+  // A write that changes what the item holds leaves the previous state behind
+  // as a version, written in the same batch under the same revision check.
+  const contentChanged = !isCipherContentUnchanged(cipher, existingCipher);
+  const revisionDate = new Date().toISOString();
+  const version = contentChanged
+    ? {
+        id: generateUUID(),
+        cipherId: existingCipher.id,
+        userId,
+        kind: existingCipher.updatedAt === existingCipher.createdAt ? ('created' as const) : ('modified' as const),
+        revisionDate,
+        createdAt: existingCipher.updatedAt,
+        type: Number(existingCipher.type) || 1,
+        name: existingCipher.name ?? null,
+        notes: existingCipher.notes ?? null,
+        key: existingCipher.key ?? null,
+        reprompt: existingCipher.reprompt ?? 0,
+        data: buildCipherVersionData(existingCipher),
+        appliedUpdatedAt: cipher.updatedAt,
+      }
+    : null;
+  if (!(await storage.updateCipherIfUnchanged(cipher, existingCipher.updatedAt, version))) {
     return errorResponse('The client copy of this cipher is out of date. Resync the client and try again.', 400);
   }
+  if (version) await storage.pruneCipherVersions(cipher.id);
   // Rejected updates must not modify attachment metadata either.
   await syncIncomingAttachmentMetadata(storage, cipher.id, cipherData);
-  const revisionDate = await storage.updateRevisionDate(userId);
-  notifyVaultSyncForRequest(request, env, userId, revisionDate);
-  notifyCipherUpdateForRequest(request, env, cipher, revisionDate);
+  const revision = await storage.updateRevisionDate(userId, revisionDate);
+  notifyVaultSyncForRequest(request, env, userId, revision);
+  notifyCipherUpdateForRequest(request, env, cipher, revision);
   const attachments = await storage.getAttachmentsByCipher(cipher.id);
   const responseOptions = cipherResponseOptionsForRequest(request);
 

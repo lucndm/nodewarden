@@ -43,6 +43,7 @@
 | 2FA recovery codes | ✅ | ✅ | One-time 2FA disable codes |
 | Real-time push sync | ✅ | ✅ | All device sync |
 | Attachments / Send | ✅ | ✅ | Cloudflare R2 or KV |
+| **Item history** | ❌ | ✅ | **Timeline, compare and restore old content** |
 | Import / export | ✅ | ✅ | Bitwarden JSON / CSV / **ZIP** |
 | **Cloud backup center** | ❌ | ✅ | **Scheduled WebDAV / S3 incrementals** |
 | Device management | ✅ | ✅ | **Remove devices; trust controls** |
@@ -60,6 +61,14 @@
 Select **Sort → Most used** to rank items by successful copies of their current login password in the NodeWarden Web Vault. Login details show the copy count and last-copied time. Username, TOTP, password-history copies, views and reveals do not count; official extension/app autofill and successful website logins are not measured.
 
 Counters start at zero when this feature is enabled and are stored per item in this instance’s D1 database, not sent to a third-party analytics service. Failed tracking shows a warning without undoing the copy; offline or failed requests are not queued. The schema upgrades automatically, cloud backups retain the counters, and older backups restore with zero counts. Permanent item deletion removes its metrics.
+
+## Web Vault item history
+
+**View Item History** in an item's *Item Information* card opens a timeline: the current version first, then every earlier state of that item. Pick a point in the timeline to see its decrypted content and to compare it field by field with the current version (name, username, password, website, notes, TOTP). Restoring asks for a confirmation, keeps the item ID, and first stores the state it replaces as a new version so a restore can be undone.
+
+The server keeps every stored state as ciphertext, exactly like the item itself, so no plaintext history leaves the browser. A version is written only when a content change really lands; folder moves, favorites and no-op saves write nothing. Each item keeps its 20 newest states, and the timeline covers the time since this feature was enabled - earlier history is not reconstructed. Password History stays a separate, per-password list.
+
+Official Bitwarden apps and extensions ignore these endpoints and keep showing the item as it is now.
 
 ## Web Vault design
 

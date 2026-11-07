@@ -1,4 +1,4 @@
-import type { Cipher, CipherUsage } from '../types';
+import type { Cipher, CipherType, CipherUsage, CipherVersion } from '../types';
 
 function normalizeOptionalId(value: unknown): string | null {
   if (value == null) return null;
@@ -148,22 +148,31 @@ export async function saveCipher(db: D1Database, safeBind: SafeBind, cipher: Cip
 
 // A single conditional UPDATE prevents a competing save or deletion between
 // the handler's read and write from being overwritten (or resurrected).
+// When a version is supplied, the snapshot of the superseded state is written
+// in the same batch, guarded by the same revision check, so history and item
+// can never disagree.
 export async function updateCipherIfUnchanged(
   db: D1Database,
   safeBind: SafeBind,
   cipher: Cipher,
-  expectedUpdatedAt: string
+  expectedUpdatedAt: string,
+  version?: CipherVersionInput | null
 ): Promise<boolean> {
   const folderId = normalizeOptionalId(cipher.folderId);
-  const result = await safeBind(
+  const data = buildCipherData(cipher, folderId);
+  const updateStatement = safeBind(
     db.prepare(
       'UPDATE ciphers SET type=?, folder_id=?, name=?, notes=?, favorite=?, data=?, reprompt=?, key=?, updated_at=?, archived_at=?, deleted_at=? ' +
       'WHERE id=? AND user_id=? AND updated_at=?'
     ),
     Number(cipher.type) || 1, folderId, cipher.name, cipher.notes, cipher.favorite ? 1 : 0,
-    buildCipherData(cipher, folderId), cipher.reprompt ?? 0, cipher.key, cipher.updatedAt,
+    data, cipher.reprompt ?? 0, cipher.key, cipher.updatedAt,
     cipher.archivedAt ?? null, cipher.deletedAt, cipher.id, cipher.userId, expectedUpdatedAt
-  ).run();
+  );
+  const statements: D1PreparedStatement[] = [updateStatement];
+  if (version) statements.push(buildCipherVersionInsertStatement(db, safeBind, version, data));
+  const results = await db.batch(statements);
+  const result = results[0];
   return result.meta.changes === 1;
 }
 
@@ -189,12 +198,196 @@ export function isCipherWriteUnchanged(next: Cipher, current: Cipher): boolean {
   );
 }
 
+// --- Item history (cipher versions) ---
+
+// How many superseded states are kept per cipher.
+// ponytail: fixed per-item cap; add a vault-wide cap if storage becomes a problem.
+export const CIPHER_VERSION_RETENTION = 20;
+
+export interface CipherVersionInput {
+  id: string;
+  cipherId: string;
+  userId: string;
+  kind: 'created' | 'modified';
+  revisionDate: string;
+  createdAt: string;
+  type: number;
+  name: string | null;
+  notes: string | null;
+  key: string | null;
+  reprompt: number;
+  data: string;
+  /** Cipher revision this write produces; the snapshot lands only when the cipher reaches it. */
+  appliedUpdatedAt: string;
+}
+
+interface CipherVersionRow {
+  id: string;
+  cipher_id: string;
+  user_id: string;
+  kind: string;
+  revision_date: string;
+  created_at: string;
+  type: number | null;
+  name: string | null;
+  notes: string | null;
+  key: string | null;
+  reprompt: number | null;
+  data: string;
+}
+
+// The stored payload without the organization tags: tags say where the item
+// sits in the folder tree, not what it holds. A folder move is therefore not a
+// content change, and a restore never moves the item back to an old folder.
+export function buildCipherVersionData(cipher: Cipher): string {
+  const raw = buildCipherData(cipher, normalizeOptionalId(cipher.folderId));
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    delete parsed.tags;
+    return JSON.stringify(parsed);
+  } catch {
+    return raw;
+  }
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[key] = canonicalize((value as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+// True when a write carries no change to what the item holds. Folder, favorite
+// and archive moves are organization, not content, so they never produce a
+// history entry.
+export function isCipherContentUnchanged(next: Cipher, current: Cipher): boolean {
+  return (
+    (Number(next.type) || 1) === (Number(current.type) || 1) &&
+    (next.name ?? null) === (current.name ?? null) &&
+    (next.notes ?? null) === (current.notes ?? null) &&
+    (next.key ?? null) === (current.key ?? null) &&
+    (next.reprompt ?? 0) === (current.reprompt ?? 0) &&
+    JSON.stringify(canonicalize(JSON.parse(buildCipherVersionData(next)))) ===
+      JSON.stringify(canonicalize(JSON.parse(buildCipherVersionData(current))))
+  );
+}
+
+function toCipherVersion(row: CipherVersionRow): CipherVersion {
+  return {
+    id: row.id,
+    cipherId: row.cipher_id,
+    userId: row.user_id,
+    kind: row.kind === 'created' ? 'created' : 'modified',
+    revisionDate: row.revision_date,
+    createdAt: row.created_at,
+    type: (Number(row.type) || 1) as CipherType,
+    name: row.name ?? null,
+    notes: row.notes ?? null,
+    key: row.key ?? null,
+    reprompt: Number(row.reprompt) || 0,
+    data: row.data,
+  };
+}
+
+// The version row is written in the same batch as the cipher write. Its guard
+// asks for the cipher at the revision this write produces, so a write that was
+// rejected or superseded never leaves a version behind.
+function buildCipherVersionInsertStatement(
+  db: D1Database,
+  safeBind: SafeBind,
+  version: CipherVersionInput,
+  appliedData: string
+): D1PreparedStatement {
+  return safeBind(
+    db.prepare(
+      'INSERT INTO cipher_versions(id, cipher_id, user_id, kind, revision_date, created_at, type, name, notes, key, reprompt, data) ' +
+      'SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ' +
+      'WHERE EXISTS (SELECT 1 FROM ciphers WHERE id = ? AND user_id = ? AND updated_at = ? AND data = ?)'
+    ),
+    version.id,
+    version.cipherId,
+    version.userId,
+    version.kind,
+    version.revisionDate,
+    version.createdAt,
+    version.type,
+    version.name,
+    version.notes,
+    version.key,
+    version.reprompt,
+    version.data,
+    version.cipherId,
+    version.userId,
+    version.appliedUpdatedAt,
+    appliedData
+  );
+}
+
+export async function listCipherVersions(
+  db: D1Database,
+  cipherId: string,
+  userId: string
+): Promise<CipherVersion[]> {
+  const res = await db
+    .prepare(
+      'SELECT id, cipher_id, user_id, kind, revision_date, created_at, type, name, notes, key, reprompt, data ' +
+      'FROM cipher_versions WHERE cipher_id = ? AND user_id = ? ORDER BY created_at DESC, id DESC'
+    )
+    .bind(cipherId, userId)
+    .all<CipherVersionRow>();
+  return (res.results || []).map(toCipherVersion);
+}
+
+export async function getCipherVersion(
+  db: D1Database,
+  versionId: string,
+  cipherId: string,
+  userId: string
+): Promise<CipherVersion | null> {
+  const row = await db
+    .prepare(
+      'SELECT id, cipher_id, user_id, kind, revision_date, created_at, type, name, notes, key, reprompt, data ' +
+      'FROM cipher_versions WHERE id = ? AND cipher_id = ? AND user_id = ?'
+    )
+    .bind(versionId, cipherId, userId)
+    .first<CipherVersionRow>();
+  return row ? toCipherVersion(row) : null;
+}
+
+export async function deleteCipherVersionsForCipher(db: D1Database, cipherId: string): Promise<void> {
+  await db.prepare('DELETE FROM cipher_versions WHERE cipher_id = ?').bind(cipherId).run();
+}
+
+// Retention: keep the newest states of an item, drop the older ones.
+export async function pruneCipherVersions(
+  db: D1Database,
+  cipherId: string,
+  limit: number = CIPHER_VERSION_RETENTION
+): Promise<void> {
+  const res = await db
+    .prepare('SELECT id FROM cipher_versions WHERE cipher_id = ? ORDER BY created_at DESC, id DESC')
+    .bind(cipherId)
+    .all<{ id: string }>();
+  const excess = (res.results || []).slice(limit);
+  for (const row of excess) {
+    await db.prepare('DELETE FROM cipher_versions WHERE id = ?').bind(row.id).run();
+  }
+}
+
 function sanitizeIds(ids: string[]): string[] {
   return Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean)));
 }
 
 export async function deleteCipher(db: D1Database, id: string, userId: string): Promise<void> {
-  await db.prepare('DELETE FROM ciphers WHERE id = ? AND user_id = ?').bind(id, userId).run();
+  await db.batch([
+    db.prepare('DELETE FROM cipher_versions WHERE cipher_id = ?').bind(id),
+    db.prepare('DELETE FROM ciphers WHERE id = ? AND user_id = ?').bind(id, userId),
+  ]);
 }
 
 // Password-copy usage counters live in their own columns. They are written
@@ -324,7 +517,10 @@ export async function bulkDeleteCiphers(
   for (let i = 0; i < uniqueIds.length; i += chunkSize) {
     const chunk = uniqueIds.slice(i, i + chunkSize);
     const placeholders = chunk.map(() => '?').join(',');
-    await db.prepare(`DELETE FROM ciphers WHERE user_id = ? AND id IN (${placeholders})`).bind(userId, ...chunk).run();
+    await db.batch([
+      db.prepare(`DELETE FROM cipher_versions WHERE cipher_id IN (${placeholders})`).bind(...chunk),
+      db.prepare(`DELETE FROM ciphers WHERE user_id = ? AND id IN (${placeholders})`).bind(userId, ...chunk),
+    ]);
   }
 
   return updateRevisionDate(userId);

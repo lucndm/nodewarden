@@ -1,4 +1,4 @@
-import { User, Cipher, CipherUsage, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord } from '../types';
+import { User, Cipher, CipherUsage, CipherVersion, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord } from '../types';
 import { LIMITS } from '../config/limits';
 import { ensurePushInstallationCredentials } from './push-relay';
 import { ensureStorageSchema } from './storage-schema';
@@ -64,10 +64,14 @@ import {
   getCiphersByIds as listStoredCiphersByIds,
   getCiphersPage as listStoredCiphersPage,
   getCipherUsageMap as listStoredCipherUsageMap,
+  getCipherVersion as findStoredCipherVersion,
   incrementCipherUsage as bumpStoredCipherUsage,
+  listCipherVersions as listStoredCipherVersions,
+  pruneCipherVersions as pruneStoredCipherVersions,
   saveCipher as saveStoredCipher,
   updateCipherIfUnchanged as updateStoredCipherIfUnchanged,
   deleteCipher as deleteStoredCipher,
+  type CipherVersionInput,
 } from './storage-cipher-repo';
 import {
   addAttachmentToCipher as attachStoredAttachmentToCipher,
@@ -183,7 +187,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-06-folder-tag-name';
+const STORAGE_SCHEMA_VERSION = '2026-11-07-cipher-versions';
 const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
 
 // D1-backed storage.
@@ -550,8 +554,24 @@ export class StorageService {
     await saveStoredCipher(this.db, this.safeBind.bind(this), cipher);
   }
 
-  async updateCipherIfUnchanged(cipher: Cipher, expectedUpdatedAt: string): Promise<boolean> {
-    return updateStoredCipherIfUnchanged(this.db, this.safeBind.bind(this), cipher, expectedUpdatedAt);
+  async updateCipherIfUnchanged(
+    cipher: Cipher,
+    expectedUpdatedAt: string,
+    version?: CipherVersionInput | null
+  ): Promise<boolean> {
+    return updateStoredCipherIfUnchanged(this.db, this.safeBind.bind(this), cipher, expectedUpdatedAt, version);
+  }
+
+  async listCipherVersions(cipherId: string, userId: string): Promise<CipherVersion[]> {
+    return listStoredCipherVersions(this.db, cipherId, userId);
+  }
+
+  async getCipherVersion(versionId: string, cipherId: string, userId: string): Promise<CipherVersion | null> {
+    return findStoredCipherVersion(this.db, versionId, cipherId, userId);
+  }
+
+  async pruneCipherVersions(cipherId: string): Promise<void> {
+    await pruneStoredCipherVersions(this.db, cipherId);
   }
 
   async deleteCipher(id: string, userId: string): Promise<void> {
@@ -664,7 +684,16 @@ export class StorageService {
     const markerKey = `tags.legacy-repair.v1:${userId}`;
     if ((await this.getConfigValue(markerKey)) === 'done') return false;
     const changed = await this.migrateFolderCiphersToTags(userId);
-    if (changed) await this.updateRevisionDate(userId);
+    if (changed) {
+      // The revision is the signal that makes clients download the repaired
+      // payload, so it has to move even when the repair lands in the same
+      // millisecond as the revision before it.
+      const previous = Date.parse(await this.getRevisionDate(userId));
+      await this.updateRevisionDate(
+        userId,
+        new Date(Math.max(Date.now(), previous + 1)).toISOString()
+      );
+    }
     await this.setConfigValue(markerKey, 'done');
     return changed;
   }
@@ -1047,8 +1076,8 @@ export class StorageService {
     return getStoredRevisionDate(this.db, userId);
   }
 
-  async updateRevisionDate(userId: string): Promise<string> {
-    return updateStoredRevisionDate(this.db, userId);
+  async updateRevisionDate(userId: string, revisionDate?: string): Promise<string> {
+    return updateStoredRevisionDate(this.db, userId, revisionDate);
   }
 
   // --- One-time attachment download tokens ---

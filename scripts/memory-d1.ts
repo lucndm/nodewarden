@@ -24,6 +24,7 @@ function topLevelSplit(input: string, separator: RegExp): string[] {
 export const PRIMARY_KEY_BUILDERS: Record<string, (row: Row) => string> = {
   users: (row) => String(row.id),
   ciphers: (row) => String(row.id),
+  cipher_versions: (row) => String(row.id),
   folders: (row) => String(row.id),
   user_revisions: (row) => String(row.user_id),
   devices: (row) => `${row.user_id}|${row.device_identifier}`,
@@ -137,6 +138,36 @@ class MemoryStatement {
   }
 
   private insert(): { success: true; meta: { changes: number } } {
+    // Item history rows are written as INSERT ... SELECT ... WHERE EXISTS, so
+    // the row only lands when the cipher it snapshots is still at the expected
+    // revision.
+    const guarded = this.sql.match(
+      /^insert\s+into\s+(\w+)\s*\(([^)]+)\)\s*select\s+(.+?)\s+where\s+exists\s*\(\s*select\s+1\s+from\s+(\w+)\s+where\s+(.+?)\s*\)\s*$/i
+    );
+    if (guarded) {
+      const [, table, columnList, valueList, gateTable, gateWhere] = guarded;
+      const columns = topLevelSplit(columnList, /,/);
+      const valueTokens = topLevelSplit(valueList, /,/);
+      if (columns.length !== valueTokens.length) {
+        throw new Error(`MemoryD1: column/value mismatch: ${this.sql}`);
+      }
+      if (!valueTokens.every((token) => token === '?')) {
+        throw new Error(`MemoryD1: unsupported INSERT SELECT values: ${this.sql}`);
+      }
+      const gatePlaceholders = (gateWhere.match(/\?/g) ?? []).length;
+      const gateBindStart = this.values.length - gatePlaceholders;
+      const gateRows = this.matches(this.db.rows(gateTable), gateWhere, gateBindStart);
+      if (gateRows.length === 0) return { success: true, meta: { changes: 0 } };
+      const row: Row = {};
+      columns.forEach((column, index) => {
+        row[column] = this.values[index];
+      });
+      const store = this.db.table(table);
+      const pk = PRIMARY_KEY_BUILDERS[table]?.(row) ?? String(row.id);
+      store.set(pk, row);
+      return { success: true, meta: { changes: 1 } };
+    }
+
     const match = this.sql.match(
       /^insert\s+(or\s+ignore\s+)?into\s+(\w+)\s*\(([^)]+)\)\s*values\s*\((.+?)\)(\s*on\s+conflict.+)?$/i
     );
@@ -279,5 +310,17 @@ export class MemoryD1 {
       all: <T>() => statement.all<T>(),
       run: () => statement.run(),
     };
+  }
+
+  // D1 runs a batch as one unit. The statements here are executed in order,
+  // which is what the storage layer relies on for the item history write.
+  async batch(statements: Array<{ run: () => Promise<{ success: true; meta: { changes: number } }> }>): Promise<
+    Array<{ success: true; meta: { changes: number } }>
+  > {
+    const results: Array<{ success: true; meta: { changes: number } }> = [];
+    for (const statement of statements) {
+      results.push(await statement.run());
+    }
+    return results;
   }
 }

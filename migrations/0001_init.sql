@@ -82,6 +82,26 @@ CREATE INDEX IF NOT EXISTS idx_ciphers_user_deleted ON ciphers(user_id, deleted_
 CREATE INDEX IF NOT EXISTS idx_ciphers_user_deleted_updated ON ciphers(user_id, deleted_at, updated_at);
 CREATE INDEX IF NOT EXISTS idx_ciphers_user_folder ON ciphers(user_id, folder_id);
 
+-- Item history: one row per superseded state of a cipher. The snapshot holds
+-- the encrypted payload as it was, so the server never sees plaintext.
+CREATE TABLE IF NOT EXISTS cipher_versions (
+  id TEXT PRIMARY KEY,
+  cipher_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  revision_date TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  type INTEGER NOT NULL,
+  name TEXT,
+  notes TEXT,
+  key TEXT,
+  reprompt INTEGER,
+  data TEXT NOT NULL,
+  FOREIGN KEY (cipher_id) REFERENCES ciphers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_cipher_versions_cipher ON cipher_versions(cipher_id, created_at);
+
 CREATE TABLE IF NOT EXISTS folders (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

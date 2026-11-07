@@ -25,6 +25,7 @@
     "test:folder-inventory": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/folder-plaintext-inventory.test.ts",
     "test:folder-tag-backup": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/folder-tag-backup.test.ts",
     "test:cipher-tags": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/cipher-tags.test.ts",
+    "test:cipher-versions": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/cipher-versions.test.ts",
     "test:web-crypto": "tsx --test scripts/web-crypto-availability.test.ts",
     "test:authed-fetch-retry": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/authed-fetch-retry.test.ts",
     "test:user-key-id": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/user-key-id.test.ts",

@@ -18,8 +18,8 @@ export async function getRevisionDate(db: D1Database, userId: string): Promise<s
   return date;
 }
 
-export async function updateRevisionDate(db: D1Database, userId: string): Promise<string> {
-  const date = new Date().toISOString();
+export async function updateRevisionDate(db: D1Database, userId: string, revisionDate?: string): Promise<string> {
+  const date = revisionDate ?? new Date().toISOString();
   await db
     .prepare(
       'INSERT INTO user_revisions(user_id, revision_date) VALUES(?, ?) ' +
