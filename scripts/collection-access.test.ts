@@ -125,13 +125,16 @@ test('a group assignment still applies when there is no direct one', () => {
   assert.equal(access.viaCollection, 'theirs');
 });
 
-test('the same collection granted twice is counted once', () => {
+test('the same collection granted twice keeps the better grant', () => {
+  // Two direct grants for one collection cannot happen through the API (the
+  // table has one row per member and collection), but when they are supplied
+  // the better one wins, which is what the official SQL does with MAX(rank).
   const access = resolveItemAccess([
     direct('c1', { readOnly: true }),
     direct('c1', { readOnly: false }),
   ]);
   assert.ok(access);
-  assert.equal(access.readOnly, true, 'the first direct grant for a collection is the one that counts');
+  assert.equal(access.readOnly, false, 'the better direct grant wins');
   assert.equal(access.viaCollection, 'c1');
 });
 

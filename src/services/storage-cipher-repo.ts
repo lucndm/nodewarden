@@ -123,10 +123,10 @@ export async function saveCipher(db: D1Database, safeBind: SafeBind, cipher: Cip
   const folderId = normalizeOptionalId(cipher.folderId);
   const data = buildCipherData(cipher, folderId);
   const stmt = db.prepare(
-    'INSERT INTO ciphers(id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at) ' +
-    'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
+    'INSERT INTO ciphers(id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at, organization_id) ' +
+    'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
     'ON CONFLICT(id) DO UPDATE SET ' +
-    'type=excluded.type, folder_id=excluded.folder_id, name=excluded.name, notes=excluded.notes, favorite=excluded.favorite, data=excluded.data, reprompt=excluded.reprompt, key=excluded.key, updated_at=excluded.updated_at, archived_at=excluded.archived_at, deleted_at=excluded.deleted_at ' +
+    'type=excluded.type, folder_id=excluded.folder_id, name=excluded.name, notes=excluded.notes, favorite=excluded.favorite, data=excluded.data, reprompt=excluded.reprompt, key=excluded.key, updated_at=excluded.updated_at, archived_at=excluded.archived_at, deleted_at=excluded.deleted_at, organization_id=excluded.organization_id ' +
     'WHERE user_id=excluded.user_id'
   );
   await safeBind(
@@ -144,7 +144,8 @@ export async function saveCipher(db: D1Database, safeBind: SafeBind, cipher: Cip
     cipher.createdAt,
     cipher.updatedAt,
     cipher.archivedAt ?? null,
-    cipher.deletedAt
+    cipher.deletedAt,
+    normalizeOptionalId(cipher.organizationId)
   ).run();
 }
 
@@ -164,12 +165,13 @@ export async function updateCipherIfUnchanged(
   const data = buildCipherData(cipher, folderId);
   const updateStatement = safeBind(
     db.prepare(
-      'UPDATE ciphers SET type=?, folder_id=?, name=?, notes=?, favorite=?, data=?, reprompt=?, key=?, updated_at=?, archived_at=?, deleted_at=? ' +
+      'UPDATE ciphers SET type=?, folder_id=?, name=?, notes=?, favorite=?, data=?, reprompt=?, key=?, updated_at=?, archived_at=?, deleted_at=?, organization_id=? ' +
       'WHERE id=? AND user_id=? AND updated_at=?'
     ),
     Number(cipher.type) || 1, folderId, cipher.name, cipher.notes, cipher.favorite ? 1 : 0,
     data, cipher.reprompt ?? 0, cipher.key, cipher.updatedAt,
-    cipher.archivedAt ?? null, cipher.deletedAt, cipher.id, cipher.userId, expectedUpdatedAt
+    cipher.archivedAt ?? null, cipher.deletedAt, normalizeOptionalId(cipher.organizationId),
+    cipher.id, cipher.userId, expectedUpdatedAt
   );
   const statements: D1PreparedStatement[] = [updateStatement];
   if (version) statements.push(buildCipherVersionInsertStatement(db, safeBind, version, data));
