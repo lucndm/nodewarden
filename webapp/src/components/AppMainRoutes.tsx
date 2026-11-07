@@ -57,6 +57,9 @@ export interface AppMainRoutesProps {
   sendsLoading: boolean;
   cipherUsage: CipherUsageMap | null;
   cipherUsageError: boolean;
+  organizations: import('@/lib/api/organizations').VaultOrganization[];
+  collections: import('@/lib/api/organizations').VaultCollection[];
+  collectionsError: string;
   onTrackPasswordCopy: (cipherId: string) => void;
   users: AdminUser[];
   invites: AdminInvite[];
@@ -273,6 +276,9 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             emailForReprompt={props.profile?.email || props.session?.email || ''}
             cipherUsage={props.cipherUsage}
             cipherUsageError={props.cipherUsageError}
+            organizations={props.organizations}
+            collections={props.collections}
+            collectionsError={props.collectionsError}
             onTrackPasswordCopy={props.onTrackPasswordCopy}
             onRefresh={props.onRefreshVault}
             onCreate={props.onCreateVaultItem}

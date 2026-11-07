@@ -238,8 +238,10 @@ export async function handleGetMemberPublicKeys(
   userIds: string[]
 ): Promise<Response> {
   const storage = new StorageService(env.DB);
+  // Only an owner or an admin needs the member list, and only they may read it:
+  // handing it to every member would let one enumerate the organization.
   const requester = await storage.getOrganizationUserForUser(orgId, userId);
-  if (!requester || requester.status !== STATUS_CONFIRMED) {
+  if (!requester || requester.status !== STATUS_CONFIRMED || requester.type > 1) {
     return errorResponse('Organization not found', 404);
   }
   const keys = await storage.getMemberPublicKeys(userIds);
@@ -477,6 +479,11 @@ export async function handleRemoveOrganizationUser(
   const target = (await storage.getOrganizationUsers(orgId)).find((entry) => entry.id === membershipId);
   if (!target) return errorResponse('Organization member not found', 404);
   if (target.type === 0) return errorResponse('The owner cannot be removed', 400);
+  // An admin may remove a member; removing another admin is the owner's call,
+  // so two admins cannot strip each other out of the organization.
+  if (target.type === 1 && requester.type !== OWNER_TYPE) {
+    return errorResponse('Only the owner removes an admin', 400);
+  }
   if (target.userId === userId) return errorResponse('Remove yourself from another owner account', 400);
 
   const removed = await storage.removeOrganizationUser(orgId, membershipId);

@@ -29,7 +29,11 @@ export type SidebarFilter =
   | { kind: 'duplicates' }
   | { kind: 'type'; value: TypeFilter }
   | { kind: 'untagged' }
-  | { kind: 'tag'; tag: string };
+  | { kind: 'tag'; tag: string }
+  /** The shared items of one collection. */
+  | { kind: 'collection'; collectionId: string }
+  /** Everything shared with the member through one organization. */
+  | { kind: 'organization'; organizationId: string };
 
 interface TypeOption {
   type: number;

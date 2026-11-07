@@ -29,6 +29,11 @@ const intentionallyEnglishKeys = new Set([
   'txt_generator_provider_simplelogin',
   // "Details" is the same word in German (and several other locales).
   'txt_email_breach_details',
+  // "Collections" is spelled the same in French and English.
+  'txt_collections',
+  // "Organisationen"/"Organizations" differ, but the singular is a technical
+  // term the German and French files keep as they are.
+  'txt_organizations',
 ]);
 const intentionallyEnglishPrefixes = [
   'txt_log_action_',

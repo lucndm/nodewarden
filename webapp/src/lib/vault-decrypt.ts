@@ -7,6 +7,15 @@ export interface DecryptVaultCoreArgs {
   ciphers: Cipher[];
   symEncKeyB64: string;
   symMacKeyB64: string;
+  /**
+   * The organizations the member belongs to, with their key as the server
+   * stores it for this member. Without them a shared item shows as an empty
+   * name: its item key is protected by the organization key, not by the
+   * member's own key.
+   */
+  organizations?: Array<{ id: string; key: string | null }>;
+  /** The member's RSA private key, encrypted under their vault key. */
+  encryptedPrivateKey?: string | null;
 }
 
 export interface DecryptVaultCoreResult {
@@ -120,6 +129,47 @@ export async function decryptVaultCore(args: DecryptVaultCoreArgs): Promise<Decr
   const userEnc = base64ToBytes(args.symEncKeyB64);
   const userMac = base64ToBytes(args.symMacKeyB64);
 
+  // A shared item's key is wrapped with the organization key, which is itself
+  // wrapped for this member with their RSA key. Opening it once is enough for
+  // every item of that organization.
+  const organizationKeys = new Map<string, { encKey: Uint8Array; macKey: Uint8Array }>();
+  if (args.organizations?.length && args.encryptedPrivateKey) {
+    let privateKey: CryptoKey | null = null;
+    try {
+      const pkcs8 = await decryptBw(args.encryptedPrivateKey, userEnc, userMac);
+      privateKey = await crypto.subtle.importKey(
+        'pkcs8',
+        pkcs8.buffer.slice(pkcs8.byteOffset, pkcs8.byteOffset + pkcs8.byteLength) as ArrayBuffer,
+        { name: 'RSA-OAEP', hash: 'SHA-1' },
+        false,
+        ['decrypt']
+      );
+    } catch {
+      privateKey = null;
+    }
+    if (privateKey) {
+      for (const organization of args.organizations) {
+        const wrapped = String(organization.key || '');
+        if (!wrapped.startsWith('4.')) continue;
+        try {
+          const blob = base64ToBytes(wrapped.slice(2));
+          const raw = new Uint8Array(
+            await crypto.subtle.decrypt(
+              { name: 'RSA-OAEP' },
+              privateKey,
+              blob.buffer.slice(blob.byteOffset, blob.byteOffset + blob.byteLength) as ArrayBuffer
+            )
+          );
+          if (raw.length === 64) {
+            organizationKeys.set(organization.id, { encKey: raw.slice(0, 32), macKey: raw.slice(32, 64) });
+          }
+        } catch {
+          // A key wrapped for someone else simply does not open here.
+        }
+      }
+    }
+  }
+
   const folders = await Promise.all(
     args.folders.map(async (folder) => ({
       ...folder,
@@ -135,7 +185,11 @@ export async function decryptVaultCore(args: DecryptVaultCoreArgs): Promise<Decr
       let usesItemKey = false;
       if (cipher.key) {
         try {
-          const itemKey = await decryptBw(cipher.key, userEnc, userMac);
+          // A shared item unwraps its key with the organization key; a personal
+          // one with the member's own key.
+          const organizationId = (cipher as { organizationId?: string | null }).organizationId;
+          const keyOwner = (organizationId && organizationKeys.get(organizationId)) || { encKey: userEnc, macKey: userMac };
+          const itemKey = await decryptBw(cipher.key, keyOwner.encKey, keyOwner.macKey);
           if (itemKey.length >= 64) {
             itemEnc = itemKey.slice(0, 32);
             itemMac = itemKey.slice(32, 64);
