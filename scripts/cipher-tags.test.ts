@@ -65,6 +65,14 @@ test('normalizeCipherTags trims, dedupes case-insensitively, caps and rejects ju
   );
   const many = Array.from({ length: 40 }, (_, i) => `tag${i}`);
   assert.equal(normalizeCipherTags(many)!.length, 24);
+  // A client replaying a pre-repair payload must not be able to write the
+  // folder's ciphertext back into the tag field.
+  assert.deepEqual(
+    normalizeCipherTags([ENC('Shared'), 'real', '2.abc|def|ghi']),
+    ['real'],
+    'ciphertext-shaped entries are never stored as tags'
+  );
+  assert.equal(normalizeCipherTags([ENC('only')]), null);
 });
 
 test('full update round-trip: absent tags preserved, present tags replaced, null clears', async () => {

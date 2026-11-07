@@ -292,12 +292,17 @@ const CIPHER_TAG_MAX_LENGTH = 64;
  * drops empties, dedupes case-insensitively, caps the list. Plaintext by
  * design (server-side metadata); official Bitwarden clients never send this
  * field and ignore it in responses.
+ *
+ * Ciphertext-shaped entries are dropped before the length cap: older builds
+ * wrote a folder's encrypted name into this field, and a client still holding
+ * that cached payload must not be able to put it back after it was repaired.
  */
 export function normalizeCipherTags(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of value) {
+    if (isValidEncString(raw)) continue;
     const tag = String(raw ?? '').trim().slice(0, CIPHER_TAG_MAX_LENGTH);
     if (!tag) continue;
     const dedupeKey = tag.toLocaleLowerCase();
