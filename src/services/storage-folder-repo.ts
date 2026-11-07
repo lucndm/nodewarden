@@ -1,5 +1,6 @@
 import type { Folder } from '../types';
 import { generateUUID } from '../utils/uuid';
+import { isValidEncString } from '../utils/enc-string';
 
 function mapFolderRow(row: any): Folder {
   return {
@@ -125,7 +126,7 @@ interface MigratableCipherRow {
  */
 export async function migrateFolderCiphersToTags(db: D1Database, userId: string, now: string): Promise<boolean> {
   const folders = await getAllFolders(db, userId);
-  const nameById = new Map(folders.map((folder) => [folder.id, folder.tagName || (/^\d+\.[^|]+\|/.test(folder.name) ? '' : folder.name)]));
+  const nameById = new Map(folders.map((folder) => [folder.id, folder.tagName || (isValidEncString(folder.name) ? '' : folder.name)]));
   const res = await db
     .prepare('SELECT id, folder_id, data FROM ciphers WHERE user_id = ?')
     .bind(userId)
@@ -141,12 +142,28 @@ export async function migrateFolderCiphersToTags(db: D1Database, userId: string,
     delete data.folder_id;
 
     if (!folderName) {
-      // Without a plaintext tag name, an encrypted Bitwarden folder cannot be backfilled server-side.
-      // Keep the folder id and existing tags until the Web Vault supplies its decrypted name.
+      // Without a plaintext tag name, an encrypted Bitwarden folder cannot be
+      // backfilled server-side. Older builds wrote that folder's ciphertext
+      // into the item tags instead; a real tag is capped at 64 characters, so
+      // an EncString-shaped entry can only be that residue. The folder
+      // position lives in folder_id, so dropping the residue loses nothing
+      // and keeps the ciphertext out of a field clients and filters read.
+      const kept = tags.filter((tag) => !isValidEncString(tag));
+      if (kept.length !== tags.length) {
+        if (kept.length) data.tags = kept;
+        else delete data.tags;
+        await db
+          .prepare('UPDATE ciphers SET updated_at = ?, data = ? WHERE id = ?')
+          .bind(now, JSON.stringify(data), row.id)
+          .run();
+        changed = true;
+      }
       continue;
     }
 
-    const remaining = tags.filter((tag) => tag.toLowerCase() !== folderName.toLowerCase());
+    const remaining = tags.filter(
+      (tag) => tag.toLowerCase() !== folderName.toLowerCase() && !isValidEncString(tag)
+    );
     if (tags.length > 0 && tags[0].toLowerCase() === folderName.toLowerCase()) {
       continue; // already migrated and in sync with the registry
     }

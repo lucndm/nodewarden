@@ -260,6 +260,43 @@ test('migration backfills tags from legacy folder assignments', async () => {
   assert.equal(changedAgain, false);
 });
 
+test('migration drops folder ciphertext that older builds wrote into item tags', async () => {
+  const db = new MemoryD1();
+  const storage = new StorageService(db);
+  const now = new Date().toISOString();
+  // A folder created by an official client: encrypted name, no plain tag.
+  const folderName = ENC('Shared');
+  await storage.saveFolder({ id: 'folder-enc', userId: 'user-1', name: folderName, tagName: null, createdAt: now, updatedAt: now });
+
+  const insert = (cipherId: string, tags: unknown) =>
+    db
+      .prepare('INSERT INTO ciphers(id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(cipherId, 'user-1', 1, 'folder-enc', ENC('Item'), null, 0, JSON.stringify({ type: 1, name: ENC('Item'), tags }), 0, null, now, now, null, null)
+      .run();
+
+  // Exactly the production shape: tags[0] is the folder's own ciphertext.
+  await insert('dirty-1', [folderName]);
+  // A real tag alongside the residue must survive.
+  await insert('dirty-2', [folderName, 'Real tag']);
+
+  const changed = await storage.migrateFolderCiphersToTags('user-1');
+  assert.equal(changed, true);
+
+  const cleaned = await storage.getCipherForUser('dirty-1', 'user-1');
+  assert.deepEqual(cleaned?.tags ?? [], [], 'ciphertext must not stay in a tag field');
+  assert.equal(cleaned?.folderId, 'folder-enc', 'the folder position lives in folder_id');
+
+  const kept = await storage.getCipherForUser('dirty-2', 'user-1');
+  assert.deepEqual(kept?.tags, ['Real tag']);
+
+  const folder = await storage.getFolderForUser('folder-enc', 'user-1');
+  assert.equal(folder?.tagName, null, 'the repair must not write a plaintext folder name');
+  assert.equal(folder?.name, folderName, 'the encrypted name is untouched');
+
+  // Idempotent: a second pass finds nothing left to clean.
+  assert.equal(await storage.migrateFolderCiphersToTags('user-1'), false);
+});
+
 test('folder create endpoint registers tags for empty folders', async () => {
   const db = new MemoryD1();
   const envArg = { DB: db } as unknown as Env;
