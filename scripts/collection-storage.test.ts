@@ -251,3 +251,60 @@ test('an item the member cannot reach is not in the shared item list', async () 
   assert.equal((await storage.getSharedCipherIdsForUser(MEMBER)).has('cipher-other'), false);
   assert.equal(await storage.getItemAccess('cipher-other', MEMBER), null);
 });
+
+test('an install created before the sharing model is upgraded in place', async () => {
+  // Production carries data written by the build that had no organizations.
+  // Upgrading must add the tables and the column without touching the rows.
+  const db = new DatabaseSync(':memory:');
+  const d1 = sqliteD1(db);
+  await ensureStorageSchema(d1);
+
+  // Take the database back to the shape the older build left behind.
+  for (const table of [
+    'collection_ciphers',
+    'collection_groups',
+    'collection_users',
+    'group_users',
+    'groups',
+    'collections',
+    'organization_users',
+    'organizations',
+  ]) {
+    db.exec(`DROP TABLE ${table}`);
+  }
+  db.exec('DROP INDEX idx_ciphers_org');
+  db.exec('ALTER TABLE ciphers DROP COLUMN organization_id');
+
+  db.prepare(
+    'INSERT INTO users (id, email, master_password_hash, key, kdf_type, kdf_iterations, security_stamp, role, status, verify_devices, yubikey_nfc, created_at, updated_at) ' +
+      'VALUES (?, ?, ?, ?, 0, 600000, ?, ?, ?, 0, 0, ?, ?)'
+  ).run('user-1', 'old@example.test', 'hash', 'key', 'stamp', 'user', 'active', NOW, NOW);
+  db.prepare(
+    'INSERT INTO ciphers (id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at) ' +
+      'VALUES (?, ?, 1, NULL, ?, NULL, 0, ?, 0, NULL, ?, ?)'
+  ).run('old-cipher', 'user-1', 'enc', '{}', NOW, NOW);
+
+  // The next request runs the schema bootstrap again, the way it does when the
+  // stored version differs from the build's version.
+  await ensureStorageSchema(d1);
+
+  for (const table of ['organizations', 'organization_users', 'collections', 'groups', 'group_users', 'collection_users', 'collection_groups', 'collection_ciphers']) {
+    const found = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(table) as { name: string } | undefined;
+    assert.ok(found, `${table} must exist after the upgrade`);
+  }
+
+  const columns = db.prepare('PRAGMA table_info(ciphers)').all() as Array<{ name: string }>;
+  assert.ok(
+    columns.some((column) => column.name === 'organization_id'),
+    'ciphers.organization_id must exist after the upgrade'
+  );
+
+  const stored = db.prepare('SELECT id, name, organization_id FROM ciphers WHERE id = ?').get('old-cipher') as
+    | { id: string; name: string; organization_id: string | null }
+    | undefined;
+  assert.ok(stored, 'the row written by the older build must survive');
+  assert.equal(stored.name, 'enc', 'the upgrade must not rewrite the row');
+  assert.equal(stored.organization_id, null, 'an item written before sharing stays personal');
+});
