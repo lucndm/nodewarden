@@ -113,6 +113,7 @@ import {
   handleCreateCollection,
   handleCreateOrganization,
   handleRemoveOrganizationUser,
+  handleRotateOrganizationKey,
   handleUpdateOrganizationUser,
   handleGetCollections,
   handleGetMemberPublicKeys,
@@ -463,6 +464,13 @@ export async function handleAuthenticatedRoute(
     if (path === '/api/organizations') {
       if (method === 'GET') return handleGetOrganizations(request, env, userId);
       if (method === 'POST') return handleCreateOrganization(request, env, userId);
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // POST /api/organizations/:orgId/rotate-key — store the new key material.
+    const rotateMatch = path.match(/^\/api\/organizations\/([^/]+)\/rotate-key$/i);
+    if (rotateMatch) {
+      if (method === 'POST') return handleRotateOrganizationKey(request, env, userId, rotateMatch[1]);
       return handleUnsupportedOrganizationAction();
     }
 

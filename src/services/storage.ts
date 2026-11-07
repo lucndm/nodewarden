@@ -174,8 +174,10 @@ import {
   getOrganizationMembershipIds as listStoredOrganizationMembershipIds,
   removeOrganizationUser as removeStoredOrganizationUser,
   replaceMembershipCollections as replaceStoredMembershipCollections,
+  rotateOrganizationKey as rotateStoredOrganizationKey,
   setOrganizationUserType as setStoredOrganizationUserType,
   type CollectionAssignment,
+  type OrganizationKeyRotation,
   getCipherRankByCipherForUser as listStoredCipherRanks,
   getCollectionIdsByCipherIds as listStoredCollectionIdsByCipherIds,
   getCollectionIdsForCipher as listStoredCollectionIdsForCipher,
@@ -758,6 +760,10 @@ export class StorageService {
 
   async getOrganizationMembershipIds(orgId: string): Promise<Set<string>> {
     return listStoredOrganizationMembershipIds(this.db, orgId);
+  }
+
+  async rotateOrganizationKey(input: OrganizationKeyRotation): Promise<void> {
+    return rotateStoredOrganizationKey(this.db, input);
   }
 
   /**
