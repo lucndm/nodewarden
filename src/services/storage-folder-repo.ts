@@ -278,8 +278,13 @@ export async function applyTagToCiphers(
 
   let changed = false;
   for (const id of sanitized) {
+    // A shared item may be moved by any member who may write it; the caller
+    // already filtered the ids, so the guard here only refuses another
+    // account's personal item.
     const row = await db
-      .prepare('SELECT data, folder_id, updated_at, name FROM ciphers WHERE id = ? AND user_id = ?')
+      .prepare(
+        'SELECT data, folder_id, updated_at, name FROM ciphers WHERE id = ? AND (user_id = ? OR organization_id IS NOT NULL)'
+      )
       .bind(id, userId)
       .first<{ data: string; folder_id: string | null; updated_at: string; name: string | null }>();
     if (!row) continue;
@@ -299,7 +304,9 @@ export async function applyTagToCiphers(
       ? (tagName ? folderIdForTag : (await ensureFoldersForTags(db, userId, [next[0]])).get(next[0]) ?? null)
       : null;
     const result = await db
-      .prepare('UPDATE ciphers SET folder_id = ?, updated_at = ?, data = ? WHERE id = ? AND user_id = ? AND data = ? AND updated_at = ? AND folder_id IS ? AND name IS ?')
+      .prepare(
+        'UPDATE ciphers SET folder_id = ?, updated_at = ?, data = ? WHERE id = ? AND (user_id = ? OR organization_id IS NOT NULL) AND data = ? AND updated_at = ? AND folder_id IS ? AND name IS ?'
+      )
       .bind(positionFolderId, now, JSON.stringify(data), id, userId, row.data, row.updated_at, row.folder_id, row.name)
       .run();
     if (result.meta.changes !== 1) return { changed, conflict: true };

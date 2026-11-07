@@ -296,3 +296,172 @@ test('the item cannot be moved to another organization by an edit', async () => 
   const cipher = (await update.json()) as { organizationId: string };
   assert.equal(cipher.organizationId, ORG, 'the organization of a shared item does not change on an edit');
 });
+
+test('a bulk action only touches the items the member may change', async () => {
+  const { env } = await fixture();
+  const created = await createShared(env);
+
+  // The reader may only read it, so a bulk delete by the reader changes nothing.
+  const readerDelete = await call(env, 'https://vault.example.test/api/ciphers/delete', 'POST', READER, {
+    ids: [created.id],
+  });
+  assert.equal(readerDelete.status, 204);
+  const stillThere = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', READER);
+  assert.equal(stillThere.status, 200, 'a read-only member must not delete the item');
+
+  // An outsider naming the id changes nothing either.
+  const outsiderDelete = await call(env, 'https://vault.example.test/api/ciphers/delete', 'POST', OUTSIDER, {
+    ids: [created.id],
+  });
+  assert.equal(outsiderDelete.status, 204);
+  const afterOutsider = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER);
+  assert.equal(afterOutsider.status, 200, 'an outsider must not delete the item');
+
+  // The writer may move it into a folder of their own, and it sticks.
+  const folder = await call(env, 'https://vault.example.test/api/folders', 'POST', WRITER, {
+    name: ENC('Writing'),
+  });
+  assert.equal(folder.status, 200);
+  const folderId = ((await folder.json()) as { id: string }).id;
+  const writerMove = await call(env, 'https://vault.example.test/api/ciphers/move', 'PUT', WRITER, {
+    ids: [created.id],
+    folderId,
+  });
+  assert.equal(writerMove.status, 204);
+  const moved = (await (
+    await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER)
+  ).json()) as { folderId: string | null };
+  assert.equal(moved.folderId, folderId, 'the writer may move a shared item');
+
+  // The writer may soft delete it: they have write rights on the collection.
+  const writerDelete = await call(env, 'https://vault.example.test/api/ciphers/delete', 'POST', WRITER, {
+    ids: [created.id],
+  });
+  assert.equal(writerDelete.status, 204);
+  const deleted = (await (
+    await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER)
+  ).json()) as { deletedDate?: string | null };
+  assert.ok(deleted.deletedDate, 'the writer may soft delete the item');
+});
+
+test('permanent deletion of a shared item takes manage rights', async () => {
+  const { env } = await fixture();
+  const created = await createShared(env);
+
+  // The writer may edit the item but not manage the collection, so it survives.
+  const writerPermanent = await call(
+    env,
+    'https://vault.example.test/api/ciphers/delete-permanent',
+    'POST',
+    WRITER,
+    { ids: [created.id] }
+  );
+  assert.equal(writerPermanent.status, 204);
+  const survives = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER);
+  assert.equal(survives.status, 200, 'an editor must not destroy a shared item');
+
+  // The organization owner manages every collection, so they may.
+  const ownerPermanent = await call(
+    env,
+    'https://vault.example.test/api/ciphers/delete-permanent',
+    'POST',
+    OWNER,
+    { ids: [created.id] }
+  );
+  assert.equal(ownerPermanent.status, 204);
+  const gone = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', OWNER);
+  assert.equal(gone.status, 404);
+});
+
+test('a bulk archive and restore follow the same rights', async () => {
+  const { env } = await fixture();
+  const created = await createShared(env);
+
+  const readerArchive = await call(env, 'https://vault.example.test/api/ciphers/archive', 'POST', READER, {
+    ids: [created.id],
+  });
+  assert.equal(readerArchive.status, 200);
+  const notArchived = (await (
+    await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', READER)
+  ).json()) as { archivedDate?: string | null };
+  assert.equal(notArchived.archivedDate ?? null, null, 'a read-only member must not archive the item');
+
+  const writerArchive = await call(env, 'https://vault.example.test/api/ciphers/archive', 'POST', WRITER, {
+    ids: [created.id],
+  });
+  assert.equal(writerArchive.status, 200);
+  const archived = (await (
+    await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER)
+  ).json()) as { archivedDate?: string | null };
+  assert.ok(archived.archivedDate, 'the writer may archive the item');
+});
+
+test('single-item actions follow the same rights as the bulk ones', async () => {
+  const { env } = await fixture();
+  const created = await createShared(env);
+
+  // The reader may not delete it one at a time either. A soft delete is a PUT;
+  // a POST on the same path is the permanent one.
+  const readerDelete = await call(
+    env,
+    `https://vault.example.test/api/ciphers/${created.id}/delete`,
+    'PUT',
+    READER
+  );
+  assert.equal(readerDelete.status, 403, 'a read-only member must be refused, not silently ignored');
+
+  // An outsider does not learn that the item exists.
+  const outsiderDelete = await call(
+    env,
+    `https://vault.example.test/api/ciphers/${created.id}/delete`,
+    'PUT',
+    OUTSIDER
+  );
+  assert.equal(outsiderDelete.status, 404);
+
+  // The writer may delete and restore it.
+  const writerDelete = await call(
+    env,
+    `https://vault.example.test/api/ciphers/${created.id}/delete`,
+    'PUT',
+    WRITER
+  );
+  assert.equal(writerDelete.status, 200);
+  const deleted = (await (
+    await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER)
+  ).json()) as { deletedDate?: string | null };
+  assert.ok(deleted.deletedDate, 'the writer may delete the item');
+
+  const restored = await call(
+    env,
+    `https://vault.example.test/api/ciphers/${created.id}/restore`,
+    'PUT',
+    WRITER
+  );
+  assert.equal(restored.status, 200);
+  const afterRestore = (await (
+    await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER)
+  ).json()) as { deletedDate?: string | null };
+  assert.equal(afterRestore.deletedDate ?? null, null, 'the writer may restore the item');
+
+  // An editor may not destroy it for everyone, but the organization owner may.
+  const writerPermanent = await call(
+    env,
+    `https://vault.example.test/api/ciphers/${created.id}/delete`,
+    'POST',
+    WRITER
+  );
+  assert.equal(writerPermanent.status, 403);
+
+  const ownerPermanent = await call(
+    env,
+    `https://vault.example.test/api/ciphers/${created.id}/delete`,
+    'POST',
+    OWNER
+  );
+  assert.equal(ownerPermanent.status, 204, 'a permanent delete answers with no content');
+  assert.equal(
+    (await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', OWNER)).status,
+    404
+  );
+});

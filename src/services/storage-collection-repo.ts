@@ -625,3 +625,84 @@ export async function getCollectionRightsForCollections(
   }
   return rights;
 }
+
+/**
+ * The right level a member holds on each item they can reach in an
+ * organization, keyed by item id.
+ *
+ * The level is the rank the official server uses: manage 4, edit 2, view
+ * password 1. An owner or admin of the organization reaches every collection
+ * of it, so their items rank 7.
+ */
+export async function getCipherRankByCipherForUser(
+  db: D1Database,
+  userId: string
+): Promise<Map<string, number>> {
+  const ranks = new Map<string, number>();
+  const res = await db
+    .prepare(
+      'SELECT CC.cipher_id AS cipher_id, ' +
+        'MAX(CASE WHEN manage = 1 THEN 4 ELSE 0 END ' +
+        '+ CASE WHEN read_only = 0 THEN 2 ELSE 0 END ' +
+        '+ CASE WHEN hide_passwords = 0 THEN 1 ELSE 0 END) AS rank ' +
+        'FROM (' +
+        'SELECT CC.cipher_id AS cipher_id, CU.read_only AS read_only, CU.hide_passwords AS hide_passwords, CU.manage AS manage ' +
+        'FROM collection_ciphers CC ' +
+        'INNER JOIN collections C ON C.id = CC.collection_id ' +
+        'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+        'INNER JOIN collection_users CU ON CU.collection_id = CC.collection_id AND CU.org_user_id = OU.id ' +
+        'UNION ALL ' +
+        'SELECT CC.cipher_id AS cipher_id, CG.read_only AS read_only, CG.hide_passwords AS hide_passwords, CG.manage AS manage ' +
+        'FROM collection_ciphers CC ' +
+        'INNER JOIN collections C ON C.id = CC.collection_id ' +
+        'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+        'INNER JOIN collection_groups CG ON CG.collection_id = CC.collection_id ' +
+        'INNER JOIN group_users GU ON GU.group_id = CG.group_id AND GU.org_user_id = OU.id ' +
+        'WHERE NOT EXISTS (SELECT 1 FROM collection_users CU2 ' +
+        'WHERE CU2.collection_id = CG.collection_id AND CU2.org_user_id = OU.id) ' +
+        'UNION ALL ' +
+        'SELECT CC.cipher_id AS cipher_id, 0 AS read_only, 0 AS hide_passwords, 1 AS manage ' +
+        'FROM collection_ciphers CC ' +
+        'INNER JOIN collections C ON C.id = CC.collection_id ' +
+        'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 AND OU.type <= 1 ' +
+        ') AS CC GROUP BY CC.cipher_id'
+    )
+    .bind(userId, userId, userId)
+    .all<{ cipher_id: string; rank: number }>();
+  for (const row of res.results || []) ranks.set(row.cipher_id, Number(row.rank) || 0);
+  return ranks;
+}
+
+/**
+ * The ids of the items the member may change: their own, plus the shared ones
+ * whose rights allow writing.
+ *
+ * A bulk action must filter its ids through here before touching anything: an
+ * item the member may only read, or cannot reach at all, is not theirs to
+ * move, archive or delete.
+ */
+export async function filterWritableCipherIds(
+  db: D1Database,
+  userId: string,
+  cipherIds: string[],
+  minimumRank = 2
+): Promise<string[]> {
+  if (!cipherIds.length) return [];
+  const unique = [...new Set(cipherIds)];
+  const placeholders = unique.map(() => '?').join(',');
+  const owned = await db
+    .prepare(
+      `SELECT id FROM ciphers WHERE user_id = ? AND organization_id IS NULL AND id IN (${placeholders})`
+    )
+    .bind(userId, ...unique)
+    .all<{ id: string }>();
+  const allowed = new Set((owned.results || []).map((row) => row.id));
+
+  const ranks = await getCipherRankByCipherForUser(db, userId);
+  for (const id of unique) {
+    if (allowed.has(id)) continue;
+    const rank = ranks.get(id);
+    if (rank !== undefined && rank >= minimumRank) allowed.add(id);
+  }
+  return unique.filter((id) => allowed.has(id));
+}
