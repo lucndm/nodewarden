@@ -650,6 +650,25 @@ export class StorageService {
     return migrateStoredFolderCiphersToTags(this.db, userId, new Date().toISOString());
   }
 
+  /**
+   * One-time repair of cipher tags written by the old folder→tag backfill.
+   *
+   * The repair lives in the sync path, but the Web Vault and official clients
+   * only request /sync when the revision changes, so a vault that never changes
+   * would never reach it. Callers that clients poll (the revision endpoint) use
+   * this entry point instead: it runs the same migration once per account,
+   * marks the account done so polling stays cheap, and moves the revision when
+   * rows changed so the client actually downloads the repaired payload.
+   */
+  async repairLegacyCipherTags(userId: string): Promise<boolean> {
+    const markerKey = `tags.legacy-repair.v1:${userId}`;
+    if ((await this.getConfigValue(markerKey)) === 'done') return false;
+    const changed = await this.migrateFolderCiphersToTags(userId);
+    if (changed) await this.updateRevisionDate(userId);
+    await this.setConfigValue(markerKey, 'done');
+    return changed;
+  }
+
   async bulkDeleteFolders(ids: string[], userId: string): Promise<string | null> {
     const hadFolders = (await this.getAllFolders(userId)).length > 0;
     await deleteStoredFolders(this.db, userId, ids);

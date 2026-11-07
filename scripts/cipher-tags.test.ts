@@ -28,6 +28,7 @@ import {
 } from '../src/handlers/folders';
 import { StorageService } from '../src/services/storage';
 import { handleSync } from '../src/handlers/sync';
+import { handleGetRevisionDate } from '../src/handlers/accounts';
 import { MemoryD1 } from './memory-d1';
 import { sqliteD1 } from './sqlite-d1';
 import { ensureStorageSchema } from '../src/services/storage-schema';
@@ -340,6 +341,48 @@ test('sync bumps the account revision after the tag repair rewrites ciphers', as
     // A later sync has nothing left to repair and must not keep bumping it.
     await handleSync(new Request('https://vault.example.test/api/sync'), envArg, 'user-1');
     assert.equal(await storage.getRevisionDate('user-1'), revisionAfter);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test('the revision endpoint runs the tag repair once and moves the revision', async () => {
+  // Clients poll /api/accounts/revision-date and skip /sync while the revision
+  // holds still, so the repair must be reachable from this endpoint.
+  const sqlite = new DatabaseSync(':memory:');
+  try {
+    const db = sqliteD1(sqlite);
+    await ensureStorageSchema(db);
+    const envArg = { DB: db } as unknown as Env;
+    const storage = new StorageService(db);
+    const now = new Date().toISOString();
+    await storage.saveUser({
+      id: 'user-1', email: 'user-1@example.test', name: null, masterPasswordHint: null,
+      masterPasswordHash: 'hash', key: '2.key', privateKey: null, publicKey: null,
+      kdfType: 0, kdfIterations: 600000, securityStamp: 'stamp', role: 'user', status: 'active',
+      totpSecret: null, totpRecoveryCode: null, yubikeyKey1: null, yubikeyKey2: null, yubikeyKey3: null,
+      yubikeyKey4: null, yubikeyKey5: null, yubikeyNfc: false, apiKey: null,
+      createdAt: now, updatedAt: now,
+    } as never);
+
+    const folderName = ENC('Shared');
+    await storage.saveFolder({ id: 'folder-enc', userId: 'user-1', name: folderName, tagName: null, createdAt: now, updatedAt: now });
+    await db
+      .prepare('INSERT INTO ciphers(id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind('dirty', 'user-1', 1, 'folder-enc', ENC('Item'), null, 0, JSON.stringify({ type: 1, name: ENC('Item'), tags: [folderName] }), 0, null, now, now, null, null)
+      .run();
+
+    const revisionBefore = await storage.getRevisionDate('user-1');
+    const first = await handleGetRevisionDate(new Request('https://vault.example.test/api/accounts/revision-date'), envArg, 'user-1');
+    assert.equal(first.status, 200);
+    const stampAfter = new Date(await storage.getRevisionDate('user-1')).getTime();
+    assert.notEqual(stampAfter, new Date(revisionBefore).getTime(), 'the repair must surface as a new revision');
+    assert.equal(await first.json(), stampAfter, 'and the response has to carry that new revision');
+    assert.deepEqual((await storage.getCipherForUser('dirty', 'user-1'))?.tags ?? [], []);
+
+    // The account is marked done: polling again neither rescans nor bumps.
+    const second = await handleGetRevisionDate(new Request('https://vault.example.test/api/accounts/revision-date'), envArg, 'user-1');
+    assert.equal(await second.json(), stampAfter);
   } finally {
     sqlite.close();
   }
