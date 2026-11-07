@@ -505,6 +505,54 @@ async function main() {
     const afterRestore = await evaluate(dialogText);
     checks.ok('the replaced state is kept as a version', afterRestore.includes('Modified'));
 
+    // The owner can replace the key every member holds. The item has to stay
+    // readable afterwards: the rotation gives it a new key and re-encrypts it,
+    // and the vault reads it again with the new organization key.
+    await evaluate(`(() => {
+      const target = document.querySelector('.item-history-close');
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(`document.querySelector('[role=dialog]') === null`, 'the history dialog to close');
+    const rotateButton = `!![...document.querySelectorAll('.sidebar .tree-btn')].find(b => b.textContent.trim() === 'Rotate key')`;
+    await waitFor(rotateButton, 'the rotate key button');
+    checks.ok('the owner is offered the key rotation', true);
+
+    await evaluate(`(() => {
+      const target = [...document.querySelectorAll('.sidebar .tree-btn')].find(b => b.textContent.trim() === 'Rotate key');
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(`document.querySelector('[role=dialog]') !== null`, 'the rotation confirmation');
+    const rotationDialog = await evaluate(dialogText);
+    checks.ok('the rotation asks before it replaces the key', rotationDialog.includes('re-encrypted'));
+    await evaluate(clickInDialog('Rotate key'));
+    await waitFor(
+      `document.body.textContent.includes('The organization key was replaced')`,
+      'the rotation to finish',
+      30000
+    );
+    checks.ok('the rotation reports that it ran', true);
+
+    // The shared item is still there and still readable: the rotation replaced
+    // its key and re-encrypted its payload.
+    await waitFor(`document.body.textContent.includes('UI Shared Login')`, 'the shared item after the rotation', 30000);
+    await evaluate(`(() => {
+      const rows = [...document.querySelectorAll('button, [role="button"]')];
+      const target = rows.find((el) => el.textContent.includes('UI Shared Login'));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(
+      `document.body.textContent.includes('shared-user')`,
+      'the shared item to be readable after the rotation',
+      30000
+    );
+    checks.ok('the shared item is still readable after the rotation', true);
+
     return checks.finish() ? 0 : 1;
   } finally {
     if (browser) await browser.stop();

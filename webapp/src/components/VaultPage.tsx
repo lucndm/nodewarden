@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { createPortal } from 'preact/compat';
 import LoadingState from '@/components/LoadingState';
 import VaultDialogs from '@/components/vault/VaultDialogs';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import VaultDetailView from '@/components/vault/VaultDetailView';
 import VaultEditor from '@/components/vault/VaultEditor';
 import VaultListPanel from '@/components/vault/VaultListPanel';
@@ -55,6 +56,8 @@ interface VaultPageProps {
   collectionsError: string;
   onTrackPasswordCopy: (cipherId: string) => void;
   onRefresh: () => Promise<void>;
+  /** The owner replaces the key every member of the organization holds. */
+  onRotateOrganizationKey: (organizationId: string) => Promise<void>;
   onCreate: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
   onUpdate: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
   onDelete: (cipher: Cipher) => Promise<void>;
@@ -90,6 +93,10 @@ export default function VaultPage(props: VaultPageProps) {
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       ? window.matchMedia(MOBILE_LAYOUT_QUERY).matches
       : false;
+  // The organization whose key the owner is about to replace, and the
+  // confirmation that comes before it.
+  const [rotateOrganizationId, setRotateOrganizationId] = useState('');
+  const [rotateOrganizationOpen, setRotateOrganizationOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchComposing, setSearchComposing] = useState(false);
@@ -411,6 +418,9 @@ export default function VaultPage(props: VaultPageProps) {
         id: organization.id,
         name: organization.name,
         keyRotationRequired: organization.keyRotationRequired,
+        // Only the owner may rotate the key, and the server refuses it for
+        // anyone else, so the button is only there for the owner.
+        canRotateKey: organization.type === 0,
         count: props.ciphers.filter((cipher) => {
           if (!isCipherVisibleInNormalVault(cipher)) return false;
           return (cipher as { organizationId?: string | null }).organizationId === organization.id;
@@ -1341,6 +1351,11 @@ const folderName = useCallback((id: string | null | undefined): string => {
     <VaultSidebar
       tags={tagSummary}
       organizations={sidebarOrganizations}
+      onRotateOrganizationKey={(organizationId) => {
+        setRotateOrganizationId(organizationId);
+        setRotateOrganizationOpen(true);
+      }}
+      rotatingOrganizationId={rotateOrganizationId && rotateOrganizationOpen ? rotateOrganizationId : ''}
       sidebarFilter={sidebarFilter}
       busy={busy}
       isMobileLayout={isMobileLayout}
@@ -1533,6 +1548,24 @@ const folderName = useCallback((id: string | null | undefined): string => {
         </section>
       </div>
 
+      <ConfirmDialog
+        open={rotateOrganizationOpen}
+        title={t('txt_rotate_organization_key')}
+        message={t('txt_rotate_organization_key_confirm')}
+        variant="warning"
+        confirmText={t('txt_rotate_organization_key')}
+        cancelText={t('txt_cancel')}
+        onConfirm={() => {
+          const organizationId = rotateOrganizationId;
+          setRotateOrganizationOpen(false);
+          setRotateOrganizationId('');
+          if (organizationId) void props.onRotateOrganizationKey(organizationId);
+        }}
+        onCancel={() => {
+          setRotateOrganizationOpen(false);
+          setRotateOrganizationId('');
+        }}
+      />
       <VaultDialogs
         busy={busy}
         fieldModalOpen={fieldModalOpen}

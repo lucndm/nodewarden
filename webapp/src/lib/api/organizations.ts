@@ -36,7 +36,9 @@ function normalizeOrganization(raw: Record<string, unknown>): VaultOrganization 
     name,
     key: typeof raw.key === 'string' && raw.key.trim() ? raw.key : null,
     status: Number(raw.status) || 0,
-    type: Number(raw.type) || 2,
+    // The owner is type 0, and a plain `|| 2` would turn the owner into an
+    // ordinary member.
+    type: raw.type === undefined || raw.type === null ? 2 : Number(raw.type),
     keyRotationRequired: raw?.keyRotationRequired === true,
   };
 }
@@ -67,6 +69,56 @@ export async function getOrganizations(authedFetch: AuthedFetch): Promise<VaultO
     .map(normalizeOrganization)
     .filter((entry): entry is VaultOrganization => !!entry)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Everything a key rotation needs, in one read.
+ *
+ * The server never sees the key itself: it hands back the encrypted private
+ * key, the members who keep their access, and the items as they are stored,
+ * so the client can re-encrypt them and send the result back.
+ */
+export interface OrganizationRotationData {
+  organization: { id: string; name: string; privateKey: string | null };
+  members: Array<{ membershipId: string; userId: string; publicKey: string | null }>;
+  ciphers: Array<{
+    id: string;
+    key: string | null;
+    name: string | null;
+    notes: string | null;
+    data: unknown;
+  }>;
+}
+
+export async function getOrganizationRotationData(
+  authedFetch: AuthedFetch,
+  organizationId: string
+): Promise<OrganizationRotationData> {
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(organizationId)}/rotation-data`);
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_organization_load_failed')));
+  const body = await parseJson<Record<string, unknown>>(resp);
+  const organization = (body?.organization ?? {}) as Record<string, unknown>;
+  const rows = Array.isArray(body?.members) ? (body.members as Record<string, unknown>[]) : [];
+  const ciphers = Array.isArray(body?.ciphers) ? (body.ciphers as Record<string, unknown>[]) : [];
+  return {
+    organization: {
+      id: String(organization.id || ''),
+      name: String(organization.name || ''),
+      privateKey: typeof organization.privateKey === 'string' ? organization.privateKey : null,
+    },
+    members: rows.map((entry) => ({
+      membershipId: String(entry.membershipId || ''),
+      userId: String(entry.userId || ''),
+      publicKey: typeof entry.publicKey === 'string' && entry.publicKey.trim() ? entry.publicKey : null,
+    })),
+    ciphers: ciphers.map((entry) => ({
+      id: String(entry.id || ''),
+      key: typeof entry.key === 'string' ? entry.key : null,
+      name: typeof entry.name === 'string' ? entry.name : null,
+      notes: typeof entry.notes === 'string' ? entry.notes : null,
+      data: entry.data,
+    })),
+  };
 }
 
 export async function getCollections(authedFetch: AuthedFetch): Promise<VaultCollection[]> {

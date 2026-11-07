@@ -184,6 +184,7 @@ import {
   getCollectionRights as listStoredCollectionRights,
   getCollectionRightsForCollections as listStoredCollectionRightsForCollections,
   getOrganizationCollectionIds as listStoredOrganizationCollectionIds,
+  getOrganizationCiphersForRotation as listStoredOrganizationCiphersForRotation,
   setCipherCollections as setStoredCipherCollections,
   getCollectionsForUser as listStoredCollectionsForUser,
   getGroupsForUser as listStoredGroupsForUser,
@@ -683,6 +684,12 @@ export class StorageService {
 
   async getMemberPublicKeys(userIds: string[]): Promise<Map<string, string | null>> {
     return listStoredMemberPublicKeys(this.db, userIds);
+  }
+
+  async getOrganizationCiphersForRotation(
+    orgId: string
+  ): Promise<Array<{ id: string; key: string | null; name: string | null; notes: string | null; data: unknown }>> {
+    return listStoredOrganizationCiphersForRotation(this.db, orgId);
   }
 
   async createOrganizationWithOwner(input: Parameters<typeof createStoredOrganizationWithOwner>[1]): Promise<void> {

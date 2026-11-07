@@ -504,6 +504,33 @@ export async function getOrganizationUserForUser(
   };
 }
 
+/**
+ * The items of one organization, with the raw stored payload.
+ *
+ * A rotation needs the payload exactly as it is stored: the client re-encrypts
+ * every encrypted string in it and sends it back, so a payload that was
+ * reshaped on the way out would come back reshaped and the item would stop
+ * matching what the other clients expect.
+ */
+export async function getOrganizationCiphersForRotation(
+  db: D1Database,
+  orgId: string
+): Promise<Array<{ id: string; key: string | null; name: string | null; notes: string | null; data: unknown }>> {
+  const res = await db
+    .prepare('SELECT id, key, name, notes, data FROM ciphers WHERE organization_id = ?')
+    .bind(orgId)
+    .all<{ id: string; key: string | null; name: string | null; notes: string | null; data: string }>();
+  return (res.results || []).map((row) => {
+    let data: unknown = {};
+    try {
+      data = JSON.parse(row.data) as unknown;
+    } catch {
+      data = {};
+    }
+    return { id: row.id, key: row.key, name: row.name, notes: row.notes, data };
+  });
+}
+
 /** The organization key wrapped for one member, or null before confirmation. */
 export async function getWrappedOrganizationKey(
   db: D1Database,
