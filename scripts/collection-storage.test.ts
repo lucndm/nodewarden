@@ -308,3 +308,46 @@ test('an install created before the sharing model is upgraded in place', async (
   assert.equal(stored.name, 'enc', 'the upgrade must not rewrite the row');
   assert.equal(stored.organization_id, null, 'an item written before sharing stays personal');
 });
+
+test('an install that already had the organization key column is migrated', async () => {
+  // The first version of the sharing schema kept the organization key on the
+  // organization row. That build is on production, so the upgrade has to move
+  // the column away without losing anything.
+  const db = new DatabaseSync(':memory:');
+  const d1 = sqliteD1(db);
+  await ensureStorageSchema(d1);
+
+  // The old tables reference each other; drop dependants first.
+  for (const table of ['collection_ciphers', 'collection_groups', 'collection_users', 'group_users', 'groups', 'collections']) {
+    db.exec(`DROP TABLE ${table}`);
+  }
+  db.exec('DROP TABLE organization_users');
+  db.exec('DROP TABLE organizations');
+  db.exec(
+    'CREATE TABLE organizations (id TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)'
+  );
+  db.exec(
+    'CREATE TABLE organization_users (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, org_id TEXT NOT NULL, ' +
+      'type INTEGER NOT NULL DEFAULT 2, status INTEGER NOT NULL DEFAULT 2, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)'
+  );
+  db.exec("INSERT INTO organizations VALUES ('org-old', 'Acme', 'wrapped-for-owner', 't', 't')");
+
+  await ensureStorageSchema(d1);
+
+  const columns = db.prepare('PRAGMA table_info(organizations)').all() as Array<{ name: string }>;
+  const names = columns.map((column) => column.name);
+  assert.equal(names.includes('key'), false, 'the per-organization key column must be gone');
+  assert.ok(names.includes('private_key'), 'the private key column must be added');
+  assert.ok(names.includes('public_key'), 'the public key column must be added');
+
+  const row = db.prepare('SELECT id, name FROM organizations WHERE id = ?').get('org-old') as
+    | { id: string; name: string }
+    | undefined;
+  assert.ok(row, 'the organization written by the older build must survive');
+  assert.equal(row.name, 'Acme');
+
+  const userColumns = (db.prepare('PRAGMA table_info(organization_users)').all() as Array<{ name: string }>).map(
+    (column) => column.name
+  );
+  assert.ok(userColumns.includes('key'), 'the per-member key column must be added');
+});
