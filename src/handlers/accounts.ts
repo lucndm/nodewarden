@@ -1423,6 +1423,11 @@ export async function handleRecoverTwoFactor(request: Request, env: Env): Promis
 export async function handleGetRevisionDate(request: Request, env: Env, userId: string): Promise<Response> {
   void request;
   const storage = new StorageService(env.DB);
+  // Clients poll this endpoint and skip /sync while the revision holds still,
+  // so the one-time legacy tag repair has to run here to be reachable at all.
+  // It bumps the revision when it rewrites rows, which is what pulls the
+  // client into /sync for the repaired payload.
+  await storage.repairLegacyCipherTags(userId);
   const revisionDate = await storage.getRevisionDate(userId);
 
   // Return as milliseconds timestamp (Bitwarden format)
