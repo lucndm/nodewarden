@@ -67,6 +67,7 @@ interface UseVaultSendActionsOptions {
   defaultKdfIterations: number;
   encryptedCiphers: Cipher[] | undefined;
   encryptedFolders: VaultFolder[] | undefined;
+  decryptedFolders: VaultFolder[];
   refetchCiphers: () => Promise<{ data?: Cipher[] | undefined } | unknown>;
   refetchFolders: () => Promise<{ data?: VaultFolder[] | undefined } | unknown>;
   refetchSends: () => Promise<unknown>;
@@ -293,6 +294,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
     defaultKdfIterations,
     encryptedCiphers,
     encryptedFolders,
+    decryptedFolders,
     refetchCiphers,
     refetchFolders,
     refetchSends,
@@ -321,6 +323,23 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
       if (session?.accessToken) return;
       throw new Error(t('txt_offline_vault_readonly'));
     };
+    async function ensureEncryptedTagFolders(tags: string[]): Promise<void> {
+      if (!session) throw new Error(t('txt_vault_key_unavailable'));
+      const byName = new Map(decryptedFolders.map((folder) => [folder.decName, folder]));
+      for (const tag of new Set(tags.filter(Boolean))) {
+        const folder = byName.get(tag);
+        if (folder) {
+          const updated = await updateFolder(authedFetch, session, folder.id, tag);
+          upsertEncryptedFolder(updated);
+          patchDecryptedFolders((prev) => prev.map((entry) => entry.id === folder.id ? { ...entry, name: updated.name, decName: tag } : entry));
+        } else {
+          const created = await createFolder(authedFetch, session, tag);
+          byName.set(tag, { ...created, decName: tag });
+          upsertEncryptedFolder(created);
+          patchDecryptedFolders((prev) => [{ ...created, decName: tag }, ...prev]);
+        }
+      }
+    }
 
     async function decryptAndPatch(encrypted: Cipher) {
       if (!session?.symEncKey || !session?.symMacKey) {
@@ -540,6 +559,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         const optimistic = optimisticCipherFromDraft(draft, null);
         patchDecryptedCiphers((prev) => [optimistic, ...prev.filter((cipher) => cipher.id !== optimistic.id)]);
         try {
+          await ensureEncryptedTagFolders(draft.tags);
           const created = await createCipher(authedFetch, session, draft);
           for (const file of attachments) {
             setUploadingAttachmentName(file.name);
@@ -592,6 +612,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         }
         patchCipherBatch([cipher.id], () => optimistic, { patchEncrypted: false });
         try {
+          await ensureEncryptedTagFolders(draft.tags);
           const updated = await updateCipher(authedFetch, session, cipher, draft);
           for (const attachmentId of removeAttachmentIds) {
             const id = String(attachmentId || '').trim();
@@ -783,22 +804,24 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           throw error;
         }
         try {
+          const folderName = folderId ? decryptedFolders.find((folder) => folder.id === folderId)?.decName || '' : '';
+          if (folderId && !folderName) throw new Error(t('txt_decrypt_failed_2'));
+          if (folderName) await ensureEncryptedTagFolders([folderName]);
           await bulkMoveCiphers(authedFetch, ids, folderId);
-          const folderName = folderId
-            ? String(
-                encryptedFolders?.find((folder) => folder.id === folderId)?.decName
-                  || encryptedFolders?.find((folder) => folder.id === folderId)?.name
-                  || ''
-              )
-            : '';
           patchCipherBatch(ids, (cipher) => {
             const currentTags = Array.isArray(cipher.tags) ? cipher.tags : [];
-            const nextTags = folderName ? [folderName, ...currentTags.slice(1)] : currentTags.slice(1);
-            return { ...cipher, tags: nextTags.length ? nextTags : null, folderId };
+            const nextTags = folderName
+              ? [folderName, ...currentTags.slice(1).filter((tag) => tag.toLowerCase() !== folderName.toLowerCase())]
+              : currentTags.slice(1);
+            const nextFolderId = folderName ? folderId : nextTags.length
+              ? decryptedFolders.find((folder) => folder.decName === nextTags[0])?.id ?? null
+              : null;
+            return { ...cipher, tags: nextTags.length ? nextTags : null, folderId: nextFolderId };
           });
           void refreshVaultRevisionStamp();
           onNotify('success', t('txt_moved_selected_items'));
         } catch (error) {
+          await Promise.allSettled([refetchCiphers(), refetchFolders()]);
           onNotify('error', error instanceof Error ? error.message : t('txt_bulk_move_failed'));
           throw error;
         }
@@ -858,15 +881,15 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
               || ''
           );
           const stripTag = (cipher: Cipher): Cipher => {
-            const tags = Array.isArray(cipher.tags) ? cipher.tags.filter((tag) => tag !== folderName) : [];
+            const tags = Array.isArray(cipher.tags) ? cipher.tags.filter((tag) => tag.toLowerCase() !== folderName.toLowerCase()) : [];
             const positionFolderId = tags.length
-              ? encryptedFolders?.find((folder) => (folder.decName || folder.name) === tags[0])?.id ?? null
+              ? encryptedFolders?.find((folder) => folder.decName?.toLowerCase() === tags[0].toLowerCase())?.id ?? null
               : null;
             return { ...cipher, tags: tags.length ? tags : null, folderId: positionFolderId };
           };
           patchFolderBatch([id], () => null);
-          patchEncryptedCiphers((prev) => prev.map((cipher) => (cipher.folderId === id ? stripTag(cipher) : cipher)));
-          patchDecryptedCiphers((prev) => prev.map((cipher) => (cipher.folderId === id ? stripTag(cipher) : cipher)));
+          patchEncryptedCiphers((prev) => prev.map((cipher) => (cipher.tags?.some((tag) => tag.toLowerCase() === folderName.toLowerCase()) ? stripTag(cipher) : cipher)));
+          patchDecryptedCiphers((prev) => prev.map((cipher) => (cipher.tags?.some((tag) => tag.toLowerCase() === folderName.toLowerCase()) ? stripTag(cipher) : cipher)));
           void refreshVaultRevisionStamp();
           onNotify('success', t('txt_folder_deleted'));
         } catch (error) {
@@ -979,7 +1002,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           const stripRemovedTags = (cipher: Cipher): Cipher => {
             const tags = Array.isArray(cipher.tags) ? cipher.tags.filter((tag) => !removedNames.has(tag)) : [];
             const positionFolderId = tags.length
-              ? encryptedFolders?.find((folder) => (folder.decName || folder.name) === tags[0])?.id ?? null
+              ? encryptedFolders?.find((folder) => folder.decName === tags[0])?.id ?? null
               : null;
             return { ...cipher, tags: tags.length ? tags : null, folderId: positionFolderId };
           };
@@ -1116,7 +1139,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
             let folderIndex = folderIndexByName.get(name);
             if (folderIndex == null) {
               folderIndex = nextPayload.folders.length;
-              nextPayload.folders.push({ name: await encryptFolderImportName(session, name) });
+              nextPayload.folders.push({ name: await encryptFolderImportName(session, name), tagName: name });
               folderIndexByName.set(name, folderIndex);
             }
             const legacyId = String(folderRaw.id || '').trim();
@@ -1444,6 +1467,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
     downloadingAttachmentKey,
     encryptedCiphers,
     encryptedFolders,
+    decryptedFolders,
     importAuthedFetch,
     onNotify,
     patchDecryptedCiphers,

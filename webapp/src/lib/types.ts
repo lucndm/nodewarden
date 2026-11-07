@@ -26,6 +26,7 @@ export interface Folder {
   id: string;
   name: string;
   decName?: string;
+  tagName?: string | null;
   revisionDate?: string;
   creationDate?: string;
 }

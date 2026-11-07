@@ -117,6 +117,7 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     folderResponses.push({
       id: folder.id,
       name: folder.name,
+      tagName: folder.tagName ?? null,
       revisionDate: folder.updatedAt,
       creationDate: folder.createdAt,
       object: 'folder',

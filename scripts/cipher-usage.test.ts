@@ -14,7 +14,7 @@
 //   - a backup export/import round-trip keeps the counters.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { zipSync } from 'fflate';
 
 import { installTestGlobals } from './test-env';
@@ -25,6 +25,7 @@ import { StorageService } from '../src/services/storage';
 import { ensureStorageSchema } from '../src/services/storage-schema';
 import { buildBackupArchive, parseBackupArchive, validateBackupPayloadContents } from '../src/services/backup-archive';
 import { importBackupArchiveBytes } from '../src/services/backup-import';
+import { sqliteD1 } from './sqlite-d1';
 import { CipherType } from '../src/types';
 import type { Cipher, CipherUsage, Env, User } from '../src/types';
 
@@ -40,45 +41,6 @@ const SEED_REVISION = '2026-01-01T00:00:00.000Z';
 
 const ENC = (value: string) =>
   `2.${Buffer.from('iv-' + value).toString('base64')}|${Buffer.from('ct-' + value).toString('base64')}|${Buffer.from('mac-' + value).toString('base64')}`;
-
-/** Runs the production schema on an in-memory SQLite database. */
-function sqliteD1(sqlite: DatabaseSync): D1Database {
-  const isQuery = (sql: string) => /^\s*(select|with|pragma)/i.test(sql);
-  const db = {
-    prepare(sql: string) {
-      let values: SQLInputValue[] = [];
-      const statement = {
-        bind(...bound: SQLInputValue[]) {
-          values = bound;
-          return statement;
-        },
-        async run() {
-          if (isQuery(sql)) {
-            return { success: true, meta: { changes: 0 }, results: sqlite.prepare(sql).all(...values) };
-          }
-          const result = sqlite.prepare(sql).run(...values);
-          return { success: true, meta: { changes: Number(result.changes) }, results: [] };
-        },
-        async all() {
-          return { success: true, meta: { changes: 0 }, results: sqlite.prepare(sql).all(...values) };
-        },
-        async first() {
-          return sqlite.prepare(sql).get(...values) ?? null;
-        },
-      };
-      return statement;
-    },
-    async batch(statements: D1PreparedStatement[]) {
-      const results = [];
-      for (const statement of statements) {
-        results.push(await statement.run());
-      }
-      return results;
-    },
-  };
-  // The D1 binding type is much wider than the subset used here.
-  return db as unknown as D1Database;
-}
 
 function makeUser(id: string, email: string): User {
   return {

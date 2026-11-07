@@ -194,6 +194,9 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
         onNotify={props.onNotify}
         folders={props.decryptedFolders}
         onExport={props.onExport}
+        authedFetch={props.authedFetch}
+        session={props.session}
+        onRefreshVault={props.onRefreshVault}
       />
     </Suspense>
   );

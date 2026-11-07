@@ -6,7 +6,8 @@ import { handleAuthenticatedRoute } from '../src/router-authenticated';
 import { cipherToResponse } from '../src/handlers/ciphers';
 import { bytesToBase64, encryptBw, decryptStr } from '../webapp/src/lib/crypto';
 import { decryptSingleCipher } from '../webapp/src/lib/decrypt-cipher';
-import { updateCipher, buildCipherImportPayload, repairCipherKeyMismatches } from '../webapp/src/lib/api/vault';
+import { decryptVaultCore } from '../webapp/src/lib/vault-decrypt';
+import { updateCipher, updateFolder, buildCipherImportPayload, repairCipherKeyMismatches } from '../webapp/src/lib/api/vault';
 import { importCipherToDraft } from '../webapp/src/lib/app-support';
 import { draftFromCipher } from '../webapp/src/components/vault/vault-page-helpers';
 import { t as translate } from '../webapp/src/lib/i18n';
@@ -34,6 +35,7 @@ async function fixture(ctx: TestContext) {
       archived_at TEXT, deleted_at TEXT);
     CREATE TABLE attachments(id TEXT PRIMARY KEY, cipher_id TEXT,
       file_name TEXT, size INTEGER, size_name TEXT, key TEXT);
+    CREATE TABLE folders(id TEXT PRIMARY KEY, user_id TEXT, name TEXT, tag_name TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE devices(user_id TEXT, push_token TEXT);
   `);
   const db: any = {
@@ -369,4 +371,220 @@ test('automatic item-key repair preserves linked metadata and the intentional re
   assert.equal(await decryptStr(saved.name, itemEnc, itemMac), 'Initial title');
   assert.equal(await decryptStr(saved.fields![0].name!, itemEnc, itemMac), 'Linked username');
   assert.equal('lastKnownRevisionDate' in saved, false);
+});
+
+test('bulk move replaces folder-position tag, preserves secondary tags and isolates owners', async (ctx) => {
+  const f = await fixture(ctx);
+  const first = '00000000-0000-4000-8000-000000000011';
+  const target = '00000000-0000-4000-8000-000000000012';
+  for (const [folderId, name] of [[first, 'Work'], [target, 'Personal']] as const) {
+    await f.storage.saveFolder({ id: folderId, userId: owner, name, createdAt: revision, updatedAt: revision });
+  }
+  await f.storage.saveCipher({ ...f.base, folderId: first, tags: ['Work', 'Shared'], login: f.base.login });
+  const before = await f.storage.getCipherForUser(id, owner);
+
+  assert.equal((await f.route('/api/ciphers/move', 'POST', { ids: [id, otherId], folderId: target })).status, 204);
+  const moved = await f.storage.getCipherForUser(id, owner);
+  assert.deepEqual(moved?.tags, ['Personal', 'Shared']);
+  assert.equal(moved?.folderId, target);
+  assert.equal(moved?.name, before?.name);
+  assert.deepEqual(moved?.login, before?.login);
+  assert.equal((await f.storage.getCipherForUser(otherId, otherOwner))?.folderId, null);
+  const list: any = await (await f.route('/api/ciphers', 'GET')).json();
+  assert.deepEqual(list.data.find((cipher: any) => cipher.id === id).tags, ['Personal', 'Shared']);
+
+  assert.equal((await f.route('/api/ciphers/move', 'PUT', { ids: [id], folderId: null })).status, 204);
+  const unfiled = await f.storage.getCipherForUser(id, owner);
+  assert.deepEqual(unfiled?.tags, ['Shared']);
+  assert.equal(unfiled?.folderId, (await f.storage.getAllFolders(owner)).find((folder) => folder.name === 'Shared')?.id);
+  assert.equal((await f.route('/api/ciphers/move', 'POST', { ids: [id], folderId: otherId })).status, 404);
+});
+test('Web encrypted folder move keeps plaintext tags and stable Bitwarden folder identity', async (ctx) => {
+  const f = await fixture(ctx);
+  const encryptedName = await encrypt('Personal');
+  const response = await f.route('/api/folders', 'POST', { name: encryptedName, tagName: 'Personal' });
+  assert.equal(response.status, 200);
+  const folder = await response.json() as { id: string; name: string };
+  assert.equal(folder.name, encryptedName);
+  await f.storage.saveCipher({ ...f.base, tags: ['Work', 'Shared'] });
+  assert.equal((await f.route('/api/ciphers/move', 'POST', { ids: [id], folderId: folder.id })).status, 204);
+  const moved = await f.storage.getCipherForUser(id, owner);
+  assert.deepEqual(moved?.tags, ['Personal', 'Shared']);
+  assert.equal(moved?.folderId, folder.id);
+  const list = await f.route('/api/ciphers', 'GET');
+  assert.equal(list.status, 200);
+  const body = await list.json() as { data: Array<{ id: string; folderId: string; tags: string[] }> };
+  assert.deepEqual(body.data.find((entry) => entry.id === id)?.tags, ['Personal', 'Shared']);
+  assert.equal((await f.storage.getFolderForUser(folder.id, owner))?.name, encryptedName);
+});
+
+test('official encrypted folder writes retain folder identity without leaking ciphertext into tags', async (ctx) => {
+  const f = await fixture(ctx);
+  const name = await encrypt('Official folder');
+  const response = await f.route('/api/folders', 'POST', { name });
+  assert.equal(response.status, 200);
+  const folder = await response.json() as { id: string };
+  const create = await f.route('/api/ciphers', 'POST', { type: 1, name: await encrypt('Official item'), folderId: folder.id });
+  assert.equal(create.status, 200);
+  const created = await create.json() as { id: string; folderId: string; tags: string[] | null };
+  assert.equal(created.folderId, folder.id);
+  assert.deepEqual(created.tags ?? [], []);
+  const saved = await f.storage.getCipherForUser(created.id, owner);
+  assert.equal(saved?.folderId, folder.id);
+  assert.deepEqual(saved?.tags ?? [], []);
+  assert.equal(await f.storage.migrateFolderCiphersToTags(owner), false);
+  assert.equal((await f.storage.getCipherForUser(created.id, owner))?.folderId, folder.id);
+});
+
+test('legacy Folder converts with the vault key without losing its ID, tags, or client name', async (ctx) => {
+  const f = await fixture(ctx);
+  const folderId = '00000000-0000-4000-8000-000000000012';
+  await f.storage.saveFolder({ id: folderId, userId: owner, name: 'Work', createdAt: revision, updatedAt: revision });
+  await f.storage.saveCipher({ ...f.base, folderId, tags: ['Work', 'Shared'] });
+  const response = await updateFolder((path, init) => f.route(path, init!.method!, JSON.parse(init!.body as string)), session, folderId, 'Work');
+  assert.equal(await decryptStr(response.name, enc, mac), 'Work');
+  assert.notEqual(response.name, 'Work');
+  assert.equal(await decryptStr((await f.storage.getFolderForUser(folderId, owner))!.name, enc, mac), 'Work');
+  const saved = await f.storage.getCipherForUser(id, owner);
+  assert.equal(saved?.folderId, folderId);
+  assert.deepEqual(saved?.tags, ['Work', 'Shared']);
+  assert.equal((await f.route('/api/ciphers/move', 'POST', { ids: [id], folderId })).status, 204);
+  assert.equal((await f.storage.getCipherForUser(id, owner))?.folderId, folderId);
+});
+
+test('legacy Folder conversion rejects a stale revision without changing name or tags', async (ctx) => {
+  const f = await fixture(ctx);
+  const folderId = '00000000-0000-4000-8000-000000000012';
+  await f.storage.saveFolder({ id: folderId, userId: owner, name: 'Concurrent name', tagName: 'Work', createdAt: revision, updatedAt: '2026-10-05T00:00:00.000Z' });
+  await f.storage.saveCipher({ ...f.base, folderId, tags: ['Work', 'Shared'] });
+  const response = await f.route(`/api/folders/${folderId}`, 'PUT', { name: await encrypt('Work'), tagName: 'Work' }, { 'If-Match': revision });
+  assert.equal(response.status, 409);
+  assert.equal((await f.storage.getFolderForUser(folderId, owner))?.name, 'Concurrent name');
+  assert.deepEqual((await f.storage.getCipherForUser(id, owner))?.tags, ['Work', 'Shared']);
+});
+
+test('official encrypted Folder bulk moves preserve secondary tags across sync and repeated moves', async (ctx) => {
+  const f = await fixture(ctx);
+  const encryptedName = await encrypt('CLI Folder');
+  const created = await f.route('/api/folders', 'POST', { name: encryptedName });
+  const folder = await created.json() as { id: string };
+  const folders = await f.storage.ensureFoldersForTags(owner, ['Work', 'Shared']);
+  await f.storage.saveCipher({ ...f.base, folderId: folders.get('Work'), tags: ['Work', 'Shared'] });
+  for (const method of ['POST', 'PUT']) {
+    assert.equal((await f.route('/api/ciphers/move', method, { ids: [id, otherId], folderId: folder.id })).status, 204);
+    const moved = await f.storage.getCipherForUser(id, owner);
+    assert.equal(moved?.folderId, folder.id);
+    assert.deepEqual(moved?.tags, ['Shared']);
+    assert.equal((await f.storage.getCipherForUser(otherId, otherOwner))?.folderId, null);
+    const decrypted = await decryptVaultCore({ folders: await f.storage.getAllFolders(owner), ciphers: [moved!], symEncKeyB64: session.symEncKey, symMacKeyB64: session.symMacKey });
+    assert.deepEqual(decrypted.ciphers[0].tags, ['CLI Folder', 'Shared']);
+    assert.equal(decrypted.ciphers[0].decName, 'Initial title');
+  }
+  assert.equal((await f.route('/api/ciphers/move', 'PUT', { ids: [id], folderId: folders.get('Work') })).status, 204);
+  assert.deepEqual((await f.storage.getCipherForUser(id, owner))?.tags, ['Work', 'Shared']);
+  for (const path of [`/api/ciphers/${id}`, `/api/ciphers/${id}/partial`]) {
+    const payload = path.endsWith('/partial') ? { folderId: folder.id } : { type: 1, name: f.base.name, folderId: folder.id };
+    assert.equal((await f.route(path, 'PUT', payload)).status, 200);
+    assert.deepEqual((await f.storage.getCipherForUser(id, owner))?.tags, ['Shared']);
+    assert.equal((await f.route(path, 'PUT', payload)).status, 200);
+    assert.deepEqual((await f.storage.getCipherForUser(id, owner))?.tags, ['Shared']);
+    assert.equal((await f.route('/api/ciphers/move', 'PUT', { ids: [id], folderId: folders.get('Work') })).status, 204);
+  }
+  assert.equal((await f.route('/api/ciphers/move', 'PUT', { ids: [id], folderId: folder.id })).status, 204);
+  assert.equal((await f.route('/api/ciphers/move', 'PUT', { ids: [id], folderId: null })).status, 204);
+  assert.deepEqual((await f.storage.getCipherForUser(id, owner))?.tags, ['Shared']);
+  assert.equal((await f.storage.getCipherForUser(id, owner))?.folderId, folders.get('Shared'));
+  await f.storage.saveCipher({ ...f.base, folderId: folders.get('Work'), tags: ['Work', 'Shared'] });
+  assert.equal((await f.route('/api/ciphers/move', 'PUT', { ids: [id], folderId: folder.id })).status, 204);
+  assert.equal((await f.route(`/api/folders/${folder.id}`, 'DELETE')).status, 204);
+  assert.equal((await f.storage.getCipherForUser(id, owner))?.folderId, folders.get('Shared'));
+  assert.deepEqual((await f.storage.getCipherForUser(id, owner))?.tags, ['Shared']);
+});
+
+test('bulk move refuses to overwrite a concurrent cipher edit', async (ctx) => {
+  const f = await fixture(ctx);
+  const first = '00000000-0000-4000-8000-000000000011';
+  const target = '00000000-0000-4000-8000-000000000012';
+  for (const [folderId, name] of [[first, 'Work'], [target, 'Personal']] as const) {
+    await f.storage.saveFolder({ id: folderId, userId: owner, name, createdAt: revision, updatedAt: revision });
+  }
+  await f.storage.saveCipher({ ...f.base, folderId: first, tags: ['Work', 'Shared'] });
+  const concurrentName = await encrypt('Concurrent edit');
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  let injected = false;
+  f.env.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (injected || !sql.includes('UPDATE ciphers SET folder_id = ?, updated_at = ?, data = ?')) return statement;
+    const bind = statement.bind.bind(statement);
+    statement.bind = (...values: any[]) => {
+      bind(...values);
+      const run = statement.run.bind(statement);
+      statement.run = async () => {
+        injected = true;
+        await f.storage.saveCipher({ ...f.base, folderId: first, tags: ['Work', 'Shared'], name: concurrentName });
+        return run();
+      };
+      return statement;
+    };
+    return statement;
+  };
+  const response = await f.route('/api/ciphers/move', 'POST', { ids: [id], folderId: target });
+  assert.equal(response.status, 409);
+  assert.equal(injected, true);
+  const saved = await f.storage.getCipherForUser(id, owner);
+  assert.deepEqual(saved?.tags, ['Work', 'Shared']);
+  assert.equal(saved?.folderId, first);
+  assert.equal(saved?.name, concurrentName);
+});
+
+test('a later move conflict still advances the vault revision for earlier items', async (ctx) => {
+  const f = await fixture(ctx);
+  const target = '00000000-0000-4000-8000-000000000012';
+  const second = '00000000-0000-4000-8000-000000000013';
+  await f.storage.saveFolder({ id: target, userId: owner, name: 'Personal', createdAt: revision, updatedAt: revision });
+  await f.storage.saveCipher({ ...f.base, tags: ['Work', 'Shared'] });
+  await f.storage.saveCipher({ ...f.base, id: second, tags: ['Work', 'Shared'] });
+  const updatedName = await encrypt('Edited during move');
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  let updates = 0;
+  f.env.DB.prepare = (sql: string) => {
+    const stmt = prepare(sql);
+    if (!sql.includes('UPDATE ciphers SET folder_id = ?, updated_at = ?, data = ?')) return stmt;
+    const run = stmt.run.bind(stmt);
+    stmt.run = async () => {
+      if (++updates === 2) await f.storage.saveCipher({ ...f.base, id: second, tags: ['Work', 'Shared'], name: updatedName });
+      return run();
+    };
+    return stmt;
+  };
+  assert.equal((await f.route('/api/ciphers/move', 'POST', { ids: [id, second], folderId: target })).status, 409);
+  assert.deepEqual((await f.storage.getCipherForUser(id, owner))?.tags, ['Personal', 'Shared']);
+  assert.deepEqual((await f.storage.getCipherForUser(second, owner))?.tags, ['Work', 'Shared']);
+  assert.equal((await f.storage.getCipherForUser(second, owner))?.name, updatedName);
+  assert.equal(f.revisionBumps(), 1);
+});
+
+test('a D1 error after an earlier move still advances the vault revision', async (ctx) => {
+  const f = await fixture(ctx);
+  const target = '00000000-0000-4000-8000-000000000012';
+  const second = '00000000-0000-4000-8000-000000000013';
+  await f.storage.saveFolder({ id: target, userId: owner, name: 'Personal', createdAt: revision, updatedAt: revision });
+  await f.storage.saveCipher({ ...f.base, tags: ['Work', 'Shared'] });
+  await f.storage.saveCipher({ ...f.base, id: second, tags: ['Work', 'Shared'] });
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  let updates = 0;
+  f.env.DB.prepare = (sql: string) => {
+    const stmt = prepare(sql);
+    if (!sql.includes('UPDATE ciphers SET folder_id = ?, updated_at = ?, data = ?')) return stmt;
+    const run = stmt.run.bind(stmt);
+    stmt.run = async () => {
+      if (++updates === 2) throw new Error('D1 write failed');
+      return run();
+    };
+    return stmt;
+  };
+  await assert.rejects(f.route('/api/ciphers/move', 'POST', { ids: [id, second], folderId: target }), /D1 write failed/);
+  assert.deepEqual((await f.storage.getCipherForUser(id, owner))?.tags, ['Personal', 'Shared']);
+  assert.deepEqual((await f.storage.getCipherForUser(second, owner))?.tags, ['Work', 'Shared']);
+  assert.equal(f.revisionBumps(), 1);
 });

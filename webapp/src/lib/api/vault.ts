@@ -55,7 +55,7 @@ export async function createFolder(
   const resp = await authedFetch('/api/folders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: encryptedName }),
+    body: JSON.stringify({ name: encryptedName, tagName: name }),
   });
   if (!resp.ok) throw new Error('Create folder failed');
   const body = await parseJson<Folder>(resp);
@@ -106,7 +106,7 @@ export async function updateFolder(
   const resp = await authedFetch(`/api/folders/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: encryptedName }),
+    body: JSON.stringify({ name: encryptedName, tagName: name }),
   });
   if (!resp.ok) throw new Error('Update folder failed');
   const body = await parseJson<Folder>(resp);
@@ -189,7 +189,7 @@ export function mergeCipherUsageEntry(
 
 export interface CiphersImportPayload {
   ciphers: Array<Record<string, unknown>>;
-  folders: Array<{ name: string }>;
+  folders: Array<{ name: string; tagName?: string }>;
   folderRelationships: Array<{ key: number; value: number }>;
 }
 

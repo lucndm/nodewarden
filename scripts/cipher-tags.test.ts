@@ -209,6 +209,33 @@ test('folder rename propagates to tags, folder delete strips them', async () => 
   assert.equal(afterDelete?.folderId ?? null, null);
 });
 
+test('renaming and deleting primary and secondary folders keeps tag positions consistent', async () => {
+  const db = new MemoryD1();
+  const envArg = { DB: db } as unknown as Env;
+  const storage = new StorageService(db);
+  const now = new Date().toISOString();
+  for (const [id, name] of [['folder-a', 'Work'], ['folder-b', 'Shared']] as const) {
+    await storage.saveFolder({ id, userId: 'user-1', name, createdAt: now, updatedAt: now });
+  }
+  const created = await createCipherWithTags(envArg, ['Work', 'Shared']);
+  const id = String(created.id);
+  const rename = async (folderId: string, name: string) => handleUpdateFolder(new Request(`https://vault.example.test/api/folders/${folderId}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+  }), envArg, 'user-1', folderId);
+  const remove = async (folderId: string) => handleDeleteFolder(new Request(`https://vault.example.test/api/folders/${folderId}`, { method: 'DELETE' }), envArg, 'user-1', folderId);
+  assert.equal((await rename('folder-b', 'Team')).status, 200);
+  assert.deepEqual((await storage.getCipherForUser(id, 'user-1'))?.tags, ['Work', 'Team']);
+  assert.equal((await storage.getCipherForUser(id, 'user-1'))?.folderId, 'folder-a');
+  assert.equal((await remove('folder-a')).status, 204);
+  assert.deepEqual((await storage.getCipherForUser(id, 'user-1'))?.tags, ['Team']);
+  assert.equal((await storage.getCipherForUser(id, 'user-1'))?.folderId, 'folder-b');
+  assert.equal((await rename('folder-b', 'Friends')).status, 200);
+  assert.deepEqual((await storage.getCipherForUser(id, 'user-1'))?.tags, ['Friends']);
+  assert.equal((await remove('folder-b')).status, 204);
+  assert.equal((await storage.getCipherForUser(id, 'user-1'))?.folderId, null);
+  assert.deepEqual((await storage.getCipherForUser(id, 'user-1'))?.tags ?? [], []);
+});
+
 test('migration backfills tags from legacy folder assignments', async () => {
   const db = new MemoryD1();
   const envArg = { DB: db } as unknown as Env;

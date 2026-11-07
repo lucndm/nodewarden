@@ -1636,7 +1636,7 @@ export default function App() {
       const encrypted = await getCipherById(authedFetch, id);
       upsertEncryptedCipher(encrypted, revisionStamp);
       const result = await decryptVaultCore({
-        folders: [],
+        folders: encryptedFolders || [],
         ciphers: [encrypted],
         symEncKeyB64: session.symEncKey,
         symMacKeyB64: session.symMacKey,
@@ -1893,6 +1893,7 @@ export default function App() {
     defaultKdfIterations,
     encryptedCiphers,
     encryptedFolders,
+    decryptedFolders,
     refetchCiphers: async () => {
       const result = await refetchVaultCoreData() as { data?: VaultCoreSnapshot };
       return { data: result.data?.ciphers };

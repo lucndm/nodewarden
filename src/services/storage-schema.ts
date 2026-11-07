@@ -58,6 +58,7 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'CREATE TABLE IF NOT EXISTS folders (' +
   'id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, ' +
   'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',
+  'ALTER TABLE folders ADD COLUMN tag_name TEXT',
   'CREATE INDEX IF NOT EXISTS idx_folders_user_updated ON folders(user_id, updated_at)',
 
   'CREATE TABLE IF NOT EXISTS attachments (' +
