@@ -35,6 +35,7 @@ import { clearAuditLogs, getAuditLogSettings, listAdminInvites, listAdminUsers, 
 import { getDomainRules, saveDomainRules } from '@/lib/api/domains';
 import { getSendById, getSends } from '@/lib/api/send';
 import { getCipherById, getCipherUsage, getFolderById, mergeCipherUsageEntry, recordCipherUsage, repairCipherKeyMismatches, repairCipherUriChecksums, type CipherUsageMap } from '@/lib/api/vault';
+import { getCollections, getOrganizations } from '@/lib/api/organizations';
 import { getCachedVaultCoreSnapshot, invalidateVaultCoreSyncSnapshot, loadVaultCoreSyncSnapshot, saveVaultCoreSyncSnapshot } from '@/lib/api/vault-sync';
 import { silentlyRepairBackupSettingsIfNeeded } from '@/lib/backup-settings-repair';
 import {
@@ -1154,6 +1155,29 @@ export default function App() {
     enabled: !IS_DEMO_MODE && phase === 'app' && !!session?.accessToken && !!session?.symEncKey && !!session?.symMacKey && !!vaultCacheKey,
     staleTime: 30_000,
   });
+  // The organizations and collections the member belongs to. They change far
+  // less often than the vault, so they are read on their own rather than
+  // riding along with every sync.
+  const organizationsQueryKey = useMemo(
+    () => ['organizations', vaultCacheKey || session?.email] as const,
+    [vaultCacheKey, session?.email]
+  );
+  const organizationsQuery = useQuery({
+    queryKey: organizationsQueryKey,
+    queryFn: () => getOrganizations(authedFetch),
+    enabled: !IS_DEMO_MODE && phase === 'app' && !!session?.accessToken && !!session?.symEncKey && !!session?.symMacKey && !!vaultCacheKey,
+    staleTime: 60_000,
+  });
+  const collectionsQueryKey = useMemo(
+    () => ['collections', vaultCacheKey || session?.email] as const,
+    [vaultCacheKey, session?.email]
+  );
+  const collectionsQuery = useQuery({
+    queryKey: collectionsQueryKey,
+    queryFn: () => getCollections(authedFetch),
+    enabled: !IS_DEMO_MODE && phase === 'app' && !!session?.accessToken && !!session?.symEncKey && !!session?.symMacKey && !!vaultCacheKey,
+    staleTime: 60_000,
+  });
   // A successful login password copy bumps the counter of that cipher. The
   // copy has already happened by then, so a failed request only warns about
   // the missing count - it never takes the copied password back.
@@ -1387,12 +1411,23 @@ export default function App() {
       try {
         setVaultDecryptError('');
         let result;
+        // A shared item's key is protected by the organization key, which is
+        // wrapped for this member: the decrypt needs both, and without them a
+        // shared item reads as an item with no name.
+        const shareArgs = {
+          organizations: (organizationsQuery.data ?? []).map((organization) => ({
+            id: organization.id,
+            key: organization.key,
+          })),
+          encryptedPrivateKey: profileQuery.data?.privateKey ?? null,
+        };
         try {
           result = await decryptVaultCoreInWorker({
             folders: encryptedFolders,
             ciphers: encryptedCiphers,
             symEncKeyB64: session.symEncKey!,
             symMacKeyB64: session.symMacKey!,
+            ...shareArgs,
           });
         } catch {
           result = await decryptVaultCore({
@@ -1400,6 +1435,7 @@ export default function App() {
             ciphers: encryptedCiphers,
             symEncKeyB64: session.symEncKey!,
             symMacKeyB64: session.symMacKey!,
+            ...shareArgs,
           });
         }
 
@@ -1440,7 +1476,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [session?.symEncKey, session?.symMacKey, vaultCacheKey, encryptedFolders, encryptedCiphers]);
+  }, [session?.symEncKey, session?.symMacKey, vaultCacheKey, encryptedFolders, encryptedCiphers, organizationsQuery.data, profileQuery.data?.privateKey]);
 
   useEffect(() => {
     if (IS_DEMO_MODE) return;
@@ -2088,6 +2124,10 @@ export default function App() {
     sendsLoading: (sendsQuery.isFetching && !encryptedSends) || (!!encryptedSends && !sendsDecryptDone),
     cipherUsage: cipherUsageQuery.isError ? null : (cipherUsageQuery.data ?? null),
     cipherUsageError: cipherUsageQuery.isError,
+    organizations: organizationsQuery.data ?? [],
+    collections: collectionsQuery.data ?? [],
+    collectionsError:
+      organizationsQuery.isError || collectionsQuery.isError ? t('txt_collection_load_failed') : '',
     onTrackPasswordCopy: (cipherId: string) => { void trackPasswordCopy(cipherId); },
     users: usersQuery.data || [],
     invites: invitesQuery.data || [],

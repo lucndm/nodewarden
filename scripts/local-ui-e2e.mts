@@ -259,7 +259,57 @@ async function seedVault(baseUrl) {
     throw new Error(`edit failed: ${edited.status} ${JSON.stringify(edited.body)}`);
   }
 
-  return { itemId: created.body.id, token };
+  // An organization with one collection and one item in it, so the browser can
+  // show what a shared item is and where it lives. The item key is wrapped with
+  // the organization key and the payload is encrypted with that item key, which
+  // is exactly what the server expects of a shared item.
+  const organizationKey = webcrypto.getRandomValues(new Uint8Array(64));
+  const organizationWrappedForOwner = await (async () => {
+    const imported = await subtle.importKey('spki', publicKey.buffer.slice(publicKey.byteOffset, publicKey.byteOffset + publicKey.byteLength), { name: 'RSA-OAEP', hash: 'SHA-1' }, false, ['encrypt']);
+    const blob = new Uint8Array(await subtle.encrypt({ name: 'RSA-OAEP' }, imported, organizationKey.buffer.slice(0, 64)));
+    return `4.${bytesToBase64(blob)}`;
+  })();
+  const organization = await api(baseUrl, '/api/organizations', {
+    method: 'POST',
+    token,
+    body: {
+      name: 'UI Team',
+      collectionName: 'UI Shared',
+      key: organizationWrappedForOwner,
+      keys: {
+        publicKey: bytesToBase64(publicKey),
+        encryptedPrivateKey: await encryptBw(privateKey, organizationKey.slice(0, 32), organizationKey.slice(32, 64)),
+      },
+    },
+  });
+  if (organization.status !== 200) {
+    throw new Error(`organization create failed: ${organization.status} ${JSON.stringify(organization.body)}`);
+  }
+
+  const collections = await api(baseUrl, '/api/collections', { token });
+  const collectionId = collections.body?.data?.[0]?.id;
+  if (!collectionId) throw new Error('the organization has no collection');
+
+  const sharedItemKey = webcrypto.getRandomValues(new Uint8Array(64));
+  const sharedEncrypt = (value) =>
+    encryptBw(new TextEncoder().encode(value), sharedItemKey.slice(0, 32), sharedItemKey.slice(32, 64));
+  const shared = await api(baseUrl, '/api/ciphers', {
+    method: 'POST',
+    token,
+    body: {
+      type: 1,
+      name: await sharedEncrypt('UI Shared Login'),
+      organizationId: organization.body.id,
+      collectionIds: [collectionId],
+      key: await encryptBw(sharedItemKey, organizationKey.slice(0, 32), organizationKey.slice(32, 64)),
+      login: { username: await sharedEncrypt('shared-user'), password: await sharedEncrypt('shared-pass') },
+    },
+  });
+  if (shared.status !== 200) {
+    throw new Error(`shared item create failed: ${shared.status} ${JSON.stringify(shared.body)}`);
+  }
+
+  return { itemId: created.body.id, token, organizationName: 'UI Team', collectionName: 'UI Shared' };
 }
 
 async function main() {
@@ -356,6 +406,68 @@ async function main() {
     await evaluate(fill('Master Password', PASSWORD));
     await evaluate(clickText('Log In'));
     await waitFor(`document.body.textContent.includes('UI History Login')`, 'the vault with the item');
+
+    // The sidebar shows the organization and the collection the shared item
+    // lives in, which is what tells a member an item is not their own.
+    const sidebarText = await evaluate(`document.querySelector('.sidebar')?.textContent || ''`);
+    checks.ok('the sidebar names the organization', sidebarText.includes(seeded.organizationName));
+    checks.ok('the sidebar lists the collection under it', sidebarText.includes(seeded.collectionName));
+
+    // Choosing the collection keeps only the item that sits in it.
+    await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll('.sidebar .tree-btn')];
+      const target = buttons.find((b) => b.textContent.includes(${JSON.stringify(seeded.collectionName)}));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const listText = await evaluate(`document.body.textContent`);
+    checks.ok('choosing the collection keeps the shared item', listText.includes('UI Shared Login'));
+    checks.ok('and drops the personal one', !listText.includes('UI History Login'));
+
+    // The detail says the item is shared and where it lives.
+    await evaluate(`(() => {
+      const rows = [...document.querySelectorAll('button, [role="button"]')];
+      const target = rows.find((el) => el.textContent.includes('UI Shared Login'));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(`!![...document.querySelectorAll('button')].find(b => b.textContent.includes('Shared'))`, 'the shared item detail', 15000);
+    const sharedDetail = await evaluate(`document.body.textContent`);
+    checks.ok('the detail names the organization', sharedDetail.includes(seeded.organizationName));
+    checks.ok('the detail marks the item as shared', sharedDetail.includes('Shared'));
+
+    // Back to everything, so the history check can find the personal item.
+    await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll('.sidebar .tree-btn')];
+      const target = buttons.find((b) => b.textContent.trim().startsWith('All Items'));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    // The shared item is the most recently written, so the vault opens on it.
+    // The history check is about the personal item, so select that one first.
+    const clickItem = (name) => `(() => {
+      const rows = [...document.querySelectorAll('button, [role="button"]')];
+      const target = rows.find((el) => el.textContent.includes(${JSON.stringify(name)}));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`;
+    await evaluate(`(${clickItem.toString()})('UI History Login')`.replace('clickItem', 'f'));
+    await evaluate(
+      `(() => {
+        const rows = [...document.querySelectorAll('button, [role="button"]')];
+        const target = rows.find((el) => el.textContent.includes('UI History Login'));
+        if (!target) return false;
+        target.click();
+        return true;
+      })()`
+    );
 
     const historyButton = `!![...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'View Item History')`;
     await waitFor(historyButton, 'the item history button');

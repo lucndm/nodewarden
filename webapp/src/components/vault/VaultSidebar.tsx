@@ -29,8 +29,16 @@ export interface SidebarTag {
   folderId: string;
 }
 
+export interface SidebarOrganization {
+  id: string;
+  name: string;
+  count: number;
+  collections: Array<{ id: string; name: string; count: number }>;
+}
+
 interface VaultSidebarProps {
   tags: SidebarTag[];
+  organizations: SidebarOrganization[];
   sidebarFilter: SidebarFilter;
   busy: boolean;
   isMobileLayout: boolean;
@@ -81,6 +89,37 @@ export default function VaultSidebar(props: VaultSidebarProps) {
           <Copy size={14} className="tree-icon" /> <span className="tree-label">{t('txt_duplicates')}</span>
         </button>
       </div>
+
+      {props.organizations.length > 0 && (
+        <div className="sidebar-block">
+          <div className="sidebar-title">{t('txt_organizations')}</div>
+          {props.organizations.map((organization) => (
+            <div key={organization.id} className="sidebar-org-group">
+              <button
+                type="button"
+                className={`tree-btn ${props.sidebarFilter.kind === 'organization' && props.sidebarFilter.organizationId === organization.id ? 'active' : ''}`}
+                onClick={() => props.onChangeFilter({ kind: 'organization', organizationId: organization.id })}
+              >
+                <Landmark size={14} className="tree-icon" />
+                <span className="tree-label">{organization.name}</span>
+                <span className="tree-count">{organization.count}</span>
+              </button>
+              {organization.collections.map((collection) => (
+                <button
+                  key={collection.id}
+                  type="button"
+                  className={`tree-btn tree-btn-child ${props.sidebarFilter.kind === 'collection' && props.sidebarFilter.collectionId === collection.id ? 'active' : ''}`}
+                  onClick={() => props.onChangeFilter({ kind: 'collection', collectionId: collection.id })}
+                >
+                  <Tag size={13} className="tree-icon" />
+                  <span className="tree-label">{collection.name}</span>
+                  <span className="tree-count">{collection.count}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="sidebar-block">
         <div className="sidebar-title">{t('txt_type')}</div>

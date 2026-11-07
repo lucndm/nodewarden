@@ -50,6 +50,9 @@ interface VaultPageProps {
   emailForReprompt: string;
   cipherUsage: CipherUsageMap | null;
   cipherUsageError: boolean;
+  organizations: import('@/lib/api/organizations').VaultOrganization[];
+  collections: import('@/lib/api/organizations').VaultCollection[];
+  collectionsError: string;
   onTrackPasswordCopy: (cipherId: string) => void;
   onRefresh: () => Promise<void>;
   onCreate: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
@@ -376,6 +379,68 @@ export default function VaultPage(props: VaultPageProps) {
     return byId;
   }, [props.ciphers, duplicateSignatureInfo]);
 
+  // The organizations and their collections, with the number of items the
+  // member actually holds in each: a collection with nothing in it is still
+  // worth showing, a count is what tells the member where things live.
+  const sidebarOrganizations = useMemo(() => {
+    if (!props.organizations.length) return [];
+    const countByCollection = new Map<string, number>();
+    let sharedTotal = 0;
+    for (const cipher of props.ciphers) {
+      if (!isCipherVisibleInNormalVault(cipher)) continue;
+      const organizationId = (cipher as { organizationId?: string | null }).organizationId;
+      if (!organizationId) continue;
+      sharedTotal += 1;
+      const collectionIds = Array.isArray((cipher as { collectionIds?: string[] }).collectionIds)
+        ? (cipher as { collectionIds?: string[] }).collectionIds!
+        : [];
+      for (const collectionId of collectionIds) {
+        countByCollection.set(collectionId, (countByCollection.get(collectionId) ?? 0) + 1);
+      }
+    }
+    void sharedTotal;
+    return props.organizations.map((organization) => {
+      const collections = props.collections
+        .filter((collection) => collection.organizationId === organization.id)
+        .map((collection) => ({
+          id: collection.id,
+          name: collection.name,
+          count: countByCollection.get(collection.id) ?? 0,
+        }));
+      return {
+        id: organization.id,
+        name: organization.name,
+        count: props.ciphers.filter((cipher) => {
+          if (!isCipherVisibleInNormalVault(cipher)) return false;
+          return (cipher as { organizationId?: string | null }).organizationId === organization.id;
+        }).length,
+        collections,
+      };
+    });
+  }, [props.organizations, props.collections, props.ciphers]);
+
+  // What an item is shared through, so the detail can say where it lives
+  // instead of showing it as an ordinary personal item.
+  const sharedWithByCipher = useMemo(() => {
+    const organizationName = new Map(props.organizations.map((organization) => [organization.id, organization.name]));
+    const collectionName = new Map(props.collections.map((collection) => [collection.id, collection.name]));
+    const map = new Map<string, { organizationName: string; collectionNames: string[] }>();
+    for (const cipher of props.ciphers) {
+      const organizationId = (cipher as { organizationId?: string | null }).organizationId;
+      if (!organizationId) continue;
+      const collectionIds = Array.isArray((cipher as { collectionIds?: string[] }).collectionIds)
+        ? (cipher as { collectionIds?: string[] }).collectionIds!
+        : [];
+      map.set(cipher.id, {
+        organizationName: organizationName.get(organizationId) ?? t('txt_organizations'),
+        collectionNames: collectionIds
+          .map((id) => collectionName.get(id))
+          .filter((name): name is string => !!name),
+      });
+    }
+    return map;
+  }, [props.ciphers, props.organizations, props.collections]);
+
   const allFilteredCiphers = useMemo(() => {
     const next = props.ciphers.filter((cipher) => {
       const meta = cipherMetaById.get(cipher.id);
@@ -400,6 +465,19 @@ export default function VaultPage(props: VaultPageProps) {
         if (sidebarFilter.kind === 'tag') {
           const tags = Array.isArray(cipher.tags) ? cipher.tags : [];
           if (!tags.includes(sidebarFilter.tag)) return false;
+        }
+        // A shared item names the collections it sits in, so the filter reads
+        // the same field the server authorised it by.
+        const collectionIds = Array.isArray((cipher as { collectionIds?: string[] }).collectionIds)
+          ? (cipher as { collectionIds?: string[] }).collectionIds!
+          : [];
+        if (sidebarFilter.kind === 'collection') {
+          if (!collectionIds.includes(sidebarFilter.collectionId)) return false;
+        }
+        if (sidebarFilter.kind === 'organization') {
+          if ((cipher as { organizationId?: string | null }).organizationId !== sidebarFilter.organizationId) {
+            return false;
+          }
         }
       }
       if (!searchQuery) return true;
@@ -1261,6 +1339,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
   const sidebar = (
     <VaultSidebar
       tags={tagSummary}
+      organizations={sidebarOrganizations}
       sidebarFilter={sidebarFilter}
       busy={busy}
       isMobileLayout={isMobileLayout}
@@ -1409,6 +1488,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 usage={props.cipherUsage?.[selectedCipher.id] || null}
                 usageAvailable={!!props.cipherUsage}
                 usageError={props.cipherUsageError}
+                sharedWith={sharedWithByCipher.get(selectedCipher.id) ?? null}
                 onPasswordCopied={props.onTrackPasswordCopy}
                 hiddenFieldVisibleMap={hiddenFieldVisibleMap}
                 folderName={folderName}

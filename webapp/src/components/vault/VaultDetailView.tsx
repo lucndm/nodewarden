@@ -44,6 +44,8 @@ interface VaultDetailViewProps {
   onPasswordCopied: (cipherId: string) => void;
   hiddenFieldVisibleMap: Record<number, boolean>;
   folderName: (id: string | null | undefined) => string;
+  /** The organization and collections the item belongs to, when it is shared. */
+  sharedWith?: { organizationName: string; collectionNames: string[] } | null;
   downloadingAttachmentKey: string;
   attachmentDownloadPercent: number | null;
   onOpenReprompt: () => void;
@@ -378,6 +380,18 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   <Tag size={13} aria-hidden="true" />
                   <span>{props.folderName(props.selectedCipher.folderId)}</span>
                 </div>
+                {props.sharedWith && (
+                  <div className="detail-folder-line detail-shared-line">
+                    <Landmark size={13} aria-hidden="true" />
+                    <span>
+                      {props.sharedWith.organizationName}
+                      {props.sharedWith.collectionNames.length
+                        ? ` · ${props.sharedWith.collectionNames.join(', ')}`
+                        : ''}
+                    </span>
+                    <span className="detail-shared-badge">{t('txt_shared_item')}</span>
+                  </div>
+                )}
               </div>
               <div className="detail-title-actions">
                 {isDeleted ? (
