@@ -531,10 +531,14 @@ export async function handleRotateOrganizationKey(
     : [];
   const ciphers = Array.isArray(body.ciphers)
     ? body.ciphers
-        .map((entry) => entry as { id?: unknown; key?: unknown; data?: unknown })
+        .map((entry) => entry as { id?: unknown; key?: unknown; name?: unknown; notes?: unknown; data?: unknown })
         .map((entry) => ({
           cipherId: text(entry?.id).trim(),
           key: text(entry?.key, 4096).trim() || null,
+          // The name and the notes live in their own columns, so they travel
+          // beside the payload and are re-encrypted with it.
+          name: entry?.name === undefined ? undefined : text(entry.name, 4096) || null,
+          notes: entry?.notes === undefined ? undefined : text(entry.notes, 65_536) || null,
           data: text(entry?.data, 1_000_000),
         }))
         .filter((entry) => entry.cipherId && entry.data)
