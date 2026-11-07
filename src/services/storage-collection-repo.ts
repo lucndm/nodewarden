@@ -18,6 +18,13 @@ export interface Organization {
   privateKey: string | null;
   /** The organization's RSA public key. */
   publicKey: string | null;
+  /**
+   * True when a member left and the key they still hold has to be replaced
+   * before the removal means anything.
+   */
+  keyRotationRequired: boolean;
+  /** When the key was last rotated. */
+  keyRotatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -185,6 +192,7 @@ export async function getOrganizationsForUser(db: D1Database, userId: string): P
   const res = await db
     .prepare(
       'SELECT O.id AS id, O.name AS name, O.private_key AS private_key, O.public_key AS public_key, ' +
+      'O.key_rotation_required AS key_rotation_required, O.key_rotated_at AS key_rotated_at, ' +
       'O.created_at AS created_at, O.updated_at AS updated_at ' +
       'FROM organizations O ' +
       'INNER JOIN organization_users OU ON OU.org_id = O.id AND OU.user_id = ? AND OU.status = 2 ' +
@@ -196,6 +204,8 @@ export async function getOrganizationsForUser(db: D1Database, userId: string): P
       name: string;
       private_key: string | null;
       public_key: string | null;
+      key_rotation_required: number | null;
+      key_rotated_at: string | null;
       created_at: string;
       updated_at: string;
     }>();
@@ -204,6 +214,8 @@ export async function getOrganizationsForUser(db: D1Database, userId: string): P
     name: row.name,
     privateKey: row.private_key,
     publicKey: row.public_key,
+    keyRotationRequired: !!row.key_rotation_required,
+    keyRotatedAt: row.key_rotated_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -638,9 +650,14 @@ export async function getCollectionRightsForCollections(
  */
 export async function getCipherRankByCipherForUser(
   db: D1Database,
-  userId: string
+  userId: string,
+  cipherIds?: string[]
 ): Promise<Map<string, number>> {
   const ranks = new Map<string, number>();
+  const scope = cipherIds && cipherIds.length
+    ? ` AND CC.cipher_id IN (${cipherIds.map(() => '?').join(',')})`
+    : '';
+  const scopeBinds = cipherIds && cipherIds.length ? cipherIds : [];
   const res = await db
     .prepare(
       'SELECT CC.cipher_id AS cipher_id, ' +
@@ -653,6 +670,7 @@ export async function getCipherRankByCipherForUser(
         'INNER JOIN collections C ON C.id = CC.collection_id ' +
         'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
         'INNER JOIN collection_users CU ON CU.collection_id = CC.collection_id AND CU.org_user_id = OU.id ' +
+        `WHERE 1 = 1 ${scope} ` +
         'UNION ALL ' +
         'SELECT CC.cipher_id AS cipher_id, CG.read_only AS read_only, CG.hide_passwords AS hide_passwords, CG.manage AS manage ' +
         'FROM collection_ciphers CC ' +
@@ -661,15 +679,16 @@ export async function getCipherRankByCipherForUser(
         'INNER JOIN collection_groups CG ON CG.collection_id = CC.collection_id ' +
         'INNER JOIN group_users GU ON GU.group_id = CG.group_id AND GU.org_user_id = OU.id ' +
         'WHERE NOT EXISTS (SELECT 1 FROM collection_users CU2 ' +
-        'WHERE CU2.collection_id = CG.collection_id AND CU2.org_user_id = OU.id) ' +
+        `WHERE CU2.collection_id = CG.collection_id AND CU2.org_user_id = OU.id) ${scope} ` +
         'UNION ALL ' +
         'SELECT CC.cipher_id AS cipher_id, 0 AS read_only, 0 AS hide_passwords, 1 AS manage ' +
         'FROM collection_ciphers CC ' +
         'INNER JOIN collections C ON C.id = CC.collection_id ' +
         'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 AND OU.type <= 1 ' +
+        `WHERE 1 = 1 ${scope} ` +
         ') AS CC GROUP BY CC.cipher_id'
     )
-    .bind(userId, userId, userId)
+    .bind(userId, ...scopeBinds, userId, ...scopeBinds, userId, ...scopeBinds)
     .all<{ cipher_id: string; rank: number }>();
   for (const row of res.results || []) ranks.set(row.cipher_id, Number(row.rank) || 0);
   return ranks;
@@ -700,7 +719,9 @@ export async function filterWritableCipherIds(
     .all<{ id: string }>();
   const allowed = new Set((owned.results || []).map((row) => row.id));
 
-  const ranks = await getCipherRankByCipherForUser(db, userId);
+  // Only the items this call is about: a bulk action on a few items must not
+  // walk every item of the organization.
+  const ranks = await getCipherRankByCipherForUser(db, userId, unique);
   for (const id of unique) {
     if (allowed.has(id)) continue;
     const rank = ranks.get(id);
@@ -781,6 +802,12 @@ export async function removeOrganizationUser(
     db.prepare('DELETE FROM collection_users WHERE org_user_id = ?').bind(membershipId),
     db.prepare('DELETE FROM group_users WHERE org_user_id = ?').bind(membershipId),
     db.prepare('DELETE FROM organization_users WHERE id = ? AND org_id = ?').bind(membershipId, orgId),
+    // The member keeps the organization key they already unwrapped, so the
+    // removal is only half done: record that the key has to be replaced.
+    db.prepare('UPDATE organizations SET key_rotation_required = 1, updated_at = ? WHERE id = ?').bind(
+      new Date().toISOString(),
+      orgId
+    ),
   ]);
   return true;
 }
@@ -893,5 +920,11 @@ export async function rotateOrganizationKey(
         )
     );
   }
-  if (statements.length) await db.batch(statements);
+  // A rotation is what makes a removal count, so it clears the marker.
+  statements.push(
+    db
+      .prepare('UPDATE organizations SET key_rotation_required = 0, key_rotated_at = ?, updated_at = ? WHERE id = ?')
+      .bind(rotation.now, rotation.now, rotation.orgId)
+  );
+  await db.batch(statements);
 }

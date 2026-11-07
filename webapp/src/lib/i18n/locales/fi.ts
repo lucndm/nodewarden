@@ -825,6 +825,7 @@ const fi: Record<string, string> = {
   "txt_shared_item": "Jaettu",
   "txt_organization_load_failed": "Organisaatioiden lataus epäonnistui",
   "txt_collection_load_failed": "Kokoelmien lataus epäonnistui",
+  "txt_key_rotation_required": "Jäsen lähti: vaihda organisaation avain",
   "txt_untagged": "Ilman tunnisteita",
   "txt_delete_all_tags": "Poista kaikki tunnisteet",
   "txt_tags": "Tunnisteet",

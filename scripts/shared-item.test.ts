@@ -766,3 +766,63 @@ test('a rotation naming another organization is refused whole', async () => {
   assert.ok(cipher);
   assert.notEqual(cipher.key, ENC('new'));
 });
+
+test('removing a member flags the key rotation, and rotating clears it', async () => {
+  const { env, storage } = await fixture();
+  await createShared(env);
+
+  const before = (await storage.getOrganizationsForUser(OWNER))[0];
+  assert.equal(before.keyRotationRequired, false, 'a fresh organization needs no rotation');
+
+  const writerMembership = await storage.getOrganizationUserForUser(ORG, WRITER);
+  assert.ok(writerMembership);
+  await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${writerMembership.id}`,
+    'DELETE',
+    OWNER
+  );
+
+  const flagged = (await (
+    await call(env, 'https://vault.example.test/api/organizations', 'GET', OWNER)
+  ).json()) as { data: Array<{ keyRotationRequired: boolean }> };
+  assert.equal(flagged.data[0].keyRotationRequired, true, 'the removal says the key has to be replaced');
+
+  // Rotating clears the marker: the key the removed member held is replaced.
+  const rotation = await call(env, `https://vault.example.test/api/organizations/${ORG}/rotate-key`, 'POST', OWNER, {
+    members: [{ membershipId: (await storage.getOrganizationUserForUser(ORG, OWNER))!.id, key: ENC('rotated') }],
+    ciphers: [],
+  });
+  assert.equal(rotation.status, 200);
+
+  const cleared = (await (
+    await call(env, 'https://vault.example.test/api/organizations', 'GET', OWNER)
+  ).json()) as { data: Array<{ keyRotationRequired: boolean }> };
+  assert.equal(cleared.data[0].keyRotationRequired, false, 'a rotation clears the marker');
+});
+
+test('a rotation is bounded so one call cannot push an arbitrary body', async () => {
+  const { env, storage } = await fixture();
+  const created = await createShared(env);
+  const ownerMembership = await storage.getOrganizationUserForUser(ORG, OWNER);
+  assert.ok(ownerMembership);
+
+  // Too many items for one call.
+  const many = Array.from({ length: 201 }, (_, index) => ({
+    id: `cipher-${index}`,
+    key: ENC('k'),
+    data: '{}',
+  }));
+  const tooMany = await call(env, `https://vault.example.test/api/organizations/${ORG}/rotate-key`, 'POST', OWNER, {
+    members: [{ membershipId: ownerMembership.id, key: ENC('k') }],
+    ciphers: many,
+  });
+  assert.equal(tooMany.status, 413);
+
+  // A single item whose payload is over the per-item ceiling.
+  const tooBig = await call(env, `https://vault.example.test/api/organizations/${ORG}/rotate-key`, 'POST', OWNER, {
+    members: [{ membershipId: ownerMembership.id, key: ENC('k') }],
+    ciphers: [{ id: created.id, key: ENC('k'), data: 'x'.repeat(70_000) }],
+  });
+  assert.equal(tooBig.status, 413);
+});

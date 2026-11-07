@@ -10,6 +10,7 @@ import {
   Landmark,
   LayoutGrid,
   Pencil,
+  ShieldAlert,
   ShieldUser,
   ShieldCheck,
   Star,
@@ -33,6 +34,8 @@ export interface SidebarOrganization {
   id: string;
   name: string;
   count: number;
+  /** The owner still has to rotate the key after a member left. */
+  keyRotationRequired: boolean;
   collections: Array<{ id: string; name: string; count: number }>;
 }
 
@@ -102,6 +105,15 @@ export default function VaultSidebar(props: VaultSidebarProps) {
               >
                 <Landmark size={14} className="tree-icon" />
                 <span className="tree-label">{organization.name}</span>
+                {organization.keyRotationRequired && (
+                  <span
+                    className="tree-warning"
+                    title={t('txt_key_rotation_required')}
+                    aria-label={t('txt_key_rotation_required')}
+                  >
+                    <ShieldAlert size={13} />
+                  </span>
+                )}
                 <span className="tree-count">{organization.count}</span>
               </button>
               {organization.collections.map((collection) => (

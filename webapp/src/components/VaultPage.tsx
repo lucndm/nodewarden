@@ -410,6 +410,7 @@ export default function VaultPage(props: VaultPageProps) {
       return {
         id: organization.id,
         name: organization.name,
+        keyRotationRequired: organization.keyRotationRequired,
         count: props.ciphers.filter((cipher) => {
           if (!isCipherVisibleInNormalVault(cipher)) return false;
           return (cipher as { organizationId?: string | null }).organizationId === organization.id;

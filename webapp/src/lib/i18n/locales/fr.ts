@@ -825,6 +825,7 @@ const fr: Record<string, string> = {
   "txt_shared_item": "Partagé",
   "txt_organization_load_failed": "Impossible de charger les organisations",
   "txt_collection_load_failed": "Impossible de charger les collections",
+  "txt_key_rotation_required": "Un membre est parti : renouvelez la clé de l’organisation",
   "txt_untagged": "Sans étiquette",
   "txt_delete_all_tags": "Supprimer toutes les étiquettes",
   "txt_tags": "Étiquettes",

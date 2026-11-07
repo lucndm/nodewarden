@@ -825,6 +825,7 @@ const sv: Record<string, string> = {
   "txt_shared_item": "Delad",
   "txt_organization_load_failed": "Det gick inte att läsa in organisationer",
   "txt_collection_load_failed": "Det gick inte att läsa in samlingar",
+  "txt_key_rotation_required": "En medlem har lämnat: rotera organisationsnyckeln",
   "txt_untagged": "Otaggade",
   "txt_delete_all_tags": "Ta bort alla taggar",
   "txt_tags": "Taggar",

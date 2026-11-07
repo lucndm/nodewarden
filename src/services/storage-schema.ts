@@ -83,7 +83,10 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   // symmetric key itself belongs to the membership, wrapped for each member.
   'CREATE TABLE IF NOT EXISTS organizations (' +
   'id TEXT PRIMARY KEY, name TEXT NOT NULL, private_key TEXT, public_key TEXT, ' +
+  'key_rotation_required INTEGER NOT NULL DEFAULT 0, key_rotated_at TEXT, ' +
   'created_at TEXT NOT NULL, updated_at TEXT NOT NULL)',
+  'ALTER TABLE organizations ADD COLUMN key_rotation_required INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE organizations ADD COLUMN key_rotated_at TEXT',
   'ALTER TABLE organizations ADD COLUMN private_key TEXT',
   'ALTER TABLE organizations ADD COLUMN public_key TEXT',
   // The first version of this table kept the organization key here, which is

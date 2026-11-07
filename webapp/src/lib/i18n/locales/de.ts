@@ -825,6 +825,7 @@ const de: Record<string, string> = {
   "txt_shared_item": "Geteilt",
   "txt_organization_load_failed": "Organisationen konnten nicht geladen werden",
   "txt_collection_load_failed": "Sammlungen konnten nicht geladen werden",
+  "txt_key_rotation_required": "Ein Mitglied ist ausgetreten: Organisationsschlüssel erneuern",
   "txt_untagged": "Ohne Schlagwort",
   "txt_delete_all_tags": "Alle Schlagwörter löschen",
   "txt_tags": "Schlagwörter",
