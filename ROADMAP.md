@@ -150,7 +150,17 @@ Server **không đọc được blob nào** và **không tự xoay được**. B
 
 **Giới hạn đã biết, và cách xoay khóa giải quyết:** thu hồi member **không** lấy lại được khóa organization họ đã mở — dữ liệu họ đã tải vẫn đọc được. Xoay khóa sau khi thu hồi mới là thứ khiến việc thu hồi có nghĩa: member đó không còn nhận được khóa mới nên không mở được item đã xoay. Dữ liệu họ **đã tải trước đó** thì không thể thu hồi từ xa — giới hạn của zero-knowledge, không phải lỗi cài đặt.
 
-**Còn làm (P1-B):** chưa có UI organization/collection, chưa có endpoint quản lý group, và client chưa tự gọi xoay khóa (hiện chỉ có endpoint; phần sinh khóa và bọc lại phía client chưa làm).
+**Xoay khóa phía client (đã có):** `webapp/src/lib/organization-key-rotation.ts` làm toàn bộ phần mật mã, không gọi server:
+
+- Sinh khóa organization mới (64 byte), **không** giữ lại sau khi trả về.
+- Mã hóa lại khóa riêng RSA của organization bằng khóa mới.
+- Bọc khóa mới cho từng member bằng RSA-OAEP SHA-1, dạng `4.` mà client chính thức đọc.
+- Mỗi item chia sẻ nhận **item key mới** và **payload được mã hóa lại** — đây là điểm quan trọng: chỉ bọc lại item key cũ thì ai giữ khóa organization cũ vẫn mở được item. Item vốn dùng khóa organization trực tiếp (không có `key`) cũng được cấp key riêng.
+- Payload không phải chuỗi mã hóa (`type`, `tags`, username plaintext…) giữ nguyên. Một chuỗi **trông như** mã hóa nhưng không giải được bằng khóa cũ sẽ **dừng cả lần xoay** thay vì để lại payload nửa cũ nửa mới.
+
+`scripts/organization-key-rotation.test.ts` (3 case, RSA + AES thật): hai member mở ra **cùng khóa mới** và khác khóa cũ; khóa organization cũ **không** mở được private key mới, item key mới, hay payload mới; payload giải đúng dưới khóa mới; giá trị không mã hóa giữ nguyên; payload lạ dừng lần xoay.
+
+**Còn làm (P1-B):** chưa có UI organization/collection, chưa có endpoint quản lý group, và **chưa nối nút xoay khóa vào Web Vault** — hàm và endpoint đã có, nhưng chưa có action/UI gọi chúng.
 
 **Tham chiếu thực tế từ `dani-garcia/vaultwarden` (đọc source `17b159b`):** đây là server Bitwarden-compatible tự host, đã làm phần lớn P3/P4/P5 mà NodeWarden còn mở, nên nó cho biết hình hình thực tế trước khi chốt. Những gì **không** có trong vaultwarden, tức là phần NodeWarden đang đi trước: không có bảng `tags` (chỉ `folders`), không có cột usage/`last_used_at` cho cipher, không có bảng version của item (chỉ `password_history`), **không** có kiểm tra tên Folder plaintext — `folders.name` lưu thẳng chuỗi client gửi lên (`src/db/models/folder.rs:52-61`), nên NodeWarden phải tự kiểm tra ciphertext-vs-plaintext như đã làm. Những gì vaultwarden có: Organizations + Collections + Groups + Member Roles (Owner/Admin/Manager/User/Custom), Event Logs, Policies, Directory Connector, Emergency Access, SSO OIDC; SCIM thì **không** (`"useScim": false` vì không thuộc AGPLv3). Bài học dùng được cho P1-B/P3/P5: `/sync` chỉ trả cipher **visible** cho user — `Cipher::find_by_user_visible` (`src/db/models/cipher.rs:926`) và `get_access_restrictions` trả `None` khi user không có quyền, nên lọc quyền nằm ở tầng query chứ không ở UI; và **gán trực tiếp thắng gán qua group** cho cùng collection (upstream cũng vậy: `WHERE NOT EXISTS (SELECT 1 FROM CollectionUser ...)` trong SQL của server chính thức). Lưu ý: vaultwarden cộng dồn quyền bằng AND cho `read_only`/`hide_passwords` và OR cho `manage`, khác quy tắc rank của server chính thức; NodeWarden theo server chính thức, chi tiết ở mục P1.
 
