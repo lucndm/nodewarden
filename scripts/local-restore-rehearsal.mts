@@ -125,6 +125,58 @@ async function main() {
     ).body?.access_token;
     if (!checks.ok('the admin gets a token', !!token)) return;
 
+    // The data itself has to be usable: every item sits in a folder that
+    // exists, no folder name is duplicated and no tag is left over as
+    // ciphertext.
+    const archiveFolders = archiveDb.folders || [];
+    const archiveCiphers = archiveDb.ciphers || [];
+    const folderById = new Map(archiveFolders.map((row) => [row.id, row]));
+    checks.equal(
+      'every item sits in a folder of its own account',
+      archiveCiphers.filter((row) => {
+        if (!row.folder_id) return false;
+        const folder = folderById.get(row.folder_id);
+        return !folder || folder.user_id !== row.user_id;
+      }).length,
+      0
+    );
+    const namesPerUser = new Map();
+    for (const folder of archiveFolders) {
+      const key = `${folder.user_id}|${folder.name}`;
+      namesPerUser.set(key, (namesPerUser.get(key) || 0) + 1);
+    }
+    checks.equal(
+      'no account has two folders with the same name',
+      [...namesPerUser.values()].filter((count) => count > 1).length,
+      0
+    );
+    checks.equal(
+      'every item payload parses',
+      archiveCiphers.filter((row) => {
+        try {
+          JSON.parse(row.data);
+          return false;
+        } catch {
+          return true;
+        }
+      }).length,
+      0
+    );
+    checks.equal('no item carries a ciphertext-shaped tag', ciphertextTags(archiveCiphers).length, 0);
+    checks.equal(
+      'no tag is longer than the 64 character limit',
+      archiveCiphers.filter((row) => {
+        let data = {};
+        try {
+          data = JSON.parse(row.data || '{}');
+        } catch {
+          return false;
+        }
+        return (Array.isArray(data.tags) ? data.tags : []).some((tag) => String(tag).length > 64);
+      }).length,
+      0
+    );
+
     const form = new FormData();
     form.set('file', new File([bytes], basename(archivePath)));
     form.set('masterPasswordHash', passwordHash);
