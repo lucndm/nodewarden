@@ -86,7 +86,7 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     return cachedResponse;
   }
 
-  const [ciphers, folders, sends, attachmentsByCipher, domainSettings, collections, organizations] = await Promise.all([
+  const [ciphers, folders, sends, attachmentsByCipher, domainSettings, collections, organizations, memberships] = await Promise.all([
     storage.getVisibleCiphers(userId),
     storage.getAllFolders(userId),
     excludeSends ? Promise.resolve([]) : storage.getAllSends(userId),
@@ -94,12 +94,37 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     excludeDomains ? Promise.resolve(null) : storage.getUserDomainSettings(userId),
     storage.getCollectionsForUser(userId),
     storage.getOrganizationsForUser(userId),
+    storage.getOrganizationUsersForUser(userId),
   ]);
   const webAuthnPrfOptions = accountPasskeys
     .map(buildWebAuthnPrfOption)
     .filter((option): option is NonNullable<typeof option> => !!option);
   const userDecryptionOptions = buildUserDecryptionOptions(user, webAuthnPrfOptions[0] || null);
   const validFolderIds = new Set(folders.map((folder) => folder.id));
+
+  // The organization key travels wrapped for the member asking: the server
+  // never holds it in a readable form. An invited member has no wrapped key
+  // yet and gets none.
+  const membershipByOrg = new Map(
+    memberships.filter((membership) => membership.status === 2).map((membership) => [membership.orgId, membership])
+  );
+  const organizationResponses = organizations.map((organization) => ({
+    id: organization.id,
+    name: organization.name,
+    key: membershipByOrg.get(organization.id)?.key ?? null,
+    status: 2,
+    type: membershipByOrg.get(organization.id)?.type ?? 2,
+    enabled: true,
+    usePolicies: false,
+    useGroups: false,
+    useDirectory: false,
+    useEvents: false,
+    useTotp: true,
+    use2fa: true,
+    useApi: true,
+    usersGetPremium: true,
+    object: 'profileOrganization',
+  }));
 
   const profile: ProfileResponse = buildProfileResponse(user, env, {
     // The official Bitwarden SDK parses profile.masterPasswordHint from the
@@ -108,6 +133,7 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     // dedicated /api/accounts/profile endpoint still returns the stored value
     // so the bundled web vault can prefill the Settings form.
     suppressNonEncStringHint: true,
+    organizations: organizationResponses,
   });
 
   const cipherResponses: CipherResponse[] = [];
@@ -150,18 +176,10 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
       object: 'collectionDetails',
     };
   });
-  const organizationResponses = organizations.map((organization) => ({
-    id: organization.id,
-    name: organization.name,
-    key: organization.key ?? null,
-    object: 'organization',
-  }));
-
   const syncResponse: SyncResponse = {
     profile,
     folders: folderResponses,
     collections: collectionResponses,
-    organizations: organizationResponses,
     ciphers: cipherResponses,
     domains: excludeDomains
       ? null

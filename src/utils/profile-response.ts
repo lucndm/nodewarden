@@ -38,6 +38,10 @@ export interface BuildProfileResponseOptions {
   // /api/accounts/profile) the stored value is returned as-is so the bundled
   // web vault can prefill its Settings form.
   suppressNonEncStringHint?: boolean;
+  // The organizations the member belongs to. The official clients read them
+  // from profile.organizations, so they belong here and not beside the
+  // profile in the sync payload.
+  organizations?: any[];
 }
 
 export function buildProfileResponse(
@@ -46,7 +50,7 @@ export function buildProfileResponse(
   options: BuildProfileResponseOptions = {}
 ): ProfileResponse {
   void env;
-  const organizations: any[] = [];
+  const organizations: any[] = options.organizations ?? [];
   const accountKeys = buildAccountKeys(user);
 
   const storedHint = user.masterPasswordHint;

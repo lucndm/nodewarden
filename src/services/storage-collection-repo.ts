@@ -14,8 +14,10 @@ import { resolveItemAccess, type CollectionGrant, type ItemAccess } from './coll
 export interface Organization {
   id: string;
   name: string;
-  /** The organization's symmetric key, encrypted for each member. */
-  key: string | null;
+  /** The organization's RSA private key, encrypted with the organization key. */
+  privateKey: string | null;
+  /** The organization's RSA public key. */
+  publicKey: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,6 +30,11 @@ export interface OrganizationUser {
   type: number;
   /** -1 revoked, 0 invited, 1 accepted, 2 confirmed. */
   status: number;
+  /**
+   * The organization's symmetric key, wrapped with this member's public key.
+   * Null until an admin confirms the membership and wraps the key for them.
+   */
+  key: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -166,7 +173,8 @@ export async function getCollectionRights(
 export async function getOrganizationsForUser(db: D1Database, userId: string): Promise<Organization[]> {
   const res = await db
     .prepare(
-      'SELECT O.id AS id, O.name AS name, O.key AS key, O.created_at AS created_at, O.updated_at AS updated_at ' +
+      'SELECT O.id AS id, O.name AS name, O.private_key AS private_key, O.public_key AS public_key, ' +
+      'O.created_at AS created_at, O.updated_at AS updated_at ' +
       'FROM organizations O ' +
       'INNER JOIN organization_users OU ON OU.org_id = O.id AND OU.user_id = ? AND OU.status = 2 ' +
       'ORDER BY O.name ASC'
@@ -175,14 +183,16 @@ export async function getOrganizationsForUser(db: D1Database, userId: string): P
     .all<{
       id: string;
       name: string;
-      key: string | null;
+      private_key: string | null;
+      public_key: string | null;
       created_at: string;
       updated_at: string;
     }>();
   return (res.results || []).map((row) => ({
     id: row.id,
     name: row.name,
-    key: row.key,
+    privateKey: row.private_key,
+    publicKey: row.public_key,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -219,7 +229,7 @@ export async function getOrganizationUsersForUser(
 ): Promise<OrganizationUser[]> {
   const res = await db
     .prepare(
-      'SELECT id, user_id, org_id, type, status, created_at, updated_at FROM organization_users ' +
+      'SELECT id, user_id, org_id, type, status, key, created_at, updated_at FROM organization_users ' +
       'WHERE user_id = ? ORDER BY created_at ASC'
     )
     .bind(userId)
@@ -229,6 +239,7 @@ export async function getOrganizationUsersForUser(
       org_id: string;
       type: number;
       status: number;
+      key: string | null;
       created_at: string;
       updated_at: string;
     }>();
@@ -238,6 +249,7 @@ export async function getOrganizationUsersForUser(
     orgId: row.org_id,
     type: row.type,
     status: row.status,
+    key: row.key,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -313,4 +325,185 @@ export async function getVisibleCipherIdsForUser(
   const ids = new Set<string>(shared);
   for (const row of owned.results || []) ids.add(row.id);
   return ids;
+}
+
+/**
+ * Creates an organization, its owner membership and a first collection in one
+ * batch.
+ *
+ * The organization key is wrapped by the owner's client before it gets here:
+ * the server stores the wrapped form and can never read the key itself. The
+ * owner also sends the organization's RSA key pair, with the private key
+ * already encrypted under the organization key.
+ */
+export async function createOrganizationWithOwner(
+  db: D1Database,
+  input: {
+    id: string;
+    name: string;
+    privateKey: string | null;
+    publicKey: string | null;
+    ownerUserId: string;
+    ownerMembershipId: string;
+    /** The organization key, wrapped with the owner's public key. */
+    wrappedOrganizationKey: string | null;
+    collectionId: string;
+    collectionName: string;
+    now: string;
+  }
+): Promise<void> {
+  await db.batch([
+    db
+      .prepare(
+        'INSERT INTO organizations (id, name, private_key, public_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      )
+      .bind(input.id, input.name, input.privateKey, input.publicKey, input.now, input.now),
+    db
+      .prepare(
+        'INSERT INTO organization_users (id, user_id, org_id, type, status, key, created_at, updated_at) ' +
+          'VALUES (?, ?, ?, 0, 2, ?, ?, ?)'
+      )
+      .bind(input.ownerMembershipId, input.ownerUserId, input.id, input.wrappedOrganizationKey, input.now, input.now),
+    db
+      .prepare('INSERT INTO collections (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(input.collectionId, input.id, input.collectionName, input.now, input.now),
+  ]);
+}
+
+/** Adds a member to an organization, without the organization key yet. */
+export async function addOrganizationUser(
+  db: D1Database,
+  input: {
+    id: string;
+    userId: string;
+    orgId: string;
+    type: number;
+    /** 0 invited, 2 confirmed. A membership confirmed here still needs its key. */
+    status: number;
+    now: string;
+  }
+): Promise<void> {
+  await db
+    .prepare(
+      'INSERT INTO organization_users (id, user_id, org_id, type, status, key, created_at, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, NULL, ?, ?)'
+    )
+    .bind(input.id, input.userId, input.orgId, input.type, input.status, input.now, input.now)
+    .run();
+}
+
+/**
+ * Stores the organization key wrapped for one member, and confirms the
+ * membership.
+ *
+ * The wrapped key comes from an admin's client, which knows the organization
+ * key and the member's public key. The server stores the blob: it can neither
+ * read the key nor wrap it for anyone.
+ */
+export async function confirmOrganizationUser(
+  db: D1Database,
+  input: { membershipId: string; orgId: string; wrappedOrganizationKey: string; now: string }
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      'UPDATE organization_users SET key = ?, status = 2, updated_at = ? WHERE id = ? AND org_id = ?'
+    )
+    .bind(input.wrappedOrganizationKey, input.now, input.membershipId, input.orgId)
+    .run();
+  return (result.meta.changes ?? 0) === 1;
+}
+
+/** The memberships of one organization. */
+export async function getOrganizationUsers(
+  db: D1Database,
+  orgId: string
+): Promise<OrganizationUser[]> {
+  const res = await db
+    .prepare(
+      'SELECT id, user_id, org_id, type, status, key, created_at, updated_at FROM organization_users ' +
+        'WHERE org_id = ? ORDER BY created_at ASC'
+    )
+    .bind(orgId)
+    .all<{
+      id: string;
+      user_id: string;
+      org_id: string;
+      type: number;
+      status: number;
+      key: string | null;
+      created_at: string;
+      updated_at: string;
+    }>();
+  return (res.results || []).map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    orgId: row.org_id,
+    type: row.type,
+    status: row.status,
+    key: row.key,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+/** The membership of one member in one organization, or null. */
+export async function getOrganizationUserForUser(
+  db: D1Database,
+  orgId: string,
+  userId: string
+): Promise<OrganizationUser | null> {
+  const row = await db
+    .prepare(
+      'SELECT id, user_id, org_id, type, status, key, created_at, updated_at FROM organization_users ' +
+        'WHERE org_id = ? AND user_id = ?'
+    )
+    .bind(orgId, userId)
+    .first<{
+      id: string;
+      user_id: string;
+      org_id: string;
+      type: number;
+      status: number;
+      key: string | null;
+      created_at: string;
+      updated_at: string;
+    }>();
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    orgId: row.org_id,
+    type: row.type,
+    status: row.status,
+    key: row.key,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** The organization key wrapped for one member, or null before confirmation. */
+export async function getWrappedOrganizationKey(
+  db: D1Database,
+  orgId: string,
+  userId: string
+): Promise<string | null> {
+  const membership = await getOrganizationUserForUser(db, orgId, userId);
+  if (!membership || membership.status !== 2) return null;
+  return membership.key ?? null;
+}
+
+/** The public keys of the members an admin wants to wrap the key for. */
+export async function getMemberPublicKeys(
+  db: D1Database,
+  userIds: string[]
+): Promise<Map<string, string | null>> {
+  const keys = new Map<string, string | null>();
+  if (!userIds.length) return keys;
+  const placeholders = userIds.map(() => '?').join(',');
+  const res = await db
+    .prepare(`SELECT id, public_key FROM users WHERE id IN (${placeholders})`)
+    .bind(...userIds)
+    .all<{ id: string; public_key: string | null }>();
+  for (const row of res.results || []) keys.set(row.id, row.public_key ?? null);
+  return keys;
 }

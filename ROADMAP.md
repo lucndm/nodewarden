@@ -90,7 +90,17 @@ flowchart LR
 - Backup export/import đã mang theo 8 bảng và `ciphers.organization_id`; diễn tập khôi phục trên archive production thật vẫn 21/21.
 - `npm run test:collection-access` (13 case) và `npm run test:collection-storage` (9 case), cả hai đã nối vào `npm run test:local`.
 
-**Còn làm (P1-B):** chưa có đường tạo organization/collection (cần phân phối khóa client-side trước), chưa có UI, chưa có endpoint thành viên/lời mời, chưa map `organizationId` khi ghi item, và `getCiphersPage`/`/api/ciphers` vẫn chỉ trả item cá nhân. Những phần này chưa được làm nên route tương ứng trả 501 chứ không trả thành công giả.
+**Phân phối khóa organization (đã có):** server **không bao giờ thấy khóa organization**. Owner tự sinh khóa đối xứng + cặp khóa RSA cho organization phía client, gửi lên dạng đã bọc:
+
+- `organizations.private_key` — khóa riêng RSA của organization, đã mã hóa bằng khóa organization.
+- `organizations.public_key` — khóa công khai RSA.
+- `organization_users.key` — khóa organization **bọc riêng cho từng thành viên** bằng public key của họ.
+
+Luồng: owner `POST /api/organizations` (kèm `key` đã bọc + `keys`), admin `POST /api/organizations/:id/users` để mời, rồi `POST /api/organizations/:id/users/:memberId/confirm` để gắn khóa đã bọc cho thành viên đó. `POST /api/organizations/:id/users/public-key` cho client của admin lấy public key của người cần bọc. `/sync` trả `profile.organizations[].key` đúng dạng đã bọc cho người đang hỏi; thành viên mới được mời nhưng chưa confirm thì nhận `key: null`.
+
+`scripts/organization-keys.test.ts` (5 case) chạy **RSA-OAEP + AES-GCM thật**: tạo organization, mời, confirm, rồi chứng minh owner và member mở ra **cùng một khóa**, người ngoài **không mở được**, người ngoài không thấy organization, plain member không confirm được, không tạo được owner thứ hai, và backup mang theo khóa đã bọc.
+
+**Còn làm (P1-B):** chưa có UI organization/collection, chưa map `organizationId` khi ghi item (item shared chưa tạo được qua API), chưa có endpoint xoá/thu hồi thành viên hay đổi quyền collection, `getCiphersPage`/`/api/ciphers` vẫn chỉ trả item cá nhân, và chưa có key rotation. Các route đó trả 501 chứ không trả thành công giả.
 
 **Tham chiếu thực tế từ `dani-garcia/vaultwarden` (đọc source `17b159b`):** đây là server Bitwarden-compatible tự host, đã làm phần lớn P3/P4/P5 mà NodeWarden còn mở, nên nó cho biết hình hình thực tế trước khi chốt. Những gì **không** có trong vaultwarden, tức là phần NodeWarden đang đi trước: không có bảng `tags` (chỉ `folders`), không có cột usage/`last_used_at` cho cipher, không có bảng version của item (chỉ `password_history`), **không** có kiểm tra tên Folder plaintext — `folders.name` lưu thẳng chuỗi client gửi lên (`src/db/models/folder.rs:52-61`), nên NodeWarden phải tự kiểm tra ciphertext-vs-plaintext như đã làm. Những gì vaultwarden có: Organizations + Collections + Groups + Member Roles (Owner/Admin/Manager/User/Custom), Event Logs, Policies, Directory Connector, Emergency Access, SSO OIDC; SCIM thì **không** (`"useScim": false` vì không thuộc AGPLv3). Bài học dùng được cho P1-B/P3/P5: `/sync` chỉ trả cipher **visible** cho user — `Cipher::find_by_user_visible` (`src/db/models/cipher.rs:926`) và `get_access_restrictions` trả `None` khi user không có quyền, nên lọc quyền nằm ở tầng query chứ không ở UI; và **gán trực tiếp thắng gán qua group** cho cùng collection (upstream cũng vậy: `WHERE NOT EXISTS (SELECT 1 FROM CollectionUser ...)` trong SQL của server chính thức). Lưu ý: vaultwarden cộng dồn quyền bằng AND cho `read_only`/`hide_passwords` và OR cho `manage`, khác quy tắc rank của server chính thức; NodeWarden theo server chính thức, chi tiết ở mục P1.
 
