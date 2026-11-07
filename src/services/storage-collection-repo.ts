@@ -839,7 +839,7 @@ export interface OrganizationKeyRotation {
   /** The new organization key, wrapped for each remaining member. */
   memberKeys: Array<{ membershipId: string; key: string }>;
   /** Each shared item, with its item key re-wrapped under the new key. */
-  cipherKeys: Array<{ cipherId: string; key: string | null; data: string }>;
+  cipherKeys: Array<{ cipherId: string; key: string | null; name?: string | null; notes?: string | null; data: string }>;
   now: string;
 }
 
@@ -875,8 +875,22 @@ export async function rotateOrganizationKey(
   for (const cipher of rotation.cipherKeys) {
     statements.push(
       db
-        .prepare('UPDATE ciphers SET key = ?, data = ?, updated_at = ? WHERE id = ? AND organization_id = ?')
-        .bind(cipher.key, cipher.data, rotation.now, cipher.cipherId, rotation.orgId)
+        .prepare(
+          'UPDATE ciphers SET key = ?, data = ?, ' +
+            // The name and the notes are columns, so a rotation has to replace
+            // them too or the item stays readable under the old key.
+            'name = COALESCE(?, name), notes = COALESCE(?, notes), ' +
+            'updated_at = ? WHERE id = ? AND organization_id = ?'
+        )
+        .bind(
+          cipher.key,
+          cipher.data,
+          cipher.name ?? null,
+          cipher.notes ?? null,
+          rotation.now,
+          cipher.cipherId,
+          rotation.orgId
+        )
     );
   }
   if (statements.length) await db.batch(statements);
