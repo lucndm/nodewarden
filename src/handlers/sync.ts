@@ -136,12 +136,22 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     organizations: organizationResponses,
   });
 
+  // A shared item names the collections it sits in, so the client can place it
+  // and read its rights without a second request per item.
+  const collectionIdsByCipher = await storage.getCollectionIdsByCipherIds(
+    ciphers.filter((cipher) => !!cipher.organizationId).map((cipher) => cipher.id)
+  );
+
   const cipherResponses: CipherResponse[] = [];
   for (const cipher of ciphers) {
     // The items the member may not read were already left out by the query
     // that reads the vault, so the interface hiding an item is never the only
     // thing keeping it from the client.
-    const response = cipherToResponse(cipher, attachmentsByCipher.get(cipher.id) || [], { preserveRepairableUris, validFolderIds });
+    const response = cipherToResponse(cipher, attachmentsByCipher.get(cipher.id) || [], {
+      preserveRepairableUris,
+      validFolderIds,
+      collectionIds: cipher.organizationId ? (collectionIdsByCipher.get(cipher.id) ?? []) : undefined,
+    });
     if (isCipherResponseSyncCompatible(response)) {
       cipherResponses.push(response);
     }

@@ -96,6 +96,15 @@ export async function getItemGrants(
       'INNER JOIN collection_users CU ON CU.collection_id = CC.collection_id AND CU.org_user_id = OU.id ' +
       'WHERE CC.cipher_id = ? ' +
       'UNION ALL ' +
+      // An owner or admin of the organization reaches every collection of it,
+      // which is what the official server does when the organization allows
+      // admin access to all collection items.
+      'SELECT CC.collection_id AS collection_id, 0 AS read_only, 0 AS hide_passwords, 1 AS manage, 1 AS direct ' +
+      'FROM collection_ciphers CC ' +
+      'INNER JOIN collections C ON C.id = CC.collection_id ' +
+      'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 AND OU.type <= 1 ' +
+      'WHERE CC.cipher_id = ? ' +
+      'UNION ALL ' +
       'SELECT CC.collection_id AS collection_id, ' +
       'CG.read_only AS read_only, CG.hide_passwords AS hide_passwords, CG.manage AS manage, 0 AS direct ' +
       'FROM collection_ciphers CC ' +
@@ -107,7 +116,7 @@ export async function getItemGrants(
       'AND NOT EXISTS (SELECT 1 FROM collection_users CU2 ' +
       'WHERE CU2.collection_id = CG.collection_id AND CU2.org_user_id = OU.id)'
     )
-    .bind(userId, cipherId, userId, cipherId)
+    .bind(userId, cipherId, userId, cipherId, userId, cipherId)
     .all<GrantRow>();
 
   return (rows.results || []).map((row) => ({
@@ -506,4 +515,113 @@ export async function getMemberPublicKeys(
     .all<{ id: string; public_key: string | null }>();
   for (const row of res.results || []) keys.set(row.id, row.public_key ?? null);
   return keys;
+}
+
+/** The collections each of these items sits in, keyed by item id. */
+export async function getCollectionIdsByCipherIds(
+  db: D1Database,
+  cipherIds: string[]
+): Promise<Map<string, string[]>> {
+  const byCipher = new Map<string, string[]>();
+  if (!cipherIds.length) return byCipher;
+  const placeholders = cipherIds.map(() => '?').join(',');
+  const res = await db
+    .prepare(
+      `SELECT cipher_id, collection_id FROM collection_ciphers WHERE cipher_id IN (${placeholders}) ` +
+        'ORDER BY collection_id ASC'
+    )
+    .bind(...cipherIds)
+    .all<{ cipher_id: string; collection_id: string }>();
+  for (const row of res.results || []) {
+    const list = byCipher.get(row.cipher_id) ?? [];
+    list.push(row.collection_id);
+    byCipher.set(row.cipher_id, list);
+  }
+  return byCipher;
+}
+
+/** The collections of one item. */
+export async function getCollectionIdsForCipher(db: D1Database, cipherId: string): Promise<string[]> {
+  const map = await getCollectionIdsByCipherIds(db, [cipherId]);
+  return map.get(cipherId) ?? [];
+}
+
+/**
+ * Replaces the collections of an item.
+ *
+ * The caller has already checked that the member may change the item and that
+ * every collection belongs to the item's organization.
+ */
+export async function setCipherCollections(
+  db: D1Database,
+  cipherId: string,
+  collectionIds: string[]
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [
+    db.prepare('DELETE FROM collection_ciphers WHERE cipher_id = ?').bind(cipherId),
+  ];
+  for (const collectionId of collectionIds) {
+    statements.push(
+      db
+        .prepare('INSERT INTO collection_ciphers (cipher_id, collection_id) VALUES (?, ?)')
+        .bind(cipherId, collectionId)
+    );
+  }
+  await db.batch(statements);
+}
+
+/** The collections of one organization that these ids name. */
+export async function getOrganizationCollectionIds(
+  db: D1Database,
+  orgId: string,
+  collectionIds: string[]
+): Promise<Set<string>> {
+  const found = new Set<string>();
+  if (!collectionIds.length) return found;
+  const placeholders = collectionIds.map(() => '?').join(',');
+  const res = await db
+    .prepare(`SELECT id FROM collections WHERE org_id = ? AND id IN (${placeholders})`)
+    .bind(orgId, ...collectionIds)
+    .all<{ id: string }>();
+  for (const row of res.results || []) found.add(row.id);
+  return found;
+}
+
+/** The collection rights a member holds on these collections, keyed by id. */
+export async function getCollectionRightsForCollections(
+  db: D1Database,
+  userId: string,
+  collectionIds: string[]
+): Promise<Map<string, CollectionRights>> {
+  const rights = new Map<string, CollectionRights>();
+  if (!collectionIds.length) return rights;
+  const placeholders = collectionIds.map(() => '?').join(',');
+  const rows = await db
+    .prepare(
+      'SELECT C.id AS collection_id, ' +
+        'COALESCE(CU.read_only, CG.read_only, 0) AS read_only, ' +
+        'COALESCE(CU.hide_passwords, CG.hide_passwords, 0) AS hide_passwords, ' +
+        'COALESCE(CU.manage, CG.manage, 0) AS manage, ' +
+        'CASE WHEN CU.collection_id IS NOT NULL THEN 1 ELSE 0 END AS direct ' +
+        'FROM collections C ' +
+        'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+        'LEFT JOIN collection_users CU ON CU.collection_id = C.id AND CU.org_user_id = OU.id ' +
+        'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
+        'LEFT JOIN collection_groups CG ON CG.collection_id = C.id AND CG.group_id = GU.group_id ' +
+        `WHERE C.id IN (${placeholders}) AND (CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1)`
+    )
+    .bind(userId, ...collectionIds)
+    .all<GrantRow>();
+  for (const row of rows.results || []) {
+    const entry: CollectionRights = {
+      collectionId: row.collection_id,
+      readOnly: !!row.read_only,
+      hidePasswords: !!row.hide_passwords,
+      manage: !!row.manage,
+      direct: !!row.direct,
+    };
+    const existing = rights.get(entry.collectionId);
+    if (!existing || (entry.direct && !existing.direct)) rights.set(entry.collectionId, entry);
+  }
+  return rights;
 }

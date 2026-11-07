@@ -163,11 +163,17 @@ import {
   getStoredGeneratorSettings,
   saveStoredGeneratorSettings,
 } from './storage-generator-settings-repo';
+import { canWriteItem } from './collection-access';
 import {
   addOrganizationUser as addStoredOrganizationUser,
   confirmOrganizationUser as confirmStoredOrganizationUser,
   createOrganizationWithOwner as createStoredOrganizationWithOwner,
+  getCollectionIdsByCipherIds as listStoredCollectionIdsByCipherIds,
+  getCollectionIdsForCipher as listStoredCollectionIdsForCipher,
   getCollectionRights as listStoredCollectionRights,
+  getCollectionRightsForCollections as listStoredCollectionRightsForCollections,
+  getOrganizationCollectionIds as listStoredOrganizationCollectionIds,
+  setCipherCollections as setStoredCipherCollections,
   getCollectionsForUser as listStoredCollectionsForUser,
   getGroupsForUser as listStoredGroupsForUser,
   getItemAccess as getStoredItemAccess,
@@ -579,10 +585,6 @@ export class StorageService {
     return findStoredCipher(this.db, id);
   }
 
-  async getCipherForUser(id: string, userId: string): Promise<Cipher | null> {
-    return findStoredCipherForUser(this.db, id, userId);
-  }
-
   async saveCipher(cipher: Cipher): Promise<void> {
     await saveStoredCipher(this.db, this.safeBind.bind(this), cipher);
   }
@@ -690,6 +692,50 @@ export class StorageService {
 
   async getCollectionRights(userId: string): Promise<CollectionRights[]> {
     return listStoredCollectionRights(this.db, userId);
+  }
+
+  async getCollectionRightsForCollections(userId: string, collectionIds: string[]) {
+    return listStoredCollectionRightsForCollections(this.db, userId, collectionIds);
+  }
+
+  async getOrganizationCollectionIds(orgId: string, collectionIds: string[]) {
+    return listStoredOrganizationCollectionIds(this.db, orgId, collectionIds);
+  }
+
+  async getCollectionIdsForCipher(cipherId: string): Promise<string[]> {
+    return listStoredCollectionIdsForCipher(this.db, cipherId);
+  }
+
+  async getCollectionIdsByCipherIds(cipherIds: string[]): Promise<Map<string, string[]>> {
+    return listStoredCollectionIdsByCipherIds(this.db, cipherIds);
+  }
+
+  async setCipherCollections(cipherId: string, collectionIds: string[]): Promise<void> {
+    return setStoredCipherCollections(this.db, cipherId, collectionIds);
+  }
+
+  /**
+   * The item, when the member may read it: their own, or one they reach
+   * through a collection of an organization they belong to.
+   */
+  async getCipherForUser(id: string, userId: string): Promise<Cipher | null> {
+    const owned = await findStoredCipherForUser(this.db, id, userId);
+    if (owned) return owned;
+    const cipher = await findStoredCipher(this.db, id);
+    if (!cipher?.organizationId) return null;
+    const access = await getStoredItemAccess(this.db, id, userId);
+    return access ? cipher : null;
+  }
+
+  /**
+   * Whether the member may change the item. `null` when they may not read it
+   * at all, so the caller can tell "missing" from "read only".
+   */
+  async getCipherWriteAccess(cipher: Cipher, userId: string): Promise<boolean | null> {
+    if (!cipher.organizationId) return cipher.userId === userId ? true : null;
+    const access = await getStoredItemAccess(this.db, cipher.id, userId);
+    if (!access) return null;
+    return canWriteItem(access);
   }
 
   async getGroupsForUser(userId: string): Promise<Group[]> {

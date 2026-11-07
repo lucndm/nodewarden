@@ -73,7 +73,8 @@ export function resolveItemAccess(grants: CollectionGrant[]): ItemAccess | null 
   if (!grants.length) return null;
 
   // The best grant per collection. A direct grant replaces the group grants
-  // for that collection; between group grants the better one wins.
+  // for that collection; between two grants of the same kind the better one
+  // wins, which is what the official SQL does with MAX(rank).
   const byCollection = new Map<string, CollectionGrant>();
   for (const grant of grants) {
     const existing = byCollection.get(grant.collectionId);
@@ -81,8 +82,11 @@ export function resolveItemAccess(grants: CollectionGrant[]): ItemAccess | null 
       byCollection.set(grant.collectionId, grant);
       continue;
     }
-    if (existing.direct) continue;
-    if (grant.direct || grantRank(grant) > grantRank(existing)) {
+    if (existing.direct !== grant.direct) {
+      if (grant.direct) byCollection.set(grant.collectionId, grant);
+      continue;
+    }
+    if (grantRank(grant) > grantRank(existing)) {
       byCollection.set(grant.collectionId, grant);
     }
   }
