@@ -53,7 +53,8 @@
     "deploy:kv": "node scripts/ensure-kv.cjs && wrangler deploy -c wrangler.kv.toml",
     "deploy:demo": "npm run build:demo && wrangler pages deploy dist --project-name nw-demo",
     "audit:prod-vault": "node scripts/prod-vault-audit.mjs",
-    "test:prod-vault-audit": "node scripts/prod-vault-audit.test.mjs"
+    "test:prod-vault-audit": "node scripts/prod-vault-audit.test.mjs",
+    "digest:backup": "node scripts/backup-archive-digest.mjs"
   },
   "keywords": [
     "bitwarden",
