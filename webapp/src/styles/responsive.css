@@ -956,6 +956,10 @@
     font-size: 16px;
   }
 
+  .item-history-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
 .toast-stack {
   top: 10px;
   left: 10px;

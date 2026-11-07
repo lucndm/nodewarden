@@ -20,7 +20,7 @@ import {
 import { readResponseBytesWithProgress } from '../download';
 import { loadVaultCoreSyncSnapshot } from './vault-sync';
 import { cipherFieldMetadata } from '../cipher-fields';
-import { t } from '../i18n';
+import { t, translateServerError } from '../i18n';
 
 type CipherLoginData = NonNullable<Cipher['login']>;
 const PASSWORD_HISTORY_MAX = 50;
@@ -128,6 +128,88 @@ export async function getCipherById(authedFetch: AuthedFetch, cipherId: string):
   const body = await parseJson<Cipher>(resp);
   if (!body?.id) throw new Error('Load cipher failed');
   return body;
+}
+
+// A stored version of one item. Names and item keys stay encrypted on the
+// server: the browser decrypts every label, the server never sees plaintext.
+export interface CipherVersionEntry {
+  id: string;
+  cipherId: string;
+  versionNo: number;
+  kind: 'created' | 'modified';
+  createdAt: string;
+  revisionDate: string;
+  name: string | null;
+  key: string | null;
+}
+
+export interface CipherVersionSnapshot extends CipherVersionEntry {
+  type: number;
+  notes: string | null;
+  reprompt: number;
+  data: string;
+}
+
+// The restore endpoint answers a conflict with { message }, other error bodies
+// use error/error_description, so all three are read here.
+async function parseApiErrorMessage(resp: Response, fallback: string): Promise<string> {
+  const body = await parseJson<{ message?: string; error?: string; error_description?: string }>(resp);
+  return translateServerError(body?.message || body?.error_description || body?.error, fallback);
+}
+
+// GET /api/ciphers/:cipherId/versions
+export async function getCipherVersions(authedFetch: AuthedFetch, cipherId: string): Promise<CipherVersionEntry[]> {
+  const id = String(cipherId || '').trim();
+  if (!id) throw new Error('Cipher id is required');
+  const resp = await authedFetch(`/api/ciphers/${encodeURIComponent(id)}/versions`);
+  if (!resp.ok) throw new Error(await parseApiErrorMessage(resp, 'Load item history failed'));
+  const body = await parseJson<CipherVersionEntry[] | { data?: CipherVersionEntry[] }>(resp);
+  const data = Array.isArray(body) ? body : body?.data;
+  return Array.isArray(data) ? data : [];
+}
+
+// GET /api/ciphers/:cipherId/versions/:versionId
+export async function getCipherVersion(
+  authedFetch: AuthedFetch,
+  cipherId: string,
+  versionId: string
+): Promise<CipherVersionSnapshot> {
+  const id = String(cipherId || '').trim();
+  const version = String(versionId || '').trim();
+  if (!id) throw new Error('Cipher id is required');
+  if (!version) throw new Error('Version id is required');
+  const resp = await authedFetch(`/api/ciphers/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}`);
+  if (resp.status === 404) throw createApiError('Version not found', 404);
+  if (!resp.ok) throw new Error(await parseApiErrorMessage(resp, 'Load item version failed'));
+  const body = await parseJson<CipherVersionSnapshot>(resp);
+  if (!body?.id) throw new Error('Load item version failed');
+  return body;
+}
+
+// POST /api/ciphers/:cipherId/versions/:versionId/restore
+// If-Match carries the revision date the client shows, so a restore never
+// overwrites a change that was made elsewhere in the meantime.
+export async function restoreCipherVersion(
+  authedFetch: AuthedFetch,
+  cipherId: string,
+  versionId: string,
+  expectedRevisionDate: string
+): Promise<Cipher> {
+  const id = String(cipherId || '').trim();
+  const version = String(versionId || '').trim();
+  if (!id) throw new Error('Cipher id is required');
+  if (!version) throw new Error('Version id is required');
+  const headers: Record<string, string> = {};
+  if (expectedRevisionDate) headers['If-Match'] = expectedRevisionDate;
+  const resp = await authedFetch(`/api/ciphers/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/restore`, {
+    method: 'POST',
+    headers,
+  });
+  if (!resp.ok) throw createApiError(await parseApiErrorMessage(resp, 'Restore item version failed'), resp.status);
+  const body = await parseJson<Cipher & { cipherDetails?: Cipher }>(resp);
+  const cipher = body?.cipherDetails || body;
+  if (!cipher?.id) throw new Error('Restore item version failed');
+  return cipher;
 }
 
 export interface CipherUsageEntry {

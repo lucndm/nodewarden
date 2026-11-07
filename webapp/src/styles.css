@@ -1829,7 +1829,7 @@ input[type='file'].input::file-selector-button {
 
 /* The item-history entry point sits below the metadata, full width, the way
    Proton surfaces "View item history". */
-.detail-meta-card .password-history-link {
+.detail-meta-card .detail-meta-link {
   display: block;
   width: 100%;
   margin-top: 16px;
@@ -1843,7 +1843,7 @@ input[type='file'].input::file-selector-button {
   text-decoration: none;
 }
 
-.detail-meta-card .password-history-link:hover {
+.detail-meta-card .detail-meta-link:hover {
   background: color-mix(in srgb, var(--primary) 22%, var(--panel));
   border-color: color-mix(in srgb, var(--primary) 58%, var(--line));
   color: var(--primary-strong);

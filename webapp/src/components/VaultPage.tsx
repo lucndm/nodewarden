@@ -36,6 +36,7 @@ import { calcTotpNow, type TotpCodeResult } from '@/lib/crypto';
 import { computeSshFingerprint, generateDefaultSshKeyMaterial } from '@/lib/ssh';
 import { ChevronLeft } from 'lucide-preact';
 import type { CipherUsageMap } from '@/lib/api/vault';
+import type { ItemHistoryEntry, ItemHistoryVersion } from '@/lib/item-history';
 import type { Cipher, CustomFieldType, Folder, VaultDraft, VaultDraftField } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import { looksLikeCipherString } from '@/lib/app-support';
@@ -70,6 +71,9 @@ interface VaultPageProps {
   onDeleteFolder: (folderId: string) => Promise<void>;
   onBulkDeleteFolders: (folderIds: string[]) => Promise<void>;
   onDownloadAttachment: (cipher: Cipher, attachmentId: string) => Promise<void>;
+  onLoadItemHistory: (cipherId: string) => Promise<ItemHistoryEntry[]>;
+  onLoadItemHistoryVersion: (cipherId: string, versionId: string) => Promise<ItemHistoryVersion>;
+  onRestoreItemHistoryVersion: (cipherId: string, versionId: string, expectedRevisionDate: string) => Promise<void>;
   downloadingAttachmentKey: string;
   attachmentDownloadPercent: number | null;
   uploadingAttachmentName: string;
@@ -1412,6 +1416,9 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 onToggleShowPassword={() => setShowPassword((value) => !value)}
                 onToggleHiddenField={(index) => setHiddenFieldVisibleMap((prev) => ({ ...prev, [index]: !prev[index] }))}
                 onDownloadAttachment={(cipher, attachmentId) => void props.onDownloadAttachment(cipher, attachmentId)}
+                onLoadItemHistory={props.onLoadItemHistory}
+                onLoadItemHistoryVersion={props.onLoadItemHistoryVersion}
+                onRestoreItemHistoryVersion={props.onRestoreItemHistoryVersion}
                 downloadingAttachmentKey={props.downloadingAttachmentKey}
                 attachmentDownloadPercent={props.attachmentDownloadPercent}
                 onStartEdit={startEdit}

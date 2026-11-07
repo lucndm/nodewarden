@@ -7,6 +7,7 @@ import LoadingState from '@/components/LoadingState';
 import type { AdminBackupImportResponse, AdminBackupRunResponse, AdminBackupSettings, RemoteBackupBrowserResponse } from '@/lib/api/backup';
 import type { AuditLogFilters } from '@/lib/api/admin';
 import type { CiphersImportPayload, CipherUsageMap } from '@/lib/api/vault';
+import type { ItemHistoryEntry, ItemHistoryVersion } from '@/lib/item-history';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { t } from '@/lib/i18n';
 import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
@@ -106,6 +107,9 @@ export interface AppMainRoutesProps {
   onDeleteFolder: (folderId: string) => Promise<void>;
   onBulkDeleteFolders: (folderIds: string[]) => Promise<void>;
   onDownloadVaultAttachment: (cipher: Cipher, attachmentId: string) => Promise<void>;
+  onLoadItemHistory: (cipherId: string) => Promise<ItemHistoryEntry[]>;
+  onLoadItemHistoryVersion: (cipherId: string, versionId: string) => Promise<ItemHistoryVersion>;
+  onRestoreItemHistoryVersion: (cipherId: string, versionId: string, expectedRevisionDate: string) => Promise<void>;
   downloadingAttachmentKey: string;
   attachmentDownloadPercent: number | null;
   uploadingAttachmentName: string;
@@ -290,6 +294,9 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             onDeleteFolder={props.onDeleteFolder}
             onBulkDeleteFolders={props.onBulkDeleteFolders}
             onDownloadAttachment={props.onDownloadVaultAttachment}
+            onLoadItemHistory={props.onLoadItemHistory}
+            onLoadItemHistoryVersion={props.onLoadItemHistoryVersion}
+            onRestoreItemHistoryVersion={props.onRestoreItemHistoryVersion}
             downloadingAttachmentKey={props.downloadingAttachmentKey}
             attachmentDownloadPercent={props.attachmentDownloadPercent}
             uploadingAttachmentName={props.uploadingAttachmentName}

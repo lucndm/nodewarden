@@ -43,8 +43,11 @@ import {
   encryptFolderImportName,
   getAttachmentDownloadInfo,
   getCipherById,
+  getCipherVersion,
+  getCipherVersions,
   importCiphers,
   permanentDeleteCipher,
+  restoreCipherVersion,
   type CiphersImportPayload,
   type ImportedCipherMapEntry,
   updateCipher,
@@ -52,6 +55,7 @@ import {
   unarchiveCipher,
   uploadCipherAttachment,
 } from '@/lib/api/vault';
+import { decryptItemHistoryEntry, decryptItemHistoryVersion, type ItemHistoryEntry, type ItemHistoryVersion } from '@/lib/item-history';
 import { deriveLoginHash, getPreloginKdfConfig, verifyMasterPassword } from '@/lib/api/auth';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { downloadBytesAsFile } from '@/lib/download';
@@ -641,6 +645,55 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         } finally {
           setUploadingAttachmentName('');
           setAttachmentUploadPercent(null);
+        }
+      },
+
+      async loadItemHistory(cipherId: string): Promise<ItemHistoryEntry[]> {
+        if (!session?.symEncKey || !session?.symMacKey) throw new Error(t('txt_vault_key_unavailable'));
+        try {
+          const raw = await getCipherVersions(authedFetch, cipherId);
+          const enc = base64ToBytes(session.symEncKey);
+          const mac = base64ToBytes(session.symMacKey);
+          const entries = await Promise.all(raw.map((entry) => decryptItemHistoryEntry(entry, enc, mac)));
+          // Newest version first, the timeline reads from the top down.
+          return entries.sort((a, b) => b.versionNo - a.versionNo);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_load_vault_failed'));
+          throw error;
+        }
+      },
+
+      async loadItemHistoryVersion(cipherId: string, versionId: string): Promise<ItemHistoryVersion> {
+        if (!session?.symEncKey || !session?.symMacKey) throw new Error(t('txt_vault_key_unavailable'));
+        try {
+          const raw = await getCipherVersion(authedFetch, cipherId, versionId);
+          return await decryptItemHistoryVersion(raw, base64ToBytes(session.symEncKey), base64ToBytes(session.symMacKey));
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_load_vault_failed'));
+          throw error;
+        }
+      },
+
+      async restoreItemHistoryVersion(cipherId: string, versionId: string, expectedRevisionDate: string): Promise<void> {
+        try {
+          requireOnlineWrite();
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_offline_vault_readonly'));
+          throw error;
+        }
+        try {
+          const restored = await restoreCipherVersion(authedFetch, cipherId, versionId, expectedRevisionDate);
+          await decryptAndPatch(restored);
+          void refreshVaultRevisionStamp();
+          onNotify('success', t('txt_item_history_restored'));
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_update_item_failed'));
+          // The item changed elsewhere: pick up the state the server holds so
+          // the timeline is compared against the real current version.
+          if ((error as { status?: number } | null)?.status === 409) {
+            await refetchCiphers().catch(() => {});
+          }
+          throw error;
         }
       },
 
