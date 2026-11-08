@@ -20,6 +20,8 @@ interface VaultDialogsProps {
   folders: Folder[];
   createFolderOpen: boolean;
   newFolderName: string;
+  createOrganizationOpen: boolean;
+  newOrganizationName: string;
   renameFolderOpen: boolean;
   renameFolderName: string;
   pendingDeleteFolder: Folder | null;
@@ -44,6 +46,9 @@ interface VaultDialogsProps {
   onCancelMove: () => void;
   onMoveFolderIdChange: (value: string) => void;
   onConfirmCreateFolder: () => void;
+  onConfirmCreateOrganization: () => void;
+  onCancelCreateOrganization: () => void;
+  onNewOrganizationNameChange: (name: string) => void;
   onCancelCreateFolder: () => void;
   onNewFolderNameChange: (value: string) => void;
   onConfirmRenameFolder: () => void;
@@ -202,6 +207,23 @@ export default function VaultDialogs(props: VaultDialogsProps) {
         <label className="field">
           <span>{t('txt_folder_name')}</span>
           <input className="input" value={props.newFolderName} onInput={(e) => props.onNewFolderNameChange((e.currentTarget as HTMLInputElement).value)} />
+        </label>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={props.createOrganizationOpen}
+        title={t('txt_create_organization')}
+        message={t('txt_enter_an_organization_name')}
+        confirmText={t('txt_create')}
+        cancelText={t('txt_cancel')}
+        confirmDisabled={props.busy}
+        cancelDisabled={props.busy}
+        onConfirm={props.onConfirmCreateOrganization}
+        onCancel={props.onCancelCreateOrganization}
+      >
+        <label className="field">
+          <span>{t('txt_organization_name')}</span>
+          <input className="input" value={props.newOrganizationName} onInput={(e) => props.onNewOrganizationNameChange((e.currentTarget as HTMLInputElement).value)} />
         </label>
       </ConfirmDialog>
 

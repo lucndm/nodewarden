@@ -168,6 +168,49 @@ async function reencryptPayload(
 }
 
 /**
+ * The key material a new organization needs.
+ */
+export interface NewOrganizationKeyMaterial {
+  /** The organization key, wrapped for the owner in the `4.` form. */
+  wrappedKey: string;
+  /** The organization's own RSA public key (SPKI, base64). */
+  publicKey: string;
+  /** The organization's RSA private key, sealed under the organization key. */
+  encryptedPrivateKey: string;
+}
+
+/**
+ * Makes the key material for a new organization.
+ *
+ * The server stores what it cannot read, so the keys are made here: the
+ * organization gets its own RSA key pair and a 64-byte symmetric key, the
+ * symmetric key is wrapped for the owner with the owner's RSA key, and the
+ * organization's private key is sealed under the symmetric key.
+ *
+ * The organization key itself never leaves this function: only its wrapped
+ * form does.
+ */
+export async function createOrganizationKeyMaterial(input: {
+  /** The owner's RSA public key (SPKI, base64). */
+  ownerPublicKey: string;
+}): Promise<NewOrganizationKeyMaterial> {
+  const organizationKey = randomKey();
+  const keyHalves = splitKey(organizationKey);
+  const pair = (await crypto.subtle.generateKey(
+    { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-1' },
+    true,
+    ['encrypt', 'decrypt']
+  )) as CryptoKeyPair;
+  const publicKey = new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey));
+  const privateKey = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
+  return {
+    wrappedKey: await wrapKeyForMember(organizationKey, input.ownerPublicKey),
+    publicKey: bytesToBase64(publicKey),
+    encryptedPrivateKey: await encryptBw(privateKey, keyHalves.encKey, keyHalves.macKey),
+  };
+}
+
+/**
  * Rotates the organization key and every blob that depends on it.
  *
  * The caller unwraps the old organization key with the owner's own key first;

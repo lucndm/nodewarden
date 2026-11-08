@@ -74,6 +74,10 @@ export function buildProfileResponse(
     yubikeyEnabled: isYubiKeyEnabled(user),
     key: user.key,
     privateKey: user.privateKey,
+    // The account's public key is public: the official clients read it from
+    // the profile, and a client that has to wrap an organization key for its
+    // owner needs it.
+    publicKey: user.publicKey ?? '',
     accountKeys,
     securityStamp: user.securityStamp || user.id,
     organizations,

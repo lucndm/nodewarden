@@ -621,6 +621,8 @@ export interface ProfileResponse {
   yubikeyEnabled?: boolean;
   key: string;
   privateKey: string | null;
+  /** The account's RSA public key, base64 SPKI. */
+  publicKey?: string;
   accountKeys: any | null;
   securityStamp: string;
   organizations: any[];

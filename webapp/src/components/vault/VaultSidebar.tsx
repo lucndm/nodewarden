@@ -56,6 +56,8 @@ interface VaultSidebarProps {
   onChangeFilter: (filter: SidebarFilter) => void;
   onOpenDeleteAllTags: () => void;
   onOpenCreateTag: () => void;
+  /** The member creates an organization and becomes its owner. */
+  onOpenCreateOrganization: () => void;
   /** The owner or an admin opens the organization to manage it. */
   onManageOrganization: (organizationId: string) => void;
   /** The invited member accepts the invitation. */
@@ -103,10 +105,20 @@ export default function VaultSidebar(props: VaultSidebarProps) {
         </button>
       </div>
 
-      {props.organizations.length > 0 && (
-        <div className="sidebar-block">
+      <div className="sidebar-block">
+        <div className="sidebar-title-row">
           <div className="sidebar-title">{t('txt_organizations')}</div>
-          {props.organizations.map((organization) => (
+          <button
+            type="button"
+            className="folder-add-btn"
+            title={t('txt_create_organization')}
+            aria-label={t('txt_create_organization')}
+            onClick={props.onOpenCreateOrganization}
+          >
+            <Landmark size={14} />
+          </button>
+        </div>
+        {props.organizations.map((organization) => (
             <div key={organization.id} className="sidebar-org-group">
               <button
                 type="button"
@@ -160,8 +172,7 @@ export default function VaultSidebar(props: VaultSidebarProps) {
               ))}
             </div>
           ))}
-        </div>
-      )}
+      </div>
 
       <div className="sidebar-block">
         <div className="sidebar-title">{t('txt_type')}</div>

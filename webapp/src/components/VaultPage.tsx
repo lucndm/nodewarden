@@ -138,6 +138,8 @@ export default function VaultPage(props: VaultPageProps) {
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveFolderId, setMoveFolderId] = useState('__none__');
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [createOrganizationOpen, setCreateOrganizationOpen] = useState(false);
+  const [newOrganizationName, setNewOrganizationName] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [pendingRenameFolder, setPendingRenameFolder] = useState<Folder | null>(null);
   const [renameFolderName, setRenameFolderName] = useState('');
@@ -1126,6 +1128,24 @@ const folderName = useCallback((id: string | null | undefined): string => {
     }
   }
 
+  async function confirmCreateOrganization(): Promise<void> {
+    const name = newOrganizationName.trim();
+    if (!name) {
+      props.onNotify('error', t('txt_organization_name_required'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const created = await props.organizationActions.createOrganization(name);
+      if (created) {
+        setCreateOrganizationOpen(false);
+        setNewOrganizationName('');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function confirmDeleteFolder(): Promise<void> {
     if (!pendingDeleteFolder) return;
     setBusy(true);
@@ -1385,6 +1405,10 @@ const folderName = useCallback((id: string | null | undefined): string => {
       onChangeFilter={handleChangeFilter}
       onOpenDeleteAllTags={handleOpenDeleteAllFolders}
       onOpenCreateTag={handleOpenCreateFolder}
+      onOpenCreateOrganization={() => {
+        setNewOrganizationName('');
+        setCreateOrganizationOpen(true);
+      }}
       onOpenRenameTag={(entry) => handleOpenRenameFolder({ id: entry.folderId, name: entry.tag })}
       onOpenDeleteTag={(entry) => setPendingDeleteFolder({ id: entry.folderId, name: entry.tag })}
     />
@@ -1688,6 +1712,8 @@ const folderName = useCallback((id: string | null | undefined): string => {
         folders={props.folders}
         createFolderOpen={createFolderOpen}
         newFolderName={newFolderName}
+        createOrganizationOpen={createOrganizationOpen}
+        newOrganizationName={newOrganizationName}
         renameFolderOpen={!!pendingRenameFolder}
         renameFolderName={renameFolderName}
         pendingDeleteFolder={pendingDeleteFolder}
@@ -1736,6 +1762,9 @@ const folderName = useCallback((id: string | null | undefined): string => {
         onCancelMove={() => setMoveOpen(false)}
         onMoveFolderIdChange={setMoveFolderId}
         onConfirmCreateFolder={() => void confirmCreateFolder()}
+        onConfirmCreateOrganization={() => void confirmCreateOrganization()}
+        onCancelCreateOrganization={() => setCreateOrganizationOpen(false)}
+        onNewOrganizationNameChange={setNewOrganizationName}
         onCancelCreateFolder={() => {
           setCreateFolderOpen(false);
           setNewFolderName('');

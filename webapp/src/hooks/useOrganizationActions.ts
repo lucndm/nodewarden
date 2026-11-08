@@ -10,10 +10,16 @@
 import { useState } from 'preact/hooks';
 import { t } from '@/lib/i18n';
 import { base64ToBytes } from '@/lib/crypto';
-import { applyOrganizationKeyRotation, openOrganizationKey, wrapKeyForMember } from '@/lib/organization-key-rotation';
+import {
+  applyOrganizationKeyRotation,
+  createOrganizationKeyMaterial,
+  openOrganizationKey,
+  wrapKeyForMember,
+} from '@/lib/organization-key-rotation';
 import {
   acceptOrganizationInvitation,
   confirmOrganizationMember,
+  createOrganization as createOrganizationApi,
   createOrganizationGroup,
   deleteOrganizationGroup,
   getOrganizationGroups,
@@ -328,6 +334,41 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     }
   };
 
+  /**
+   * Creates an organization and hands the owner its key.
+   *
+   * The key material is made here, not on the server: the server stores what
+   * it cannot read, and an organization whose key nobody can unwrap is a
+   * shell. The owner's own RSA key wraps the new organization key.
+   */
+  const createOrganization = async (name: string) => {
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) {
+      input.onNotify('error', t('txt_organization_name_required'));
+      return false;
+    }
+    if (!input.profile?.publicKey) {
+      input.onNotify('error', t('txt_organization_key_missing'));
+      return false;
+    }
+    setBusyOrganizationId('new');
+    try {
+      const material = await createOrganizationKeyMaterial({ ownerPublicKey: input.profile.publicKey });
+      await createOrganizationApi(input.authedFetch, { name: trimmedName, ...material });
+      await input.onChanged();
+      input.onNotify('success', t('txt_organization_created'));
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_organization_create_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
+
   const rotateOrganizationKey = async (organizationId: string) => {
     const organization = input.organizations.find((entry) => entry.id === organizationId);
     if (!organization) return false;
@@ -399,6 +440,7 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
   };
 
   return {
+    createOrganization,
     rotateOrganizationKey,
     rotatingOrganizationId,
     acceptInvitation,

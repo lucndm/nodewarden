@@ -165,6 +165,42 @@ export async function acceptOrganizationInvitation(
 }
 
 /**
+ * Creates an organization.
+ *
+ * The key material is made on the client, so the body carries the wrapped
+ * organization key and the organization's own key pair, not the key itself.
+ */
+export async function createOrganization(
+  authedFetch: AuthedFetch,
+  input: {
+    name: string;
+    collectionName?: string;
+    /** The organization key, wrapped for the owner in the `4.` form. */
+    wrappedKey: string;
+    /** The organization's RSA public key (SPKI, base64). */
+    publicKey: string;
+    /** The organization's RSA private key, sealed under the organization key. */
+    encryptedPrivateKey: string;
+  }
+): Promise<VaultOrganization> {
+  const resp = await authedFetch('/api/organizations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: input.name,
+      collectionName: input.collectionName || 'Default',
+      key: input.wrappedKey,
+      keys: { publicKey: input.publicKey, encryptedPrivateKey: input.encryptedPrivateKey },
+    }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_organization_create_failed')));
+  const body = await parseJson<Record<string, unknown>>(resp);
+  const organization = body ? normalizeOrganization(body) : null;
+  if (!organization) throw new Error(t('txt_organization_create_failed'));
+  return organization;
+}
+
+/**
  * A group of an organization.
  *
  * A group is a shortcut: it hands a set of collections to a set of members in
