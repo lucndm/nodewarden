@@ -158,6 +158,15 @@ async function main() {
   const tableRows = await queryAll(database.uuid, "SELECT name FROM sqlite_master WHERE type = 'table'");
   const tables = new Set(tableRows.map((row) => String(row.name || '')));
   const missingTables = EXPECTED_TABLES.filter((name) => !tables.has(name));
+  // Items the migration must carry: a personal item's attachments and its
+  // history are sealed with the item key, so moving the item to an
+  // organization means re-sealing them too. The counts say how much is at
+  // stake before anything is moved.
+  const attachments = tables.has('attachments') ? await queryAll(database.uuid, 'SELECT id, cipher_id FROM attachments') : [];
+  const versions = tables.has('cipher_versions') ? await queryAll(database.uuid, 'SELECT id, cipher_id FROM cipher_versions') : [];
+  const sends = tables.has('sends') ? await queryAll(database.uuid, 'SELECT id FROM sends') : [];
+  const attachmentCipherIds = new Set(attachments.map((row) => String(row.cipher_id || '')));
+  const versionCipherIds = new Set(versions.map((row) => String(row.cipher_id || '')));
   const organizationPolicies = tables.has('organization_policies')
     ? await queryAll(database.uuid, 'SELECT id, org_id, type, enabled FROM organization_policies')
     : [];
@@ -206,6 +215,11 @@ async function main() {
     duplicateFolderNames,
     items: ciphers.length,
     itemsInAFolder: ciphers.filter((cipher) => !!cipher.folder_id).length,
+    attachments: attachments.length,
+    itemsWithAttachments: attachmentCipherIds.size,
+    cipherVersions: versions.length,
+    itemsWithHistory: versionCipherIds.size,
+    sends: sends.length,
     itemsWithoutFolder,
     itemsWithTags,
     itemsWithCiphertextShapedTag: junkTags,
