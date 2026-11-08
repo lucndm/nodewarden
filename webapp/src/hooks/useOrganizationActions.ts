@@ -485,7 +485,9 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
           setMigrationProgress(progress);
         },
       });
-      await input.onChanged();
+      // The vault is read again: the items moved, so the sidebar and the
+      // lists have to show where they are now.
+      await input.onRotated();
       input.onNotify(
         result.failed.length ? 'warning' : 'success',
         result.failed.length
