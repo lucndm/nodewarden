@@ -221,6 +221,9 @@ async function main() {
     namePerUser.set(key, (namePerUser.get(key) || 0) + 1);
   }
   const duplicateFolderNames = [...namePerUser.values()].filter((count) => count > 1).length;
+  // A folder with no name cannot become a collection: there would be nothing
+  // to call it. Its items have to go somewhere else.
+  const foldersWithoutName = folders.filter((folder) => !String(folder.name || '').trim()).length;
   const foldersWithoutTagName = folders.filter((folder) => folder.tag_name === null || folder.tag_name === '').length;
 
   const folderIds = new Set(folders.map((folder) => folder.id));
@@ -257,6 +260,7 @@ async function main() {
     folders: folders.length,
     foldersWithPlainTextName: plainTextFolders.length,
     foldersWithoutTagName,
+    foldersWithoutName,
     duplicateFolderNames,
     items: ciphers.length,
     itemsInAFolder: ciphers.filter((cipher) => !!cipher.folder_id).length,

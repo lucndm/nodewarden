@@ -348,6 +348,176 @@ test('a personal vault moves into the organization', async () => {
   );
 });
 
+test('an item whose folder has no collection goes to the general collection', async () => {
+  const { env, owner, vaultHalves, organizationHalves } = await vault();
+
+  const authedFetch = async (url: string, init?: RequestInit) => {
+    const path = new URL(url, 'https://vault.example.test').pathname;
+    const response = await handleAuthenticatedRoute(
+      new Request(`https://vault.example.test${url}`, init),
+      env,
+      OWNER,
+      { id: OWNER } as never,
+      path,
+      init?.method ?? 'GET'
+    );
+    assert.ok(response, `no route answered ${path}`);
+    return response;
+  };
+
+  // The folder's name is sealed with a key this account does not hold, so it
+  // cannot become a collection and its item has to go somewhere else.
+  const stranger = new Uint8Array(64).fill(11);
+  await env.DB.prepare('UPDATE folders SET name = ? WHERE id = ?')
+    .bind(await encryptBw(new TextEncoder().encode('Work'), stranger.slice(0, 32), stranger.slice(32)), FOLDER)
+    .run();
+
+  const item = (await env.DB.prepare('SELECT name, notes, key, folder_id FROM ciphers WHERE id = ?')
+    .bind(ITEM)
+    .first<{ name: string; notes: string | null; key: string | null; folder_id: string | null }>())!;
+
+  const result = await migratePersonalVaultIntoOrganization({
+    authedFetch,
+    userEncKey: bytesToBase64(vaultHalves.encKey),
+    userMacKey: bytesToBase64(vaultHalves.macKey),
+    encryptedPrivateKey: (
+      await env.DB.prepare('SELECT private_key FROM users WHERE id = ?').bind(OWNER).first<{ private_key: string }>()
+    )!.private_key,
+    organization: { id: ORGANIZATION, wrappedKey: await wrap(owner.publicKey, new Uint8Array(64).fill(9)) },
+    folders: [
+      {
+        id: FOLDER,
+        name: (
+          await env.DB.prepare('SELECT name FROM folders WHERE id = ?').bind(FOLDER).first<{ name: string }>()
+        )!.name,
+      },
+    ],
+    items: [
+      {
+        id: ITEM,
+        key: item.key,
+        name: item.name,
+        notes: item.notes,
+        folderId: item.folder_id,
+        fields: JSON.parse(
+          (
+            await env.DB.prepare('SELECT data FROM ciphers WHERE id = ?').bind(ITEM).first<{ data: string }>()
+          )!.data
+        ) as Record<string, unknown>,
+        attachments: [],
+        versions: [],
+      },
+    ],
+    existingCollections: [],
+  });
+
+  // The folder could not be read, so it is reported, but its item still moves.
+  assert.equal(result.failed.length, 1, `only the folder failed: ${JSON.stringify(result.failed)}`);
+  assert.equal(result.items, 1, 'the item moved anyway');
+  const collections = await env.DB.prepare('SELECT collection_id FROM collection_ciphers WHERE cipher_id = ?')
+    .bind(ITEM)
+    .all<{ collection_id: string }>();
+  assert.equal(collections.results.length, 1, 'the item sits in a collection');
+  const general = (await env.DB.prepare('SELECT id, name FROM collections WHERE org_id = ? AND id != ?')
+    .bind(ORGANIZATION, COLLECTION)
+    .all<{ id: string; name: string }>()).results;
+  const generalNames: string[] = [];
+  for (const row of general) {
+    try {
+      generalNames.push(
+        new TextDecoder().decode(await decryptBw(row.name, organizationHalves.encKey, organizationHalves.macKey))
+      );
+    } catch {
+      // Not a name this organization can open.
+    }
+  }
+  const generalCollection = general[generalNames.indexOf('General')];
+  assert.ok(generalCollection, 'the general collection exists');
+  assert.equal(collections.results[0].collection_id, generalCollection.id, 'the item went to the general collection');
+});
+
+test('an item that changed during the move is moved again from the current copy', async () => {
+  const { env, owner, vaultHalves } = await vault();
+
+  let shareCalls = 0;
+  const authedFetch = async (url: string, init?: RequestInit) => {
+    const path = new URL(url, 'https://vault.example.test').pathname;
+    // The first share is refused the way the server refuses a stale copy.
+    if (path.endsWith('/share')) {
+      shareCalls += 1;
+      if (shareCalls > 1) {
+        const response = await handleAuthenticatedRoute(
+          new Request(`https://vault.example.test${url}`, init),
+          env,
+          OWNER,
+          { id: OWNER } as never,
+          path,
+          init?.method ?? 'GET'
+        );
+        assert.ok(response, `no route answered ${path}`);
+        return response;
+      }
+      return new Response(
+        JSON.stringify({ error: 'The client copy of this cipher is out of date. Resync the client and try again.' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    const response = await handleAuthenticatedRoute(
+      new Request(`https://vault.example.test${url}`, init),
+      env,
+      OWNER,
+      { id: OWNER } as never,
+      path,
+      init?.method ?? 'GET'
+    );
+    assert.ok(response, `no route answered ${path}`);
+    return response;
+  };
+
+  const item = (await env.DB.prepare('SELECT name, notes, key, folder_id FROM ciphers WHERE id = ?')
+    .bind(ITEM)
+    .first<{ name: string; notes: string | null; key: string | null; folder_id: string | null }>())!;
+
+  const result = await migratePersonalVaultIntoOrganization({
+    authedFetch,
+    userEncKey: bytesToBase64(vaultHalves.encKey),
+    userMacKey: bytesToBase64(vaultHalves.macKey),
+    encryptedPrivateKey: (
+      await env.DB.prepare('SELECT private_key FROM users WHERE id = ?').bind(OWNER).first<{ private_key: string }>()
+    )!.private_key,
+    organization: { id: ORGANIZATION, wrappedKey: await wrap(owner.publicKey, new Uint8Array(64).fill(9)) },
+    folders: [
+      {
+        id: FOLDER,
+        name: (
+          await env.DB.prepare('SELECT name FROM folders WHERE id = ?').bind(FOLDER).first<{ name: string }>()
+        )!.name,
+      },
+    ],
+    items: [
+      {
+        id: ITEM,
+        key: item.key,
+        name: item.name,
+        notes: item.notes,
+        folderId: item.folder_id,
+        fields: JSON.parse(
+          (
+            await env.DB.prepare('SELECT data FROM ciphers WHERE id = ?').bind(ITEM).first<{ data: string }>()
+          )!.data
+        ) as Record<string, unknown>,
+        attachments: [],
+        versions: [],
+      },
+    ],
+    existingCollections: [],
+  });
+
+  assert.equal(result.failed.length, 0, `nothing failed: ${JSON.stringify(result.failed)}`);
+  assert.equal(result.items, 1, 'the item moved after the conflict');
+  assert.equal(shareCalls, 2, 'the item was shared again from the current copy');
+});
+
 test('a second move leaves what already moved alone', async () => {
   const { env, owner, vaultHalves } = await vault();
 

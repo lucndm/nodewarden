@@ -154,6 +154,181 @@ async function loadItemHistory(
 }
 
 /**
+ * The fields of an item that make up its payload.
+ *
+ * The server keeps the name, the notes and the key in columns of their own
+ * and everything else in the payload, so these are the fields that travel
+ * with the item when it moves.
+ */
+const CIPHER_COLUMN_FIELDS = new Set([
+  'id',
+  'userId',
+  'type',
+  'folderId',
+  'name',
+  'notes',
+  'favorite',
+  'reprompt',
+  'key',
+  'attachments',
+  'createdAt',
+  'creationDate',
+  'updatedAt',
+  'revisionDate',
+  'archivedAt',
+  'archivedDate',
+  'deletedAt',
+  'deletedDate',
+  'organizationId',
+  'collectionIds',
+  'object',
+]);
+
+export function cipherPayloadFields(cipher: object): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(cipher)) {
+    if (CIPHER_COLUMN_FIELDS.has(key)) continue;
+    fields[key] = value;
+  }
+  return fields;
+}
+
+/**
+ * Reads an item as the server stores it, so a move can be retried against
+ * the current copy instead of the one it started from.
+ */
+async function loadItem(authedFetch: AuthedFetch, itemId: string): Promise<MigrationItem | null> {
+  const response = await authedFetch(`/api/ciphers/${encodeURIComponent(itemId)}`);
+  if (!response.ok) return null;
+  const cipher = (await response.json()) as Record<string, unknown>;
+  if (!cipher || !cipher.id) return null;
+  return {
+    id: String(cipher.id),
+    key: typeof cipher.key === 'string' ? cipher.key : null,
+    name: typeof cipher.name === 'string' ? cipher.name : null,
+    notes: typeof cipher.notes === 'string' ? cipher.notes : null,
+    folderId: typeof cipher.folderId === 'string' ? cipher.folderId : null,
+    fields: cipherPayloadFields(cipher),
+    attachments: (Array.isArray(cipher.attachments) ? cipher.attachments : [])
+      .map((attachment) => ({
+        id: String((attachment as Record<string, unknown>)?.id || ''),
+        key: typeof (attachment as Record<string, unknown>)?.key === 'string'
+          ? ((attachment as Record<string, unknown>).key as string)
+          : null,
+      }))
+      .filter((attachment) => !!attachment.id),
+    versions: [],
+  };
+}
+
+/**
+ * Moves one item into the organization.
+ *
+ * The item gets a fresh key wrapped for the organization, its payload is
+ * re-encrypted with it, and its attachments and history are re-sealed.
+ */
+async function shareItem(
+  input: { authedFetch: AuthedFetch; organization: { id: string; wrappedKey: string } },
+  item: MigrationItem,
+  organizationHalves: { encKey: Uint8Array; macKey: Uint8Array },
+  userEnc: Uint8Array,
+  userMac: Uint8Array,
+  collectionIds: string[]
+): Promise<{ ok: boolean; reason: string; conflict: boolean }> {
+  const oldItemKey = item.key
+    ? splitKey(await decryptBw(item.key, userEnc, userMac))
+    : { encKey: userEnc, macKey: userMac };
+  const newItemKeyRaw = randomKey();
+  const newItemKey = splitKey(newItemKeyRaw);
+  const newItemKeySealed = await encryptBw(newItemKeyRaw, organizationHalves.encKey, organizationHalves.macKey);
+
+  const name = item.name
+    ? ((await reencryptPayload(item.name, oldItemKey, newItemKey, `${item.id}.name`)) as string)
+    : null;
+  const notes = item.notes
+    ? ((await reencryptPayload(item.notes, oldItemKey, newItemKey, `${item.id}.notes`)) as string)
+    : null;
+  const fields = (await reencryptPayload(item.fields, oldItemKey, newItemKey, item.id)) as Record<string, unknown>;
+  // The tags were the personal folders; a shared item's collections are its
+  // place now.
+  if (Array.isArray(fields.tags)) fields.tags = [];
+
+  // The attachments and the history are sealed with the item key too, so they
+  // are re-sealed with the new one. The history carries the item's wrapped
+  // key, which becomes the new one.
+  const attachments = await Promise.all(
+    (item.attachments ?? []).map(async (attachment) => ({
+      id: attachment.id,
+      key: attachment.key
+        ? ((await reencryptPayload(
+            attachment.key,
+            oldItemKey,
+            newItemKey,
+            `${item.id}.attachment.${attachment.id}.key`
+          )) as string)
+        : null,
+    }))
+  );
+  const history = item.versions?.length ? item.versions : await loadItemHistory(input.authedFetch, item.id);
+  const versions = await Promise.all(
+    history.map(async (version) => ({
+      id: version.id,
+      key: newItemKeySealed,
+      name: version.name
+        ? ((await reencryptPayload(
+            version.name,
+            oldItemKey,
+            newItemKey,
+            `${item.id}.version.${version.id}.name`
+          )) as string)
+        : null,
+      notes: version.notes
+        ? ((await reencryptPayload(
+            version.notes,
+            oldItemKey,
+            newItemKey,
+            `${item.id}.version.${version.id}.notes`
+          )) as string)
+        : null,
+      data: (await reencryptPayload(
+        version.data,
+        oldItemKey,
+        newItemKey,
+        `${item.id}.version.${version.id}.data`
+      )) as Record<string, unknown>,
+    }))
+  );
+
+  const response = await input.authedFetch(`/api/ciphers/${encodeURIComponent(item.id)}/share`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...fields,
+      id: item.id,
+      name,
+      notes,
+      // The payload travels as the fields it is made of. The nested form the
+      // official clients use is not sent, so nothing that was sealed with the
+      // old key is left behind.
+      data: null,
+      key: newItemKeySealed,
+      organizationId: input.organization.id,
+      collectionIds,
+      attachments,
+      versions,
+    }),
+  });
+  if (response.ok) return { ok: true, reason: '', conflict: false };
+  const detail = await response.text().catch(() => '');
+  return {
+    ok: false,
+    reason: `The item was not shared (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+    // The server refuses a write whose copy is older than the one it holds.
+    conflict: response.status === 400 && /out of date/i.test(detail),
+  };
+}
+
+/**
  * Moves a personal vault into an organization.
  *
  * The organization key is opened with the member's own key, the folders
@@ -263,105 +438,37 @@ export async function migratePersonalVaultIntoOrganization(input: {
       label: item.id,
     });
     try {
-      const oldItemKey = item.key
-        ? splitKey(await decryptBw(item.key, userEnc, userMac))
-        : { encKey: userEnc, macKey: userMac };
-      const newItemKeyRaw = randomKey();
-      const newItemKey = splitKey(newItemKeyRaw);
-      const newItemKeySealed = await encryptBw(newItemKeyRaw, organizationHalves.encKey, organizationHalves.macKey);
-
-      const name = item.name
-        ? ((await reencryptPayload(item.name, oldItemKey, newItemKey, `${item.id}.name`)) as string)
-        : null;
-      const notes = item.notes
-        ? ((await reencryptPayload(item.notes, oldItemKey, newItemKey, `${item.id}.notes`)) as string)
-        : null;
-      const fields = (await reencryptPayload(item.fields, oldItemKey, newItemKey, item.id)) as Record<string, unknown>;
-      // The tags were the personal folders; a shared item's collections are
-      // its place now.
-      if (Array.isArray(fields.tags)) fields.tags = [];
-
-      // The attachments and the history are sealed with the item key too, so
-      // they are re-sealed with the new one. The history carries the item's
-      // wrapped key, which becomes the new one.
-      const attachments = await Promise.all(
-        (item.attachments ?? []).map(async (attachment) => ({
-          id: attachment.id,
-          key: attachment.key
-            ? ((await reencryptPayload(
-                attachment.key,
-                oldItemKey,
-                newItemKey,
-                `${item.id}.attachment.${attachment.id}.key`
-              )) as string)
-            : null,
-        }))
-      );
-      const history = item.versions?.length ? item.versions : await loadItemHistory(input.authedFetch, item.id);
-      const versions = await Promise.all(
-        history.map(async (version) => ({
-          id: version.id,
-          key: newItemKeySealed,
-          name: version.name
-            ? ((await reencryptPayload(
-                version.name,
-                oldItemKey,
-                newItemKey,
-                `${item.id}.version.${version.id}.name`
-              )) as string)
-            : null,
-          notes: version.notes
-            ? ((await reencryptPayload(
-                version.notes,
-                oldItemKey,
-                newItemKey,
-                `${item.id}.version.${version.id}.notes`
-              )) as string)
-            : null,
-          data: (await reencryptPayload(
-            version.data,
-            oldItemKey,
-            newItemKey,
-            `${item.id}.version.${version.id}.data`
-          )) as Record<string, unknown>,
-        }))
-      );
-
-      const collectionIds = item.folderId ? [collectionByFolder.get(item.folderId)] : [generalCollectionId];
-      const targetCollectionIds = collectionIds.filter((id): id is string => !!id);
-      if (!targetCollectionIds.length) {
+      // The item's collection is the one its folder became. A folder whose
+      // collection could not be made leaves its item without a place, so the
+      // item goes to the general collection instead of staying behind.
+      const fromFolder = item.folderId ? collectionByFolder.get(item.folderId) : undefined;
+      const place = fromFolder ? [fromFolder] : generalCollectionId ? [generalCollectionId] : [];
+      if (!place.length) {
         result.failed.push({ id: item.id, reason: 'No collection to put the item in' });
         continue;
       }
 
-      const response = await input.authedFetch(`/api/ciphers/${encodeURIComponent(item.id)}/share`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...fields,
-          id: item.id,
-          name,
-          notes,
-          // The payload travels as the fields it is made of. The nested form
-          // the official clients use is not sent, so nothing that was sealed
-          // with the old key is left behind.
-          data: null,
-          key: newItemKeySealed,
-          organizationId: input.organization.id,
-          collectionIds: targetCollectionIds,
-          attachments,
-          versions,
-        }),
-      });
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        result.failed.push({
-          id: item.id,
-          reason: `The item was not shared (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`,
-        });
+      const shared = await shareItem(input, item, organizationHalves, userEnc, userMac, place);
+      if (shared.ok) {
+        result.items += 1;
         continue;
       }
-      result.items += 1;
+      if (shared.conflict) {
+        // The item changed while the move was running. The current copy is
+        // read and moved instead, so a newer edit is not overwritten with the
+        // older one.
+        const fresh = await loadItem(input.authedFetch, item.id);
+        if (fresh) {
+          const again = await shareItem(input, fresh, organizationHalves, userEnc, userMac, place);
+          if (again.ok) {
+            result.items += 1;
+            continue;
+          }
+          result.failed.push({ id: item.id, reason: again.reason });
+          continue;
+        }
+      }
+      result.failed.push({ id: item.id, reason: shared.reason });
     } catch (error) {
       result.failed.push({
         id: item.id,
