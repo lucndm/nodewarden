@@ -193,14 +193,15 @@ async function main() {
   // key is the organization key wrapped for that member.
   const membershipRows = await queryAll(
     database.uuid,
-    'SELECT id, user_id, org_id, type, status, key FROM organization_users'
+    'SELECT id, user_id, org_id, type, status, key, substr(key, 1, 2) AS key_head, length(key) AS key_length FROM organization_users'
   );
   // The account's own key pair: the organization key is wrapped with the
   // account's public key and opened with its private key.
   const accountKeys = await queryAll(
     database.uuid,
     'SELECT id, email, public_key IS NOT NULL AS has_public_key, private_key IS NOT NULL AS has_private_key, ' +
-      'length(public_key) AS public_key_length, length(private_key) AS private_key_length FROM users'
+      'length(public_key) AS public_key_length, length(private_key) AS private_key_length, ' +
+      'substr(public_key, 1, 2) AS public_key_head, substr(private_key, 1, 2) AS private_key_head FROM users'
   );
   const markers = await queryAll(
     database.uuid,
@@ -288,6 +289,10 @@ async function main() {
     type: Number(row.type),
     status: Number(row.status),
     hasKey: !!String(row.key || '').trim(),
+    // The head of the wrapped key says which form it is in: the `4.` form is
+    // the one a client can open with the account's RSA key.
+    keyHead: String(row.key_head || ''),
+    keyLength: Number(row.key_length || 0),
   }));
   // How the shared items sit in the collections, and whether the names they
   // carry are the encrypted form the sync requires.
@@ -338,7 +343,13 @@ async function main() {
       hasPrivateKey: !!row.has_private_key,
       publicKeyLength: Number(row.public_key_length || 0),
       privateKeyLength: Number(row.private_key_length || 0),
+      publicKeyHead: String(row.public_key_head || ''),
+      privateKeyHead: String(row.private_key_head || ''),
     })),
+    organizationKeyHeads: await queryAll(
+      database.uuid,
+      'SELECT id, name, substr(public_key, 1, 2) AS public_key_head, substr(private_key, 1, 2) AS private_key_head FROM organizations'
+    ),
     itemsPerCollection: [...itemsPerCollection.entries()].map(([collectionId, count]) => ({ collectionId, count })),
     sharedNamesNotEncrypted,
     attachments: attachments.length,
