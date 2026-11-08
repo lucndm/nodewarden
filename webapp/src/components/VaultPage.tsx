@@ -1581,6 +1581,10 @@ const folderName = useCallback((id: string | null | undefined): string => {
         groups={organizationGroups}
         loading={organizationMembersLoading}
         busy={props.organizationActions.busyOrganizationId === manageOrganizationId}
+        onLoadPolicies={() => props.organizationActions.loadPolicies(manageOrganizationId)}
+        onSavePolicy={(type, enabled, data) =>
+          props.organizationActions.savePolicy(manageOrganizationId, type, enabled, data)
+        }
         currentUserId={props.currentUserId}
         onClose={() => setManageOrganizationId('')}
         onLoad={() => {

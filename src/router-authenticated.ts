@@ -3,6 +3,7 @@ import { errorResponse, jsonResponse, unsupportedResponse } from './utils/respon
 import { handleGetGeneratorSettings, handleUpdateGeneratorSettings } from './handlers/generator-settings';
 import { handleSsoLinkStart, handleSsoStatus, handleSsoUnlink } from './handlers/identity';
 import { handleGetEmailBreaches } from './handlers/email-breach';
+import { handleGetUserPolicies, handleGetOrganizationPolicies, handleSetOrganizationPolicy } from './handlers/policies';
 import {
   handleGetProfile,
   handleUpdateProfile,
@@ -539,6 +540,19 @@ export async function handleAuthenticatedRoute(
       return handleUnsupportedOrganizationAction();
     }
 
+    // The policies of an organization: the decisions that bind its members.
+    const orgPoliciesMatch = path.match(/^\/api\/organizations\/([^/]+)\/policies(?:\/(\d+))?$/i);
+    if (orgPoliciesMatch) {
+      const type = orgPoliciesMatch[2] === undefined ? null : Number(orgPoliciesMatch[2]);
+      if (type === null && method === 'GET') {
+        return handleGetOrganizationPolicies(request, env, userId, orgPoliciesMatch[1]);
+      }
+      if (type !== null && (method === 'PUT' || method === 'POST')) {
+        return handleSetOrganizationPolicy(request, env, userId, orgPoliciesMatch[1], type);
+      }
+      return handleUnsupportedOrganizationAction();
+    }
+
     // The groups of an organization: a shortcut that hands a set of
     // collections to a set of members in one go.
     const groupsMatch = path.match(/^\/api\/organizations\/([^/]+)\/groups$/i);
@@ -645,7 +659,7 @@ export async function handleAuthenticatedRoute(
 
   if (path === '/api/policies' || path.startsWith('/api/policies/')) {
     if (method === 'GET') {
-      return jsonResponse({ data: [], object: 'list', continuationToken: null });
+      return handleGetUserPolicies(request, env, userId);
     }
     return null;
   }

@@ -108,6 +108,28 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
   const membershipByOrg = new Map(
     memberships.filter((membership) => membership.status === 2).map((membership) => [membership.orgId, membership])
   );
+  // The policies of the user's organizations, in the shape the official
+  // clients read: they show what a policy forbids and the server refuses the
+  // action as well, so a client that never looks cannot ignore one.
+  const userPolicies = await storage.listPoliciesForUser(userId);
+  const policyResponses = userPolicies.map((policy) => {
+    let data: unknown = {};
+    try {
+      data = JSON.parse(policy.data || '{}');
+    } catch {
+      data = {};
+    }
+    return {
+      object: 'policy',
+      id: policy.id,
+      organizationId: policy.orgId,
+      type: policy.type,
+      enabled: policy.enabled,
+      data,
+      revisionDate: policy.revisionDate,
+    };
+  });
+
   const organizationResponses = organizations.map((organization) => ({
     id: organization.id,
     name: organization.name,
@@ -116,7 +138,7 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     status: 2,
     type: membershipByOrg.get(organization.id)?.type ?? 2,
     enabled: true,
-    usePolicies: false,
+    usePolicies: policyResponses.length > 0,
     useGroups: false,
     useDirectory: false,
     useEvents: false,
@@ -200,8 +222,8 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
           domainSettings?.excludedGlobalEquivalentDomains || [],
           { omitExcludedGlobals: true }
         ),
-    policies: [],
-    policiesNew: [],
+    policies: policyResponses,
+    policiesNew: policyResponses,
     sends: sendResponses,
     UserDecryption: {
       MasterPasswordUnlock: userDecryptionOptions.MasterPasswordUnlock,

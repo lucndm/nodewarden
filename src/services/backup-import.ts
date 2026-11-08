@@ -35,6 +35,7 @@ type BackupTableName =
   | 'attachments'
   | 'organizations'
   | 'organization_users'
+  | 'organization_policies'
   | 'collections'
   | 'groups'
   | 'group_users'
@@ -51,6 +52,7 @@ const BACKUP_TABLES: BackupTableName[] = [
   'folders',
   'organizations',
   'organization_users',
+  'organization_policies',
   'collections',
   'groups',
   'ciphers',
@@ -344,6 +346,12 @@ async function importPreparedBackupRows(db: D1Database, payload: BackupPayload['
     })),
     attachments: cloneRows(payload.attachments || []),
     organizations: cloneRows(payload.organizations || []),
+    organization_policies: cloneRows(payload.organization_policies || []).map((row) => ({
+      ...row,
+      type: Number(row.type ?? 0),
+      enabled: row.enabled == null || row.enabled === '' ? 0 : Number(row.enabled),
+      data: row.data == null || row.data === '' ? '{}' : String(row.data),
+    })),
     organization_users: cloneRows(payload.organization_users || []).map((row) => ({
       ...row,
       type: row.type == null || row.type === '' ? 2 : Number(row.type),
@@ -763,6 +771,11 @@ async function importBackupRows(db: D1Database, payload: BackupPayload['db'], us
   );
   await runInsertBatch(
     db,
+    tableName('organization_policies'),
+    buildInsertStatements(db, tableName('organization_policies'), ['id', 'org_id', 'type', 'enabled', 'data', 'revision_date'], payload.organization_policies || [])
+  );
+  await runInsertBatch(
+    db,
     tableName('collections'),
     buildInsertStatements(db, tableName('collections'), ['id', 'org_id', 'name', 'created_at', 'updated_at'], payload.collections || [])
   );
@@ -844,6 +857,18 @@ export async function importBackupArchiveBytes(
       ciphers: (db.ciphers || []).length,
       cipher_versions: (db.cipher_versions || []).length,
       attachments: (db.attachments || []).length,
+      // The sharing structure is restored too, so it is counted too: a table
+      // missing here would either fail the count after being restored, or be
+      // dropped without anyone noticing.
+      organizations: (db.organizations || []).length,
+      organization_users: (db.organization_users || []).length,
+      organization_policies: (db.organization_policies || []).length,
+      collections: (db.collections || []).length,
+      groups: (db.groups || []).length,
+      group_users: (db.group_users || []).length,
+      collection_users: (db.collection_users || []).length,
+      collection_groups: (db.collection_groups || []).length,
+      collection_ciphers: (db.collection_ciphers || []).length,
     });
 
     await progress?.({
@@ -867,6 +892,16 @@ export async function importBackupArchiveBytes(
       folders: (db.folders || []).length,
       ciphers: (db.ciphers || []).length,
       attachments: restored.restoredAttachments.length,
+      // The sharing structure is restored too, so it is counted here as well.
+      organizations: (db.organizations || []).length,
+      organization_users: (db.organization_users || []).length,
+      organization_policies: (db.organization_policies || []).length,
+      collections: (db.collections || []).length,
+      groups: (db.groups || []).length,
+      group_users: (db.group_users || []).length,
+      collection_users: (db.collection_users || []).length,
+      collection_groups: (db.collection_groups || []).length,
+      collection_ciphers: (db.collection_ciphers || []).length,
     });
     await progress?.({
       source: 'local',
@@ -987,6 +1022,18 @@ export async function importRemoteBackupArchiveBytes(
       ciphers: (db.ciphers || []).length,
       cipher_versions: (db.cipher_versions || []).length,
       attachments: (db.attachments || []).length,
+      // The sharing structure is restored too, so it is counted too: a table
+      // missing here would either fail the count after being restored, or be
+      // dropped without anyone noticing.
+      organizations: (db.organizations || []).length,
+      organization_users: (db.organization_users || []).length,
+      organization_policies: (db.organization_policies || []).length,
+      collections: (db.collections || []).length,
+      groups: (db.groups || []).length,
+      group_users: (db.group_users || []).length,
+      collection_users: (db.collection_users || []).length,
+      collection_groups: (db.collection_groups || []).length,
+      collection_ciphers: (db.collection_ciphers || []).length,
     });
 
     await progress?.({
@@ -1010,6 +1057,16 @@ export async function importRemoteBackupArchiveBytes(
       folders: (db.folders || []).length,
       ciphers: (db.ciphers || []).length,
       attachments: restored.restoredAttachments.length,
+      // The sharing structure is restored too, so it is counted here as well.
+      organizations: (db.organizations || []).length,
+      organization_users: (db.organization_users || []).length,
+      organization_policies: (db.organization_policies || []).length,
+      collections: (db.collections || []).length,
+      groups: (db.groups || []).length,
+      group_users: (db.group_users || []).length,
+      collection_users: (db.collection_users || []).length,
+      collection_groups: (db.collection_groups || []).length,
+      collection_ciphers: (db.collection_ciphers || []).length,
     });
     await progress?.({
       source: 'remote',
