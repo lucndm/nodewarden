@@ -195,6 +195,8 @@ function parseSummary(stdout) {
   const summary = parseSummary(result.stdout);
   assert.equal(result.code, 0, 'a plain-text field is not a damaged vault');
   assert.equal(summary.itemsWithPlainTextFields, 1);
+  assert.equal(summary.personalItems, 2, 'the items that belong to no organization are counted');
+  assert.equal(summary.itemsInAnOrganization, 0);
   assert.match(result.stdout, /1 item\(s\) still carry plain-text fields/);
   console.log('ok   an item with plain-text fields is counted');
 }

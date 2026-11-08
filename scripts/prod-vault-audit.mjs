@@ -174,7 +174,7 @@ async function main() {
   const folders = await queryAll(database.uuid, 'SELECT id, user_id, name, tag_name FROM folders');
   const ciphers = await queryAll(
     database.uuid,
-    'SELECT id, user_id, folder_id, name, notes, data FROM ciphers'
+    'SELECT id, user_id, folder_id, organization_id, name, notes, data FROM ciphers'
   );
   const users = await queryAll(database.uuid, 'SELECT id, email, role, status FROM users');
   const revisions = await queryAll(database.uuid, 'SELECT user_id, revision_date FROM user_revisions');
@@ -256,6 +256,8 @@ async function main() {
     duplicateFolderNames,
     items: ciphers.length,
     itemsInAFolder: ciphers.filter((cipher) => !!cipher.folder_id).length,
+    itemsInAnOrganization: ciphers.filter((cipher) => !!cipher.organization_id).length,
+    personalItems: ciphers.filter((cipher) => !cipher.organization_id).length,
     attachments: attachments.length,
     itemsWithAttachments: attachmentCipherIds.size,
     cipherVersions: versions.length,
