@@ -45,6 +45,8 @@ export type {
 
 export interface BackupSettingsInput {
   destinations?: unknown;
+  /** The passphrase the archive is sealed with; an empty string clears it. */
+  archivePassphrase?: unknown;
 }
 
 export interface BackupSettingsRepairState {
@@ -519,6 +521,9 @@ function stripRuntimeFromSettings(settings: BackupSettings): BackupSettings {
       ...destination,
       runtime: normalizeRuntime(null),
     })),
+    // The passphrase is not runtime state: it is the setting itself, and it
+    // has to survive being stored.
+    archivePassphrase: settings.archivePassphrase || '',
   };
 }
 
@@ -551,6 +556,7 @@ function mergeRuntimeStates(settings: BackupSettings, runtimes: Map<string, Back
       ...destination,
       runtime: runtimes.get(destination.id) || normalizeRuntime(destination.runtime),
     })),
+    archivePassphrase: settings.archivePassphrase || '',
   };
 }
 
@@ -591,6 +597,7 @@ export function parseBackupSettings(raw: string | null, fallbackTimezone: string
       });
       return {
         destinations: parseDestinations(normalizedEntries, previousById, fallbackTimezone),
+        archivePassphrase: asTrimmedString(parsed.archivePassphrase),
       };
     }
     return parseLegacyBackupSettings(parsed, fallbackTimezone);
@@ -611,8 +618,18 @@ export function normalizeBackupSettingsInput(
   const rawDestinations = input.destinations ?? previous.destinations;
   const destinations = parseDestinations(rawDestinations, previousById, BACKUP_DEFAULT_TIMEZONE);
 
+  // The passphrase comes back redacted, so an unchanged field keeps the
+  // passphrase that is already there and a new one replaces it. An empty
+  // field clears it, which puts the archive back to being readable.
+  const rawPassphrase = input.archivePassphrase;
+  const archivePassphrase =
+    rawPassphrase === undefined || rawPassphrase === REDACTED_BACKUP_SECRET
+      ? previous.archivePassphrase || ''
+      : asTrimmedString(rawPassphrase);
+
   return {
     destinations,
+    archivePassphrase,
   };
 }
 
@@ -622,6 +639,7 @@ export function serializeBackupSettings(settings: BackupSettings): string {
 
 export function redactBackupSettingsSecrets(settings: BackupSettings): BackupSettings {
   return {
+    archivePassphrase: settings.archivePassphrase ? REDACTED_BACKUP_SECRET : '',
     destinations: settings.destinations.map((destination) => {
       if (destination.type === 's3') {
         const config = destination.destination as S3BackupDestination;

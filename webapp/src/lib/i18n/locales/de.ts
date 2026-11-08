@@ -87,6 +87,8 @@ const de: Record<string, string> = {
   "txt_backup_export": "Backup exportieren",
   "txt_backup_import": "Wiederherstellen",
   "txt_backup_include_attachments": "Anhänge einschließen",
+  "txt_backup_archive_passphrase": "Archiv-Passphrase",
+  "txt_backup_archive_passphrase_help": "Verschlüsselt jedes Archiv, das dieser Server schreibt. Es wird mit den Einstellungen gespeichert und nie wieder angezeigt; ohne ihn kann jeder, der die Archivdatei hat, sie lesen. Leeren Sie das Feld, um nicht mehr zu verschlüsseln.",
     "txt_backup_export_contains_credentials": "Das Archiv enthält die Passwort-Hashes und die Zwei-Schritt-Geheimnisse der Konten. Behandle es wie ein Passwort.",
 "txt_backup_export_description": "Laden Sie ein vollständiges Backup-ZIP der Instanz zur manuellen Aufbewahrung herunter.",
   "txt_backup_import_description": "Laden Sie ein zuvor exportiertes Backup-ZIP hoch und stellen Sie es in dieser Instanz wieder her.",

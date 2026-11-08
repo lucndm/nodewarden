@@ -430,11 +430,14 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
 
   function buildSettingsPayloadForSelectedDestination(): AdminBackupSettings {
     if (!selectedDestinationId || !selectedDestination) {
-      return savedSettings || { destinations: [] };
+      return savedSettings || { destinations: [], archivePassphrase: settings.archivePassphrase };
     }
     const persistedDestinations = (savedSettings?.destinations || []).filter((destination) => destination.id !== selectedDestinationId);
     return {
       destinations: [...persistedDestinations, selectedDestination],
+      // The passphrase travels with the settings: it seals every archive, so
+      // it is saved with them rather than with one destination.
+      archivePassphrase: settings.archivePassphrase,
     };
   }
 
@@ -1000,6 +1003,8 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
         restoringRemotePath={restoringRemotePath}
         deletingRemotePath={deletingRemotePath}
         onSaveSettings={() => void handleSaveSettings()}
+        archivePassphrase={settings.archivePassphrase || ''}
+        onArchivePassphraseChange={(value) => updateSettings((current) => ({ ...current, archivePassphrase: value }))}
         onToggleSchedule={handleToggleSelectedSchedule}
         onRunRemoteBackup={() => void handleRunRemoteBackup()}
         onPromptDeleteDestination={() => setConfirmDeleteDestinationOpen(true)}

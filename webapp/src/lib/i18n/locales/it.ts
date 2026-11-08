@@ -87,6 +87,8 @@ const it: Record<string, string> = {
   "txt_backup_export": "Esporta Backup",
   "txt_backup_import": "Ripristina",
   "txt_backup_include_attachments": "Includi allegati",
+  "txt_backup_archive_passphrase": "Passphrase dell'archivio",
+  "txt_backup_archive_passphrase_help": "Sigilla ogni archivio scritto da questo server. Viene salvato con le impostazioni e non viene più mostrato; senza di esso chiunque abbia il file può leggerlo. Svuota il campo per smettere di sigillare.",
     "txt_backup_export_contains_credentials": "L'archivio contiene gli hash delle password e i segreti della verifica in due passaggi degli account. Trattalo come una password.",
 "txt_backup_export_description": "Scarica un file ZIP di backup completo dell'istanza per la conservazione manuale.",
   "txt_backup_import_description": "Carica un file ZIP di backup esportato in precedenza e ripristinalo in questa istanza.",

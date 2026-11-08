@@ -9,6 +9,26 @@ import {
   parseBackupArchive,
   validateBackupPayloadContents,
 } from './backup-archive';
+import { decryptBackupArchive, isEncryptedBackupArchive } from './backup-archive-crypto';
+import { loadBackupSettings } from './backup-config';
+import { StorageService } from './storage';
+
+/**
+ * Opens an archive that may be sealed with the backup passphrase.
+ *
+ * An archive without the seal is an archive from before the passphrase
+ * existed, and it is read as it is. A sealed one needs the passphrase that the
+ * settings hold; without it the archive stays closed rather than being read
+ * as rubbish.
+ */
+export async function openBackupArchiveBytes(archiveBytes: Uint8Array, env: Env): Promise<Uint8Array> {
+  if (!isEncryptedBackupArchive(archiveBytes)) return archiveBytes;
+  const settings = await loadBackupSettings(new StorageService(env.DB), env, 'UTC');
+  if (!settings.archivePassphrase) {
+    throw new Error('This archive is sealed and needs the backup passphrase');
+  }
+  return decryptBackupArchive(archiveBytes, settings.archivePassphrase);
+}
 
 // CONTRACT:
 // Restore is intentionally whitelist-based. Old backups may contain retired
@@ -814,7 +834,7 @@ export async function importBackupArchiveBytes(
   progress?: BackupRestoreProgressReporter,
   fileName: string = 'nodewarden_backup.zip'
 ): Promise<BackupImportExecutionResult> {
-  const parsed = parseBackupArchive(archiveBytes);
+  const parsed = parseBackupArchive(await openBackupArchiveBytes(archiveBytes, env));
   validateBackupPayloadContents(parsed.payload, parsed.files);
   const prepared = prepareImportPayloadForTarget(env, parsed.payload, parsed.files);
 
@@ -979,7 +999,9 @@ export async function importRemoteBackupArchiveBytes(
   progress?: BackupRestoreProgressReporter,
   fileName: string = 'nodewarden_backup.zip'
 ): Promise<BackupImportExecutionResult> {
-  const parsed = parseBackupArchive(archiveBytes, { allowExternalAttachmentBlobs: true });
+  const parsed = parseBackupArchive(await openBackupArchiveBytes(archiveBytes, env), {
+    allowExternalAttachmentBlobs: true,
+  });
   const preparedRemote = await prepareRemoteAttachmentPayload(env, parsed.payload, parsed.files, source);
   validateBackupPayloadContents(preparedRemote.payload, parsed.files, { allowExternalAttachmentBlobs: true });
 

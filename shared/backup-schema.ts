@@ -69,6 +69,11 @@ export interface BackupDestinationRecord {
 
 export interface BackupSettings {
   destinations: BackupDestinationRecord[];
+  /**
+   * The passphrase the archive is sealed with. An empty string means the
+   * archive is written as it is: readable by whoever holds the file.
+   */
+  archivePassphrase?: string;
 }
 
 export function createBackupRandomId(): string {
@@ -159,5 +164,6 @@ export function createDefaultBackupSettings(
         name: options.destinationName,
       }),
     ],
+    archivePassphrase: '',
   };
 }

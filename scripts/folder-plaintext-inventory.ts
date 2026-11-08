@@ -26,6 +26,7 @@ import {
   selectPlainTextFolders,
   type FolderNameEntry,
 } from '../webapp/src/lib/folder-legacy-encryption';
+import { decryptBackupArchive, isEncryptedBackupArchive } from '../src/services/backup-archive-crypto';
 
 interface FolderRow {
   id?: string;
@@ -54,12 +55,24 @@ export interface InventorySummary {
   folderRows: number;
 }
 
-function readArchive(path: string): { users: UserRow[]; folders: FolderRow[] } {
+async function readArchive(path: string, passphrase?: string): Promise<{ users: UserRow[]; folders: FolderRow[] }> {
   let entries: Record<string, Uint8Array>;
-  try {
-    entries = unzipSync(new Uint8Array(readFileSync(path)));
-  } catch (error) {
-    throw new Error(`${path}: not a readable backup archive (${error instanceof Error ? error.message : String(error)})`);
+  const raw = new Uint8Array(readFileSync(path));
+  if (isEncryptedBackupArchive(raw)) {
+    if (!passphrase) throw new Error(`${path}: the archive is sealed and needs the backup passphrase`);
+    let opened: Uint8Array;
+    try {
+      opened = await decryptBackupArchive(raw, passphrase);
+    } catch (error) {
+      throw new Error(`${path}: the archive could not be opened (${error instanceof Error ? error.message : String(error)})`);
+    }
+    entries = unzipSync(opened);
+  } else {
+    try {
+      entries = unzipSync(raw);
+    } catch (error) {
+      throw new Error(`${path}: not a readable backup archive (${error instanceof Error ? error.message : String(error)})`);
+    }
   }
   const dbBytes = entries['db.json'];
   if (!dbBytes) throw new Error(`${path}: archive has no db.json`);
@@ -72,8 +85,8 @@ function readArchive(path: string): { users: UserRow[]; folders: FolderRow[] } {
   return { users: db.users || [], folders: db.folders || [] };
 }
 
-export async function inventoryArchive(path: string): Promise<InventorySummary> {
-  const { users, folders } = readArchive(path);
+export async function inventoryArchive(path: string, passphrase?: string): Promise<InventorySummary> {
+  const { users, folders } = await readArchive(path, passphrase);
 
   const byUser = new Map<string, InventoryUser>();
   for (const user of users) {
@@ -141,15 +154,30 @@ export function formatInventory(summary: InventorySummary): string {
   return lines.join('\n');
 }
 
-async function main(paths: string[]): Promise<void> {
+async function main(args: string[]): Promise<void> {
+  // The passphrase may come from the command line or from the environment, so
+  // it does not have to sit in the shell history.
+  let passphrase = process.env.NODEWARDEN_BACKUP_PASSPHRASE || '';
+  const paths: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--passphrase') {
+      passphrase = args[index + 1] || '';
+      index += 1;
+      continue;
+    }
+    paths.push(arg);
+  }
   if (!paths.length) {
-    console.error('usage: npx tsx scripts/folder-plaintext-inventory.ts <backup.zip> [more.zip ...]');
+    console.error(
+      'usage: npx tsx scripts/folder-plaintext-inventory.ts [--passphrase <passphrase>] <backup.zip> [more.zip ...]'
+    );
     process.exitCode = 2;
     return;
   }
   for (const path of paths) {
     try {
-      console.log(`\n${formatInventory(await inventoryArchive(path))}`);
+      console.log(`\n${formatInventory(await inventoryArchive(path, passphrase || undefined))}`);
     } catch (error) {
       console.error(`FAIL: ${error instanceof Error ? error.message : String(error)}`);
       process.exitCode = 1;

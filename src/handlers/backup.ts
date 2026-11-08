@@ -31,6 +31,7 @@ import {
   type BackupRestoreProgressReporter,
   importBackupArchiveBytes,
   importRemoteBackupArchiveBytes,
+  openBackupArchiveBytes,
 } from '../services/backup-import';
 import {
   type RemoteBackupTransferSession,
@@ -353,6 +354,7 @@ export async function executeConfiguredBackup(
     const archive = await buildBackupArchive(env, now, {
       includeAttachments: destination.includeAttachments,
       timeZone: destination.schedule.timezone,
+      passphrase: currentSettings.archivePassphrase,
       progress: progress
         ? async (event) => {
           if (event.step === 'archive_ready') {
@@ -711,7 +713,10 @@ export async function importAndAuditRemoteBackupFile(
   };
   const restoreFileName = remoteFile.fileName || remotePath.split('/').pop() || remotePath;
   await touchLease();
-  const externalAttachmentBlobNames = collectExternalRemoteAttachmentBlobNames(remoteFile.bytes);
+  // The archive may be sealed with the backup passphrase; it is opened once
+  // here and the open bytes are what the restore reads.
+  const archiveBytes = await openBackupArchiveBytes(remoteFile.bytes, env);
+  const externalAttachmentBlobNames = collectExternalRemoteAttachmentBlobNames(archiveBytes);
   const externalAttachmentCache = new Map<string, Uint8Array | null>();
   const progress: BackupRestoreProgressReporter = async (event) => {
     await touchLease();
@@ -726,7 +731,7 @@ export async function importAndAuditRemoteBackupFile(
     );
   };
   const result = await importRemoteBackupArchiveBytes(
-    remoteFile.bytes,
+    archiveBytes,
     env,
     actorUserId,
     replaceExisting,
@@ -1201,6 +1206,7 @@ export async function handleAdminExportBackup(request: Request, env: Env, actorU
     };
     archive = await buildBackupArchive(env, new Date(), {
       includeAttachments: !!body?.includeAttachments,
+      passphrase: (await loadBackupSettings(storage, env, 'UTC')).archivePassphrase,
       progress,
     });
   } catch (error) {
