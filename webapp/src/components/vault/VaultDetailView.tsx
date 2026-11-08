@@ -201,24 +201,22 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     () => (props.selectedCipher.login?.uris || []).map((uri) => plainValue(uri.decUri, uri.uri).trim()).filter((value) => !!value),
     [props.selectedCipher.login?.uris]
   );
+  // The password was replaced or the view was locked: what was revealed is
+  // hidden again. Another item on screen is another view, mounted again, so
+  // what is shown for an item does not have to be reset here: an effect that
+  // lands after the user opened the history would close the history again.
   useEffect(() => {
     breachControllerRef.current?.abort();
     breachControllerRef.current = null;
     setShowSshPrivateKey(false);
     setRevealedFields({});
     setOverflowOpen(false);
-    setPasswordHistoryOpen(false);
-    setItemHistoryOpen(false);
-    setItemHistoryEntries([]);
-    setItemHistoryVersion(null);
-    setItemHistoryError('');
-    itemHistoryRequestRef.current += 1;
     setCheckingBreach(false);
     return () => {
       breachControllerRef.current?.abort();
       breachControllerRef.current = null;
     };
-  }, [props.selectedCipher.id, props.selectedCipher.login?.decPassword, repromptLocked]);
+  }, [props.selectedCipher.login?.decPassword, repromptLocked]);
 
   // The overflow menu closes on outside click and on Escape, like the other
   // menus in the vault.
