@@ -37,10 +37,6 @@ import type { Env } from '../src/types';
 const ENC = (value: string) =>
   `2.${Buffer.from('iv-' + value).toString('base64')}|${Buffer.from('ct-' + value).toString('base64')}|${Buffer.from('mac-' + value).toString('base64')}`;
 
-function env(): Env {
-  return { DB: new MemoryD1() } as unknown as Env;
-}
-
 async function createCipherWithTags(envArg: Env, tags: unknown): Promise<Record<string, unknown>> {
   const response = await handleCreateCipher(
     new Request('https://vault.example.test/api/ciphers', {
@@ -252,7 +248,6 @@ test('renaming and deleting primary and secondary folders keeps tag positions co
 
 test('migration backfills tags from legacy folder assignments', async () => {
   const db = new MemoryD1();
-  const envArg = { DB: db } as unknown as Env;
   const storage = new StorageService(db);
   const now = new Date().toISOString();
   await storage.saveFolder({ id: 'folder-legacy', userId: 'user-1', name: 'Legacy', createdAt: now, updatedAt: now });

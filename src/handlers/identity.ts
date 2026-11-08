@@ -1576,6 +1576,15 @@ const SSO_REDIRECT_SCHEME_RE = /^bitwarden[a-z-]*:\/\//i;
 
 const SSO_LOOPBACK_REDIRECT_RE = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?(?:\/[^\s]*)?$/i;
 
+// Base a relative redirect_uri is resolved against. It is never a real host:
+// only its path and query are ever used, and the path is what keeps a
+// relative redirect on this origin.
+const RELATIVE_REDIRECT_BASE = 'https://placeholder.invalid';
+
+// A redirect_uri that carries its own scheme (custom app scheme, loopback
+// HTTP, absolute https) is used as it is; everything else is relative.
+const ABSOLUTE_REDIRECT_RE = /^[a-z][a-z0-9+.-]*:/i;
+
 function isAllowedClientRedirectUri(redirectUri: string, requestOrigin: string, clientId: string): boolean {
   // WHATWG URL parsers fold "\" into "/" for special schemes, so a value like
   // "/\evil.com" (single slash, backslash) would pass the relative-shape check
@@ -1585,7 +1594,13 @@ function isAllowedClientRedirectUri(redirectUri: string, requestOrigin: string, 
     if (redirectUri.startsWith('//')) return false;
     // Resolve-then-compare: a relative URI must stay on this origin.
     try {
-      return new URL(redirectUri, requestOrigin).origin === requestOrigin;
+      const resolved = new URL(redirectUri, requestOrigin);
+      if (resolved.origin !== requestOrigin) return false;
+      // "/..//evil.example.test" resolves on this origin but its path is
+      // "//evil.example.test": protocol-relative, so a browser would leave
+      // the origin with it. A relative redirect must carry a plain path.
+      if (resolved.pathname.startsWith('//')) return false;
+      return true;
     } catch {
       return false;
     }
@@ -1822,20 +1837,27 @@ export async function handleSsoCallback(request: Request, env: Env): Promise<Res
     const redirectUri = payload.clientRedirectUri!;
     const issuer = new URL(request.url).origin;
     const withRedirectParams = (params: Record<string, string>) => {
+      // The redirect_uri was checked when the flow started, but the sink must
+      // not trust a sealed value on its own: check it again here.
+      if (!isAllowedClientRedirectUri(redirectUri, issuer, payload.clientId ?? '')) return null;
       try {
-        const target = new URL(redirectUri, 'https://placeholder.invalid');
+        const target = new URL(redirectUri, RELATIVE_REDIRECT_BASE);
         for (const [key, value] of Object.entries(params)) {
           if (value) target.searchParams.set(key, value);
         }
-        const resolved = target.toString();
-        // Sink hardening: a relative redirect_uri must resolve on the
-        // placeholder origin. WHATWG parsers fold "\" into "/", so a value
-        // like "/\evil.com" resolves off-origin here — refuse to emit it
-        // rather than redirecting the freshly minted code to a foreign host.
-        if (redirectUri.startsWith('/') && !resolved.startsWith('https://placeholder.invalid')) {
-          return null;
+        // Sink hardening: a relative redirect_uri must stay on this origin, so
+        // only its path and query are emitted — the path comes from the parsed
+        // URL, never from a string prefix. Stripping the prefix instead would
+        // turn "/..//evil.example.test" (path "//evil.example.test") into a
+        // protocol-relative Location that hands the freshly minted code to a
+        // foreign host.
+        if (!ABSOLUTE_REDIRECT_RE.test(redirectUri)) {
+          if (target.origin !== RELATIVE_REDIRECT_BASE) return null;
+          const path = `${target.pathname}${target.search}`;
+          if (!path.startsWith('/') || path.startsWith('//')) return null;
+          return path;
         }
-        return resolved.replace('https://placeholder.invalid', '') || resolved;
+        return target.toString();
       } catch {
         return null;
       }

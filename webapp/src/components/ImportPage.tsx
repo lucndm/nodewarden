@@ -827,10 +827,11 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
       return;
     }
     await runExportWithMasterPassword(masterPassword);
-    if (!isExporting) {
-      setExportAuthPassword('');
-      setExportAuthDialogOpen(false);
-    }
+    // The export has finished (runExportWithMasterPassword awaits it), so the
+    // dialog can close. The captured `isExporting` is the render-time value
+    // and was always false here.
+    setExportAuthPassword('');
+    setExportAuthDialogOpen(false);
   }
 
   function handleExport() {

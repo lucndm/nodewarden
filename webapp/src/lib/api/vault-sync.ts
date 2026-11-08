@@ -10,7 +10,13 @@ interface VaultSyncResponse {
   profile?: { organizations?: Array<{ id?: string; key?: string | null }> };
 }
 
-const pendingVaultCoreRequests = new Map<string, Promise<VaultCoreSnapshot>>();
+// The pending request is kept in a wrapper so that concurrent callers can
+// share the same promise without comparing promises by identity.
+interface PendingVaultCoreRequest {
+  promise: Promise<VaultCoreSnapshot>;
+}
+
+const pendingVaultCoreRequests = new Map<string, PendingVaultCoreRequest>();
 const memoryVaultCoreCache = new Map<string, { revisionStamp: number; snapshot: VaultCoreSnapshot }>();
 
 function normalizeSnapshot(body: VaultSyncResponse | null | undefined): VaultCoreSnapshot {
@@ -87,7 +93,7 @@ export async function loadVaultCoreSyncSnapshot(authedFetch: AuthedFetch, cacheK
   if (!normalizedKey) return { ciphers: [], folders: [], sends: [] };
 
   const existing = pendingVaultCoreRequests.get(normalizedKey);
-  if (existing) return existing;
+  if (existing) return existing.promise;
 
   const request = (async () => {
     const memory = memoryVaultCoreCache.get(normalizedKey);
@@ -140,11 +146,12 @@ export async function loadVaultCoreSyncSnapshot(authedFetch: AuthedFetch, cacheK
     }
   })();
 
-  pendingVaultCoreRequests.set(normalizedKey, request);
+  const entry: PendingVaultCoreRequest = { promise: request };
+  pendingVaultCoreRequests.set(normalizedKey, entry);
   try {
     return await request;
   } finally {
-    if (pendingVaultCoreRequests.get(normalizedKey) === request) {
+    if (pendingVaultCoreRequests.get(normalizedKey) === entry) {
       pendingVaultCoreRequests.delete(normalizedKey);
     }
   }

@@ -1,5 +1,5 @@
 import type { Env, User } from './types';
-import { errorResponse, jsonResponse, unsupportedResponse } from './utils/response';
+import { errorResponse, unsupportedResponse } from './utils/response';
 import { handleGetGeneratorSettings, handleUpdateGeneratorSettings } from './handlers/generator-settings';
 import { handleSsoLinkStart, handleSsoStatus, handleSsoUnlink } from './handlers/identity';
 import { handleGetEmailBreaches } from './handlers/email-breach';

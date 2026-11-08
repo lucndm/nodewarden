@@ -226,7 +226,10 @@ async function seedVault(baseUrl) {
 // A very small CDP client: the browser's own websocket, one target, and the
 // two calls the check needs.
 async function connectCdp(endpoint) {
-  const socket = new WebSocket(endpoint);
+  // The endpoint is the local Chromium DevTools websocket: a validated port
+  // number plus a validated /devtools/ path, both read from the browser's own
+  // DevToolsActivePort file. It never leaves the loopback interface.
+  const socket = new WebSocket(endpoint); // codeql[js/file-access-to-http]
   await new Promise((resolve, reject) => {
     socket.addEventListener('open', resolve, { once: true });
     socket.addEventListener('error', reject, { once: true });
@@ -289,10 +292,16 @@ async function launchChromium(binary, display) {
     if (existsSync(portFile)) {
       const content = readFileSync(portFile, 'utf8').split('\n');
       if (content[0]) {
-        port = content[0].trim();
+        const rawPort = content[0].trim();
         // The second line is the browser's own websocket path.
-        browserPath = (content[1] || '').trim();
-        break;
+        const rawPath = (content[1] || '').trim();
+        // Only a plain port number and a /devtools/ path are taken from the
+        // file: nothing else may end up in the websocket URL.
+        if (/^\d{1,5}$/.test(rawPort) && /^\/devtools\/[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/.test(rawPath)) {
+          port = rawPort;
+          browserPath = rawPath;
+          break;
+        }
       }
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -397,7 +406,7 @@ async function loadExtension(cdp) {
 // The extension asks which server to talk to before it asks for the account.
 async function configureServer(evaluate, waitFor, serverUrl) {
   // The environment button shows the server it would talk to.
-  const opened = await evaluate(`(() => {
+  await evaluate(`(() => {
     const buttons = [...document.querySelectorAll('button')];
     const target = buttons.find((b) => /^(bitwarden\.com|https?:\\/\\/)/i.test((b.textContent || '').trim()));
     if (!target) return false;

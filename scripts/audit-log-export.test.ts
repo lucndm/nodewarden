@@ -132,7 +132,7 @@ test('the filters on screen apply to the export as well', async () => {
 });
 
 test('a secret that an old event was written with does not reach the file', async () => {
-  const { env, storage, admin } = await fixture();
+  const { env, admin } = await fixture();
   // Written straight into the table, the way a row from before the rule
   // existed would look.
   await env.DB.prepare(

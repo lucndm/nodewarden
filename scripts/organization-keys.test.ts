@@ -317,7 +317,7 @@ test('the memberships list keeps the wrapped key away from an outsider', async (
 });
 
 test('a backup carries the organization and the wrapped keys across', async () => {
-  const { env, ownerKeys, memberKeys, organizationKey } = await fixture();
+  const { env, ownerKeys, organizationKey } = await fixture();
   const organizationKeyWrapped = await wrapFor(ownerKeys.publicKey, organizationKey);
 
   const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {

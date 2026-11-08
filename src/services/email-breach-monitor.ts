@@ -18,7 +18,6 @@ import {
 // is stale. Passwords are never sent anywhere — only the account email.
 
 const HIBP_BREACHED_ACCOUNT_URL = 'https://haveibeenpwned.com/api/v3/breachedaccount';
-const HIBP_USER_AGENT = 'NodeWarden-Password-Manager';
 const XON_CHECK_URL = 'https://api.xposedornot.com/v1/check-email';
 const XON_CATALOG_URL = 'https://api.xposedornot.com/v1/breaches';
 // Re-check each account at most once per day. Breach corpora change slowly and
@@ -215,17 +214,6 @@ async function checkEmailBreachesHibp(env: Env, email: string): Promise<EmailBre
 export async function checkEmailBreaches(env: Env, email: string): Promise<EmailBreachCheckOutcome> {
   if (getBreachProvider(env) === 'hibp') return checkEmailBreachesHibp(env, email);
   return checkEmailBreachesXon(email);
-}
-
-async function refreshEmailBreachCache(env: Env, email: string): Promise<EmailBreachCheckOutcome> {
-  const outcome = await checkEmailBreaches(env, email);
-  // Only definitive results overwrite the cache: transient failures
-  // (network, rate limit) keep the previous verdict so a temporary upstream
-  // outage does not blank out the user's report.
-  if (outcome.status === 'ok' || outcome.status === 'invalid_key') {
-    await upsertEmailBreachCache(env.DB, email, outcome.status, JSON.stringify(outcome.breaches), new Date().toISOString());
-  }
-  return outcome;
 }
 
 /**
