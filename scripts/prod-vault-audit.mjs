@@ -181,6 +181,14 @@ async function main() {
   const organizations = await queryAll(database.uuid, 'SELECT id, name FROM organizations');
   const organizationUsers = await queryAll(database.uuid, 'SELECT id, org_id, type, status FROM organization_users');
   const collections = await queryAll(database.uuid, 'SELECT id, org_id FROM collections');
+  const collectionCipherRows = await queryAll(
+    database.uuid,
+    'SELECT cipher_id, collection_id FROM collection_ciphers'
+  );
+  const collectionUserRows = await queryAll(
+    database.uuid,
+    'SELECT collection_id, org_user_id, read_only FROM collection_users'
+  );
   const markers = await queryAll(
     database.uuid,
     "SELECT key, value FROM config WHERE key LIKE 'tags.legacy-repair.v1:%'"
@@ -241,6 +249,12 @@ async function main() {
   const itemsWithPlainTextFields = ciphers.filter((cipher) => plainTextFields(cipher).length > 0);
   // Which items stayed personal, and the folder each of them is in. Only ids:
   // the audit never prints vault content.
+  // A shared item that is in no collection is a shared item the member cannot
+  // reach: the sync and the list both need the collection link.
+  const collectionLinks = new Set(collectionCipherRows.map((row) => String(row.cipher_id || '')));
+  const itemsInNoCollection = ciphers.filter(
+    (cipher) => !!cipher.organization_id && !collectionLinks.has(String(cipher.id))
+  ).length;
   const personalItemRows = ciphers
     .filter((cipher) => !cipher.organization_id)
     .map((cipher) => ({ id: cipher.id, folderId: cipher.folder_id || null }));
@@ -268,6 +282,9 @@ async function main() {
     itemsInAnOrganization: ciphers.filter((cipher) => !!cipher.organization_id).length,
     personalItems: ciphers.filter((cipher) => !cipher.organization_id).length,
     personalItemRows,
+    collectionCipherRows: collectionCipherRows.length,
+    collectionUserRows: collectionUserRows.length,
+    itemsInNoCollection,
     attachments: attachments.length,
     itemsWithAttachments: attachmentCipherIds.size,
     cipherVersions: versions.length,
