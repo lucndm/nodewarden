@@ -77,10 +77,10 @@ async function query(databaseId, sql, params = []) {
   return first?.results || [];
 }
 
-async function queryAll(databaseId, sql) {
+async function queryAll(databaseId, sql, params = []) {
   const rows = [];
   for (let offset = 0; ; offset += PAGE_SIZE) {
-    const page = await query(databaseId, `${sql} LIMIT ${PAGE_SIZE} OFFSET ${offset}`);
+    const page = await query(databaseId, `${sql} LIMIT ${PAGE_SIZE} OFFSET ${offset}`, params);
     rows.push(...page);
     if (page.length < PAGE_SIZE) break;
   }
