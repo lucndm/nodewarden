@@ -11,6 +11,10 @@
 // Nothing here writes, and nothing prints vault content: only counts and the
 // repair marker are printed.
 //
+// Run it from a machine that holds the credentials, never from a CI runner.
+// This repository is public, so a CI log is a public log: whatever the runner
+// prints about the running vault is published with it.
+//
 // Environment:
 //   CLOUDFLARE_API_TOKEN   Cloudflare API token with D1 read
 //   CLOUDFLARE_ACCOUNT_ID  Cloudflare account id
@@ -239,11 +243,6 @@ async function main() {
   // server, so a move into an organization would refuse it. The count says
   // how many items that would be before the move, not after.
   const itemsWithPlainTextFields = ciphers.filter((cipher) => plainTextFields(cipher).length > 0);
-  // Which items stayed personal, and the folder each of them is in. Only ids:
-  // the audit never prints vault content.
-  const personalItemRows = ciphers
-    .filter((cipher) => !cipher.organization_id)
-    .map((cipher) => ({ id: cipher.id, folderId: cipher.folder_id || null }));
 
   const marker = markers.find((row) => row.key.startsWith('tags.legacy-repair.v1:'));
   const repairMarker = marker ? String(marker.value || '') : 'missing';
@@ -267,7 +266,6 @@ async function main() {
     itemsInAFolder: ciphers.filter((cipher) => !!cipher.folder_id).length,
     itemsInAnOrganization: ciphers.filter((cipher) => !!cipher.organization_id).length,
     personalItems: ciphers.filter((cipher) => !cipher.organization_id).length,
-    personalItemRows,
     attachments: attachments.length,
     itemsWithAttachments: attachmentCipherIds.size,
     cipherVersions: versions.length,
