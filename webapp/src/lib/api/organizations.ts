@@ -139,6 +139,70 @@ export async function acceptOrganizationInvitation(
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_accept_invitation_failed')));
 }
 
+/**
+ * A group of an organization.
+ *
+ * A group is a shortcut: it hands a set of collections to a set of members in
+ * one go, instead of one member at a time.
+ */
+export interface OrganizationGroup {
+  id: string;
+  name: string;
+  /** The memberships the group carries. */
+  members: string[];
+  collections: Array<{ id: string; readOnly: boolean; hidePasswords: boolean; manage: boolean }>;
+}
+
+export async function getOrganizationGroups(
+  authedFetch: AuthedFetch,
+  organizationId: string
+): Promise<OrganizationGroup[]> {
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(organizationId)}/groups`);
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_organization_load_failed')));
+  const body = await parseJson<{ data?: unknown }>(resp);
+  const rows = Array.isArray(body?.data) ? (body.data as Record<string, unknown>[]) : [];
+  return rows.map((entry) => ({
+    id: String(entry.id || ''),
+    name: String(entry.name || ''),
+    members: Array.isArray(entry.members)
+      ? (entry.members as unknown[]).filter((value): value is string => typeof value === 'string')
+      : [],
+    collections: (Array.isArray(entry.collections) ? (entry.collections as Record<string, unknown>[]) : []).map(
+      (assignment) => ({
+        id: String(assignment.id || ''),
+        readOnly: assignment.readOnly === true,
+        hidePasswords: assignment.hidePasswords === true,
+        manage: assignment.manage === true,
+      })
+    ),
+  }));
+}
+
+export async function createOrganizationGroup(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  group: { name: string; members: string[]; collections: Array<{ id: string }> }
+): Promise<void> {
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(organizationId)}/groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(group),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_group_save_failed')));
+}
+
+export async function deleteOrganizationGroup(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  groupId: string
+): Promise<void> {
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(organizationId)}/groups/${encodeURIComponent(groupId)}`,
+    { method: 'DELETE' }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_group_save_failed')));
+}
+
 /** A member of an organization, with the rights they hold on each collection. */
 export interface OrganizationMember {
   id: string;

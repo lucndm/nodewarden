@@ -330,6 +330,141 @@ export async function getSharedCipherIdsForUser(
 }
 
 /**
+ * The groups of one organization, with the members and the collections each
+ * one carries.
+ *
+ * A group is a shortcut: it hands a set of collections to a set of members in
+ * one go, instead of one member at a time.
+ */
+export async function getOrganizationGroups(
+  db: D1Database,
+  orgId: string
+): Promise<Array<Group & { members: string[]; collections: CollectionAssignment[] }>> {
+  const groups = await db
+    .prepare('SELECT id, org_id, name, created_at, updated_at FROM groups WHERE org_id = ? ORDER BY name ASC')
+    .bind(orgId)
+    .all<{ id: string; org_id: string; name: string; created_at: string; updated_at: string }>();
+
+  const result: Array<Group & { members: string[]; collections: CollectionAssignment[] }> = [];
+  for (const row of groups.results || []) {
+    const members = await db
+      .prepare('SELECT org_user_id FROM group_users WHERE group_id = ? ORDER BY org_user_id ASC')
+      .bind(row.id)
+      .all<{ org_user_id: string }>();
+    const collections = await db
+      .prepare(
+        'SELECT collection_id, read_only, hide_passwords, manage FROM collection_groups WHERE group_id = ? ORDER BY collection_id ASC'
+      )
+      .bind(row.id)
+      .all<{ collection_id: string; read_only: number; hide_passwords: number; manage: number }>();
+    result.push({
+      id: row.id,
+      orgId: row.org_id,
+      name: row.name,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      members: (members.results || []).map((entry) => entry.org_user_id),
+      collections: (collections.results || []).map((entry) => ({
+        collectionId: entry.collection_id,
+        readOnly: !!entry.read_only,
+        hidePasswords: !!entry.hide_passwords,
+        manage: !!entry.manage,
+      })),
+    });
+  }
+  return result;
+}
+
+/** Creates a group, and puts the members and collections into it. */
+export async function createOrganizationGroup(
+  db: D1Database,
+  input: {
+    id: string;
+    orgId: string;
+    name: string;
+    members: string[];
+    collections: CollectionAssignment[];
+    now: string;
+  }
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [
+    db
+      .prepare('INSERT INTO groups (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(input.id, input.orgId, input.name, input.now, input.now),
+  ];
+  for (const memberId of input.members) {
+    statements.push(
+      db.prepare('INSERT OR IGNORE INTO group_users (group_id, org_user_id) VALUES (?, ?)').bind(input.id, memberId)
+    );
+  }
+  for (const assignment of input.collections) {
+    statements.push(
+      db
+        .prepare(
+          'INSERT OR REPLACE INTO collection_groups (collection_id, group_id, read_only, hide_passwords, manage) VALUES (?, ?, ?, ?, ?)'
+        )
+        .bind(
+          assignment.collectionId,
+          input.id,
+          assignment.readOnly ? 1 : 0,
+          assignment.hidePasswords ? 1 : 0,
+          assignment.manage ? 1 : 0
+        )
+    );
+  }
+  await db.batch(statements);
+}
+
+/**
+ * Replaces the members and the collections of a group.
+ *
+ * The assignments replace the previous ones, the way the rights of a member
+ * do: what is not listed any more is not there.
+ */
+export async function replaceOrganizationGroup(
+  db: D1Database,
+  input: {
+    groupId: string;
+    members: string[];
+    collections: CollectionAssignment[];
+    now: string;
+  }
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [
+    db.prepare('DELETE FROM group_users WHERE group_id = ?').bind(input.groupId),
+    db.prepare('DELETE FROM collection_groups WHERE group_id = ?').bind(input.groupId),
+    db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').bind(input.now, input.groupId),
+  ];
+  for (const memberId of input.members) {
+    statements.push(
+      db.prepare('INSERT OR IGNORE INTO group_users (group_id, org_user_id) VALUES (?, ?)').bind(input.groupId, memberId)
+    );
+  }
+  for (const assignment of input.collections) {
+    statements.push(
+      db
+        .prepare(
+          'INSERT OR REPLACE INTO collection_groups (collection_id, group_id, read_only, hide_passwords, manage) VALUES (?, ?, ?, ?, ?)'
+        )
+        .bind(
+          assignment.collectionId,
+          input.groupId,
+          assignment.readOnly ? 1 : 0,
+          assignment.hidePasswords ? 1 : 0,
+          assignment.manage ? 1 : 0
+        )
+    );
+  }
+  await db.batch(statements);
+}
+
+/** Removes a group. Its members and collections go with it. */
+export async function deleteOrganizationGroup(db: D1Database, groupId: string): Promise<boolean> {
+  const result = await db.prepare('DELETE FROM groups WHERE id = ?').bind(groupId).run();
+  return (result.meta.changes ?? 0) === 1;
+}
+
+/**
  * The items a member may see: the ones they own, plus the ones they reach
  * through a collection of an organization they belong to.
  *

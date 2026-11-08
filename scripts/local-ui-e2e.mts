@@ -727,6 +727,40 @@ async function main() {
     );
     checks.ok('the invited member is confirmed', !!invitedRow && invitedRow.status === 2);
 
+    // A group hands a set of collections to a set of members in one go.
+    await evaluate(`(() => {
+      const input = [...document.querySelectorAll('.org-group-form input.input')][0];
+      if (!input) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'Support');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    await evaluate(`(() => {
+      const lists = [...document.querySelectorAll('.org-group-list')];
+      const members = lists[0];
+      const collections = lists[1];
+      if (!members || !collections) return false;
+      const memberBox = members.querySelector('input[type="checkbox"]');
+      const collectionBox = collections.querySelector('input[type="checkbox"]');
+      if (!memberBox || !collectionBox) return false;
+      memberBox.click();
+      collectionBox.click();
+      return true;
+    })()`);
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.org-group-form button')].find((b) => b.textContent.trim() === 'Add group');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(
+      `document.querySelector('.org-groups').textContent.includes('Support')`,
+      'the new group',
+      20000
+    );
+    checks.ok('a group can be created in the organization', true);
+
     // Removing a member takes their access away at once. The key they already
     // opened stays with them, so the organization says the key has to be
     // replaced.

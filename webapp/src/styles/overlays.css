@@ -345,3 +345,46 @@
 .org-actions {
   @apply mt-4 flex items-center justify-end gap-2;
 }
+
+/* The groups of an organization: a shortcut that hands collections to members. */
+.org-groups {
+  @apply mt-4 grid gap-2;
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+
+.org-section-title {
+  @apply text-xs font-extrabold uppercase tracking-[0.12em];
+  color: var(--muted);
+}
+
+.org-group {
+  @apply flex items-center gap-2 rounded-xl border px-3 py-2;
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, var(--surface));
+}
+
+.org-group-name {
+  @apply min-w-0 flex-1 truncate text-sm font-semibold;
+}
+
+.org-group-detail {
+  @apply text-xs;
+  color: var(--muted);
+}
+
+.org-group-form {
+  @apply grid gap-2;
+}
+
+.org-group-lists {
+  @apply grid gap-3 sm:grid-cols-2;
+}
+
+.org-group-list {
+  @apply grid gap-1;
+}
+
+.org-group-check {
+  @apply flex items-center gap-2 text-sm;
+}

@@ -13,7 +13,7 @@ import { createPortal } from 'preact/compat';
 import { KeyRound, ShieldAlert, Trash2, X } from 'lucide-preact';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { t } from '@/lib/i18n';
-import type { OrganizationMember, VaultCollection, VaultOrganization } from '@/lib/api/organizations';
+import type { OrganizationGroup, OrganizationMember, VaultCollection, VaultOrganization } from '@/lib/api/organizations';
 
 export interface MemberRights {
   id: string;
@@ -53,6 +53,7 @@ interface OrganizationDialogProps {
   organization: VaultOrganization | null;
   collections: VaultCollection[];
   members: OrganizationMember[];
+  groups: OrganizationGroup[];
   loading: boolean;
   busy: boolean;
   /** The member who is looking at this: they cannot remove themselves. */
@@ -67,6 +68,8 @@ interface OrganizationDialogProps {
   onRemoveMember: (membershipId: string) => Promise<boolean>;
   /** Hands the organization key to a member who has none yet. */
   onGiveKey: (membershipId: string) => Promise<boolean>;
+  onSaveGroup: (group: { name: string; members: string[]; collections: Array<{ id: string }> }) => Promise<boolean>;
+  onDeleteGroup: (groupId: string) => Promise<boolean>;
   onRotate: () => void;
 }
 
@@ -81,11 +84,19 @@ const ACCESS_LEVELS: Array<{ value: AccessLevel; label: string }> = [
 export default function OrganizationDialog(props: OrganizationDialogProps) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [pendingRemoval, setPendingRemoval] = useState<OrganizationMember | null>(null);
+  // The group being written: a name, the members it carries, and the
+  // collections it hands them.
+  const [groupName, setGroupName] = useState('');
+  const [groupMembers, setGroupMembers] = useState<string[]>([]);
+  const [groupCollections, setGroupCollections] = useState<string[]>([]);
 
   useEffect(() => {
     if (!props.open) return;
     setInviteEmail('');
     setPendingRemoval(null);
+    setGroupName('');
+    setGroupMembers([]);
+    setGroupCollections([]);
     props.onLoad();
   }, [props.open]);
 
@@ -234,6 +245,96 @@ export default function OrganizationDialog(props: OrganizationDialogProps) {
               );
             })}
           </div>
+
+          {isAdmin && (
+            <div className="org-groups">
+              <div className="org-section-title">{t('txt_groups')}</div>
+              {props.groups.map((group) => (
+                <div className="org-group" key={group.id}>
+                  <span className="org-group-name">{group.name}</span>
+                  <span className="org-group-detail">
+                    {group.members.length} {t('txt_group_members').toLowerCase()} ·{' '}
+                    {group.collections.length} {t('txt_group_collections').toLowerCase()}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary small org-member-remove"
+                    disabled={props.busy}
+                    title={t('txt_remove_member')}
+                    aria-label={`${t('txt_remove_member')} - ${group.name}`}
+                    onClick={() => void props.onDeleteGroup(group.id)}
+                  >
+                    <Trash2 size={14} className="btn-icon" />
+                  </button>
+                </div>
+              ))}
+              <div className="org-group-form">
+                <input
+                  className="input"
+                  placeholder={t('txt_group_name')}
+                  value={groupName}
+                  onInput={(e) => setGroupName((e.currentTarget as HTMLInputElement).value)}
+                />
+                <div className="org-group-lists">
+                  <div className="org-group-list">
+                    <div className="org-section-title">{t('txt_group_members')}</div>
+                    {props.members.map((member) => (
+                      <label className="org-group-check" key={member.id}>
+                        <input
+                          type="checkbox"
+                          checked={groupMembers.includes(member.id)}
+                          onChange={(e) => {
+                            const on = (e.currentTarget as HTMLInputElement).checked;
+                            setGroupMembers((prev) => (on ? [...prev, member.id] : prev.filter((id) => id !== member.id)));
+                          }}
+                        />
+                        <span>{member.email || member.userId}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="org-group-list">
+                    <div className="org-section-title">{t('txt_group_collections')}</div>
+                    {collections.map((collection) => (
+                      <label className="org-group-check" key={collection.id}>
+                        <input
+                          type="checkbox"
+                          checked={groupCollections.includes(collection.id)}
+                          onChange={(e) => {
+                            const on = (e.currentTarget as HTMLInputElement).checked;
+                            setGroupCollections((prev) =>
+                              on ? [...prev, collection.id] : prev.filter((id) => id !== collection.id)
+                            );
+                          }}
+                        />
+                        <span>{collection.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={props.busy || !groupName.trim() || !groupCollections.length}
+                  onClick={() => {
+                    void (async () => {
+                      const saved = await props.onSaveGroup({
+                        name: groupName.trim(),
+                        members: groupMembers,
+                        collections: groupCollections.map((id) => ({ id })),
+                      });
+                      if (saved) {
+                        setGroupName('');
+                        setGroupMembers([]);
+                        setGroupCollections([]);
+                      }
+                    })();
+                  }}
+                >
+                  {t('txt_add_group')}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="org-actions">
             {isOwner && (

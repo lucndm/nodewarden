@@ -120,7 +120,11 @@ import {
   handleGetCollections,
   handleGetMemberPublicKeys,
   handleAcceptOrganization,
+  handleCreateOrganizationGroup,
+  handleDeleteOrganizationGroup,
   handleGetOrganizationCollections,
+  handleGetOrganizationGroups,
+  handleUpdateOrganizationGroup,
   handleGetOrganizationRotationData,
   handleGetOrganizationUsers,
   handleGetOrganizations,
@@ -514,6 +518,25 @@ export async function handleAuthenticatedRoute(
       // GET reads the member list, POST invites.
       if (method === 'GET') return handleGetOrganizationUsers(request, env, userId, inviteMatch[1]);
       if (method === 'POST') return handleInviteOrganizationUser(request, env, userId, inviteMatch[1]);
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // The groups of an organization: a shortcut that hands a set of
+    // collections to a set of members in one go.
+    const groupsMatch = path.match(/^\/api\/organizations\/([^/]+)\/groups$/i);
+    if (groupsMatch) {
+      if (method === 'GET') return handleGetOrganizationGroups(request, env, userId, groupsMatch[1]);
+      if (method === 'POST') return handleCreateOrganizationGroup(request, env, userId, groupsMatch[1]);
+      return handleUnsupportedOrganizationAction();
+    }
+    const groupMatch = path.match(/^\/api\/organizations\/([^/]+)\/groups\/([^/]+)$/i);
+    if (groupMatch) {
+      if (method === 'PUT' || method === 'POST') {
+        return handleUpdateOrganizationGroup(request, env, userId, groupMatch[1], groupMatch[2]);
+      }
+      if (method === 'DELETE') {
+        return handleDeleteOrganizationGroup(request, env, userId, groupMatch[1], groupMatch[2]);
+      }
       return handleUnsupportedOrganizationAction();
     }
 

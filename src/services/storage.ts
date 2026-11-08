@@ -191,6 +191,10 @@ import {
   getItemAccess as getStoredItemAccess,
   getItemGrants as listStoredItemGrants,
   acceptOrganizationUser as acceptStoredOrganizationUser,
+  createOrganizationGroup as createStoredOrganizationGroup,
+  deleteOrganizationGroup as deleteStoredOrganizationGroup,
+  getOrganizationGroups as listStoredOrganizationGroups,
+  replaceOrganizationGroup as replaceStoredOrganizationGroup,
   getMemberEmails as listStoredMemberEmails,
   getMemberPublicKeys as listStoredMemberPublicKeys,
   getOrganizationUserForUser as findStoredOrganizationUserForUser,
@@ -694,6 +698,36 @@ export class StorageService {
 
   async acceptOrganizationUser(input: { membershipId: string; orgId: string; now: string }): Promise<boolean> {
     return acceptStoredOrganizationUser(this.db, input);
+  }
+
+  async getOrganizationGroups(
+    orgId: string
+  ): Promise<Array<Group & { members: string[]; collections: CollectionAssignment[] }>> {
+    return listStoredOrganizationGroups(this.db, orgId);
+  }
+
+  async createOrganizationGroup(input: {
+    id: string;
+    orgId: string;
+    name: string;
+    members: string[];
+    collections: CollectionAssignment[];
+    now: string;
+  }): Promise<void> {
+    return createStoredOrganizationGroup(this.db, input);
+  }
+
+  async replaceOrganizationGroup(input: {
+    groupId: string;
+    members: string[];
+    collections: CollectionAssignment[];
+    now: string;
+  }): Promise<void> {
+    return replaceStoredOrganizationGroup(this.db, input);
+  }
+
+  async deleteOrganizationGroup(groupId: string): Promise<boolean> {
+    return deleteStoredOrganizationGroup(this.db, groupId);
   }
 
   async getOrganizationCiphersForRotation(

@@ -5,7 +5,7 @@ import VaultDialogs from '@/components/vault/VaultDialogs';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import OrganizationDialog from '@/components/vault/OrganizationDialog';
 import type { OrganizationActions } from '@/hooks/useOrganizationActions';
-import type { OrganizationMember } from '@/lib/api/organizations';
+import type { OrganizationGroup, OrganizationMember } from '@/lib/api/organizations';
 import VaultDetailView from '@/components/vault/VaultDetailView';
 import VaultEditor from '@/components/vault/VaultEditor';
 import VaultListPanel from '@/components/vault/VaultListPanel';
@@ -105,6 +105,7 @@ export default function VaultPage(props: VaultPageProps) {
   // The organization being managed, and the members it has right now.
   const [manageOrganizationId, setManageOrganizationId] = useState('');
   const [organizationMembers, setOrganizationMembers] = useState<OrganizationMember[]>([]);
+  const [organizationGroups, setOrganizationGroups] = useState<OrganizationGroup[]>([]);
   const [organizationMembersLoading, setOrganizationMembersLoading] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1564,6 +1565,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
         organization={props.organizations.find((entry) => entry.id === manageOrganizationId) ?? null}
         collections={props.collections}
         members={organizationMembers}
+        groups={organizationGroups}
         loading={organizationMembersLoading}
         busy={props.organizationActions.busyOrganizationId === manageOrganizationId}
         currentUserId={props.currentUserId}
@@ -1575,6 +1577,9 @@ const folderName = useCallback((id: string | null | undefined): string => {
             .loadMembers(manageOrganizationId)
             .then((members: OrganizationMember[]) => setOrganizationMembers(members))
             .finally(() => setOrganizationMembersLoading(false));
+          void props.organizationActions
+            .loadGroups(manageOrganizationId)
+            .then((groups: OrganizationGroup[]) => setOrganizationGroups(groups));
         }}
         onInvite={async (email) => {
           if (!manageOrganizationId) return false;
@@ -1599,6 +1604,22 @@ const folderName = useCallback((id: string | null | undefined): string => {
             setOrganizationMembers(await props.organizationActions.loadMembers(manageOrganizationId));
           }
           return given;
+        }}
+        onSaveGroup={async (group) => {
+          if (!manageOrganizationId) return false;
+          const saved = await props.organizationActions.saveGroup(manageOrganizationId, group);
+          if (saved) {
+            setOrganizationGroups(await props.organizationActions.loadGroups(manageOrganizationId));
+          }
+          return saved;
+        }}
+        onDeleteGroup={async (groupId) => {
+          if (!manageOrganizationId) return false;
+          const removed = await props.organizationActions.removeGroup(manageOrganizationId, groupId);
+          if (removed) {
+            setOrganizationGroups(await props.organizationActions.loadGroups(manageOrganizationId));
+          }
+          return removed;
         }}
         onRemoveMember={async (membershipId) => {
           if (!manageOrganizationId) return false;
