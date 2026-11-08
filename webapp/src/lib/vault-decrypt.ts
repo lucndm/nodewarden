@@ -1,4 +1,5 @@
 import { base64ToBytes, decryptBw, decryptStr } from './crypto';
+import { openOrganizationKey } from './organization-key-rotation';
 import { deriveSendKeyParts, looksLikeCipherString } from './app-support';
 import type { Cipher, Folder, Send } from './types';
 
@@ -123,6 +124,59 @@ async function decryptFieldWithSource(
     }
   }
   return { text: looksLikeCipherString(raw) ? '' : raw, source: 'plain' };
+}
+
+/**
+ * Reads the names of the collections.
+ *
+ * A collection name is encrypted with the organization key, exactly like a
+ * shared item, so a collection created by an official client arrives as a
+ * cipher string. A name that is not encrypted is shown as it is: an older
+ * collection, or one this server let through in plain text.
+ */
+export async function decryptCollectionNames<T extends { organizationId: string; name: string }>(args: {
+  collections: T[];
+  organizations: Array<{ id: string; key: string | null }>;
+  symEncKeyB64: string;
+  symMacKeyB64: string;
+  encryptedPrivateKey: string | null;
+}): Promise<T[]> {
+  if (!args.collections.length) return [];
+  const userEnc = base64ToBytes(args.symEncKeyB64);
+  const userMac = base64ToBytes(args.symMacKeyB64);
+
+  const organizationKeys = new Map<string, { encKey: Uint8Array; macKey: Uint8Array }>();
+  if (args.encryptedPrivateKey) {
+    for (const organization of args.organizations) {
+      const wrapped = String(organization.key || '');
+      if (!wrapped.startsWith('4.')) continue;
+      try {
+        const raw = await openOrganizationKey({
+          encryptedPrivateKey: args.encryptedPrivateKey,
+          userEncKey: userEnc,
+          userMacKey: userMac,
+          wrappedOrganizationKey: wrapped,
+        });
+        organizationKeys.set(organization.id, { encKey: raw.slice(0, 32), macKey: raw.slice(32, 64) });
+      } catch {
+        // A key wrapped for someone else simply does not open here.
+      }
+    }
+  }
+
+  return Promise.all(
+    args.collections.map(async (collection) => {
+      const raw = String(collection.name || '');
+      if (!looksLikeCipherString(raw)) return collection;
+      const key = organizationKeys.get(collection.organizationId);
+      if (!key) return { ...collection, name: '' };
+      try {
+        return { ...collection, name: await decryptStr(raw, key.encKey, key.macKey) };
+      } catch {
+        return collection;
+      }
+    })
+  );
 }
 
 export async function decryptVaultCore(args: DecryptVaultCoreArgs): Promise<DecryptVaultCoreResult> {

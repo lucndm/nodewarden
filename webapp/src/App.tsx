@@ -72,7 +72,7 @@ import { dispatchBackupProgress, type BackupProgressDetail } from '@/lib/backup-
 import { clearOfflineUnlockRecord } from '@/lib/offline-auth';
 import { clearPasswordSecurityCache } from '@/lib/password-security-cache';
 import { clearGeneratorHistory } from '@/lib/generator-history';
-import { decryptSends, decryptVaultCore } from '@/lib/vault-decrypt';
+import { decryptCollectionNames, decryptSends, decryptVaultCore } from '@/lib/vault-decrypt';
 import { decryptSendsInWorker, decryptVaultCoreInWorker } from '@/lib/vault-worker';
 import {
   DEMO_CIPHERS,
@@ -1204,6 +1204,46 @@ export default function App() {
       pushToast('warning', t('txt_usage_tracking_failed'));
     }
   }
+  // A collection created by an official client carries an encrypted name, so
+  // the names are read here the same way the vault is.
+  const [decryptedCollections, setDecryptedCollections] = useState<
+    import('@/lib/api/organizations').VaultCollection[]
+  >([]);
+  useEffect(() => {
+    const source = collectionsQuery.data ?? [];
+    if (!source.length) {
+      setDecryptedCollections([]);
+      return;
+    }
+    if (IS_DEMO_MODE || !session?.symEncKey || !session?.symMacKey || !profile?.privateKey) {
+      setDecryptedCollections(source);
+      return;
+    }
+    let active = true;
+    void decryptCollectionNames({
+      collections: source,
+      organizations: organizationsQuery.data ?? [],
+      symEncKeyB64: session.symEncKey,
+      symMacKeyB64: session.symMacKey,
+      encryptedPrivateKey: profile.privateKey,
+    })
+      .then((next) => {
+        if (active) setDecryptedCollections(next);
+      })
+      .catch(() => {
+        if (active) setDecryptedCollections(source);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    collectionsQuery.data,
+    organizationsQuery.data,
+    session?.symEncKey,
+    session?.symMacKey,
+    profile?.privateKey,
+  ]);
+
   const profileQuery = useQuery({
     queryKey: ['profile', vaultCacheKey || session?.email],
     queryFn: () => getProfile(authedFetch),
@@ -2147,7 +2187,7 @@ export default function App() {
     cipherUsage: cipherUsageQuery.isError ? null : (cipherUsageQuery.data ?? null),
     cipherUsageError: cipherUsageQuery.isError,
     organizations: organizationsQuery.data ?? [],
-    collections: collectionsQuery.data ?? [],
+    collections: decryptedCollections,
     collectionsError:
       organizationsQuery.isError || collectionsQuery.isError ? t('txt_collection_load_failed') : '',
     onTrackPasswordCopy: (cipherId: string) => { void trackPasswordCopy(cipherId); },

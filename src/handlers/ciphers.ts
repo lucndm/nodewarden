@@ -1403,6 +1403,168 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
   );
 }
 
+// PUT /api/ciphers/:id/share
+//
+// The official clients share a personal item by re-encrypting it under the
+// organization key on their side and sending the whole item back with the
+// organization and the collections it should join. The server never sees the
+// key; it checks that the member may write those collections and stores the
+// item where it was told.
+export async function handleShareCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const existingCipher = await storage.getCipherForUser(id, userId);
+  if (!existingCipher) return errorResponse('Cipher not found', 404);
+  // Only the item's own owner shares it: a shared item already belongs to an
+  // organization, and moving one between organizations would leave its key
+  // wrapped for the old one.
+  if (existingCipher.organizationId) {
+    return errorResponse('This item already belongs to an organization', 400);
+  }
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+  const cipherData = body.Cipher || body.cipher || body;
+
+  // The official clients put the organization inside the cipher, and the
+  // collections beside it. Both are accepted where they arrive.
+  const organizationId = normalizeOptionalId(
+    readCipherProp<string | null>(body, ['organizationId', 'OrganizationId']).value
+    ?? readCipherProp<string | null>(cipherData, ['organizationId', 'OrganizationId']).value
+  );
+  if (!organizationId) return errorResponse('organizationId is required', 400);
+
+  // The official clients send `{ cipher: {...}, collectionIds: [...] }`: the
+  // collections sit beside the cipher, not inside it. A body without them
+  // shares the item and leaves it in no collection, which is what the newer
+  // clients do before they assign one.
+  const incomingCollectionIds = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']);
+  const nestedCollectionIds = readCipherProp<string[] | null>(cipherData, ['collectionIds', 'CollectionIds']);
+  const rawCollectionIds = incomingCollectionIds.present
+    ? incomingCollectionIds.value
+    : nestedCollectionIds.value;
+  const requested = Array.isArray(rawCollectionIds)
+    ? [...new Set(rawCollectionIds.filter((value): value is string => typeof value === 'string'))]
+    : [];
+  if (requested.length) {
+    const organizationCollections = await storage.getOrganizationCollectionIds(organizationId, requested);
+    if (organizationCollections.size !== requested.length) {
+      return errorResponse('Collection not found', 404);
+    }
+    const rights = await storage.getCollectionRightsForCollections(userId, requested);
+    for (const collectionId of requested) {
+      const entry = rights.get(collectionId);
+      if (!entry || entry.readOnly || entry.hidePasswords) {
+        return errorResponse('You may not write to that collection', 403);
+      }
+    }
+  }
+
+  const incomingKey = readCipherProp<string | null>(cipherData, ['key', 'Key']);
+  if (incomingKey.present && !shouldAcceptCipherKey(incomingKey.value)) {
+    return errorResponse('Cipher key encryption is not supported by this server. Resync the client and try again.', 400);
+  }
+
+  const {
+    preserveRevisionDate: _preserveRevisionDate,
+    PreserveRevisionDate: _pascalPreserveRevisionDate,
+    lastKnownRevisionDate: _lastKnownRevisionDate,
+    LastKnownRevisionDate: _pascalLastKnownRevisionDate,
+    organizationId: _organizationId,
+    OrganizationId: _pascalOrganizationId,
+    collectionIds: _collectionIds,
+    CollectionIds: _pascalCollectionIds,
+    ...sharedFields
+  } = cipherData;
+  const cipher: Cipher = {
+    ...existingCipher,
+    ...sharedFields,
+    id: existingCipher.id,
+    userId: existingCipher.userId,
+    createdAt: existingCipher.createdAt,
+    // A shared item has no personal folder and no personal tags: both belong
+    // to the member's own vault, not to the organization.
+    folderId: null,
+    tags: [],
+    organizationId,
+    collectionIds: requested,
+    updatedAt: new Date(Math.max(Date.now(), Date.parse(existingCipher.updatedAt) + 1)).toISOString(),
+  };
+  if (incomingKey.present) {
+    cipher.key = normalizeCipherKeyForStorage(incomingKey.value) || normalizeCipherKeyForStorage(existingCipher.key);
+  } else {
+    cipher.key = normalizeCipherKeyForStorage(existingCipher.key);
+  }
+  normalizeCipherForStorage(cipher);
+  const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
+  if (compatibilityError) return errorResponse(compatibilityError, 400);
+
+  if (!(await storage.updateCipherIfUnchanged(cipher, existingCipher.updatedAt, null))) {
+    return errorResponse('The client copy of this cipher is out of date. Resync the client and try again.', 400);
+  }
+  await storage.setCipherCollections(cipher.id, requested);
+  const revision = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revision);
+  notifyCipherUpdateForRequest(request, env, cipher, revision);
+
+  return jsonResponse(
+    cipherToResponse(cipher, await storage.getAttachmentsByCipher(cipher.id), {
+      ...cipherResponseOptionsForRequest(request),
+      collectionIds: requested,
+    })
+  );
+}
+
+// PUT /api/ciphers/:id/collections_v2
+//
+// The newer clients assign the collections of an organization item here,
+// after sharing it. The member has to be allowed to write them.
+export async function handleSetCipherCollections(
+  request: Request,
+  env: Env,
+  userId: string,
+  id: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const cipher = await storage.getCipherForUser(id, userId);
+  if (!cipher) return errorResponse('Cipher not found', 404);
+  if (!cipher.organizationId) return errorResponse('This item does not belong to an organization', 400);
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+  const incoming = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']);
+  const requested = Array.isArray(incoming.value)
+    ? [...new Set(incoming.value.filter((value): value is string => typeof value === 'string'))]
+    : [];
+  if (!requested.length) {
+    return errorResponse('A shared item must stay in at least one collection', 400);
+  }
+  const organizationCollections = await storage.getOrganizationCollectionIds(cipher.organizationId, requested);
+  if (organizationCollections.size !== requested.length) {
+    return errorResponse('Collection not found', 404);
+  }
+  const rights = await storage.getCollectionRightsForCollections(userId, requested);
+  for (const collectionId of requested) {
+    const entry = rights.get(collectionId);
+    if (!entry || entry.readOnly || entry.hidePasswords) {
+      return errorResponse('You may not write to that collection', 403);
+    }
+  }
+
+  await storage.setCipherCollections(cipher.id, requested);
+  const revision = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revision);
+
+  return new Response(null, { status: 204 });
+}
+
 // DELETE /api/ciphers/:id
 export async function handleDeleteCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);

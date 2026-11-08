@@ -37,6 +37,8 @@ import {
   handleUpdateCipher,
   handleDeleteCipher,
   handleDeleteCipherCompat,
+  handleSetCipherCollections,
+  handleShareCipher,
   handlePermanentDeleteCipher,
   handleRestoreCipher,
   handleBulkArchiveCiphers,
@@ -117,6 +119,7 @@ import {
   handleUpdateOrganizationUser,
   handleGetCollections,
   handleGetMemberPublicKeys,
+  handleGetOrganizationCollections,
   handleGetOrganizationRotationData,
   handleGetOrganizationUsers,
   handleGetOrganizations,
@@ -381,6 +384,10 @@ export async function handleAuthenticatedRoute(
     if (subPath === '/unarchive' && (method === 'PUT' || method === 'POST')) return handleUnarchiveCipher(request, env, userId, cipherId);
     if (subPath === '/partial' && (method === 'PUT' || method === 'POST')) return handlePartialUpdateCipher(request, env, userId, cipherId);
     if (subPath === '/usage' && method === 'POST') return handleRecordCipherUsage(request, env, userId, cipherId);
+    if (subPath === '/share' && method === 'PUT') return handleShareCipher(request, env, userId, cipherId);
+    if (subPath === '/collections_v2' && (method === 'PUT' || method === 'POST')) {
+      return handleSetCipherCollections(request, env, userId, cipherId);
+    }
     if (subPath === '/share' && method === 'POST') return handleGetCipher(request, env, userId, cipherId);
     if (subPath === '/details' && method === 'GET') return handleGetCipher(request, env, userId, cipherId);
     if (subPath === '/attachment/v2' && method === 'POST') return handleCreateAttachment(request, env, userId, cipherId);
@@ -486,6 +493,7 @@ export async function handleAuthenticatedRoute(
     // POST /api/organizations/:orgId/collections — create a collection.
     const collectionMatch = path.match(/^\/api\/organizations\/([^/]+)\/collections$/i);
     if (collectionMatch) {
+      if (method === 'GET') return handleGetOrganizationCollections(request, env, userId, collectionMatch[1]);
       if (method === 'POST') {
         return handleCreateCollection(request, env, userId, collectionMatch[1]);
       }

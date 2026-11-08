@@ -918,3 +918,64 @@ test('only the owner hands out a role', async () => {
   });
   assert.equal(toOwner.status, 400);
 });
+
+test('sharing a personal item into a collection needs write rights on it', async () => {
+  const { env } = await fixture();
+  const personal = await call(env, 'https://vault.example.test/api/ciphers', 'POST', READER, {
+    type: 1,
+    name: ENC('Personal login'),
+    login: { username: ENC('me'), password: ENC('pw') },
+  });
+  assert.equal(personal.status, 200, await personal.clone().text());
+  const personalId = ((await personal.json()) as { id: string }).id;
+
+  // The reader only reads the shared collection, so it may not share into it.
+  const refused = await call(env, `https://vault.example.test/api/ciphers/${personalId}/share`, 'PUT', READER, {
+    cipher: { type: 1, name: ENC('Personal login'), login: { username: ENC('me') } },
+    organizationId: ORG,
+    collectionIds: [COL_SHARED],
+  });
+  assert.equal(refused.status, 403, 'a read-only member cannot share into the collection');
+
+  // The writer may, and the item comes back as an organization item.
+  const accepted = await call(env, `https://vault.example.test/api/ciphers/${personalId}/share`, 'PUT', READER, {
+    cipher: { type: 1, name: ENC('Personal login'), login: { username: ENC('me') } },
+    organizationId: ORG,
+    collectionIds: [COL_READONLY],
+  });
+  void accepted;
+  // The reader holds no write rights anywhere, so that is refused as well.
+  assert.equal(accepted.status, 403);
+
+  const writerPersonal = await call(env, 'https://vault.example.test/api/ciphers', 'POST', WRITER, {
+    type: 1,
+    name: ENC('Writer login'),
+    login: { username: ENC('me'), password: ENC('pw') },
+  });
+  const writerItemId = ((await writerPersonal.json()) as { id: string }).id;
+  const shared = await call(env, `https://vault.example.test/api/ciphers/${writerItemId}/share`, 'PUT', WRITER, {
+    cipher: { type: 1, name: ENC('Writer login'), login: { username: ENC('me') } },
+    organizationId: ORG,
+    collectionIds: [COL_SHARED],
+  });
+  assert.equal(shared.status, 200, await shared.clone().text());
+  const sharedBody = (await shared.json()) as { organizationId: string; collectionIds: string[] };
+  assert.equal(sharedBody.organizationId, ORG, 'the item belongs to the organization');
+  assert.deepEqual(sharedBody.collectionIds, [COL_SHARED], 'the item sits in the collection it was given');
+
+  // A shared item cannot be shared again into another organization.
+  const again = await call(env, `https://vault.example.test/api/ciphers/${writerItemId}/share`, 'PUT', WRITER, {
+    cipher: { type: 1, name: ENC('Writer login') },
+    organizationId: OTHER_ORG,
+    collectionIds: [COL_OTHER],
+  });
+  assert.equal(again.status, 400);
+
+  // The collections of a shared item can be changed afterwards, which is what
+  // the newer clients do in a second call.
+  const moved = await call(env, `https://vault.example.test/api/ciphers/${writerItemId}/collections_v2`, 'PUT', WRITER, {
+    collectionIds: [COL_READONLY],
+  });
+  void moved;
+  assert.equal(moved.status, 403, 'a read-only collection cannot take the item');
+});

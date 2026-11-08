@@ -90,6 +90,12 @@ export async function handleCreateOrganization(
     now,
   });
 
+  // A new organization changes what the member's vault holds, so the revision
+  // moves: the official clients skip a sync whose revision matches, and would
+  // otherwise not see the organization until something else changed.
+  const organizationRevision = await storage.updateRevisionDate(userId, now);
+  notifyVaultSyncForRequest(request, env, userId, organizationRevision);
+
   return jsonResponse(
     {
       id: orgId,
@@ -477,7 +483,14 @@ export async function handleCreateCollection(
   if (!name) return errorResponse('Collection name is required', 400);
 
   const collectionId = crypto.randomUUID();
-  await storage.createCollection({ id: collectionId, orgId, name, now: new Date().toISOString() });
+  const now = new Date().toISOString();
+  await storage.createCollection({ id: collectionId, orgId, name, now });
+  // A collection is something the members' clients have to sync.
+  for (const membership of await storage.getOrganizationUsers(orgId)) {
+    if (membership.status !== STATUS_CONFIRMED) continue;
+    const revision = await storage.updateRevisionDate(membership.userId, now);
+    notifyVaultSyncForRequest(request, env, membership.userId, revision);
+  }
   return jsonResponse(
     {
       id: collectionId,
@@ -491,6 +504,50 @@ export async function handleCreateCollection(
       object: 'collectionDetails',
     },
     200
+  );
+}
+
+// GET /api/organizations/:orgId/collections
+//
+// The collections of one organization that this member may reach, with the
+// rights they hold on each. The official clients ask for this before they let
+// a member put an item into a collection.
+export async function handleGetOrganizationCollections(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const membership = await storage.getOrganizationUserForUser(orgId, userId);
+  if (!membership || membership.status !== STATUS_CONFIRMED) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  const [collections, rights] = await Promise.all([
+    storage.getCollectionsForUser(userId),
+    storage.getCollectionRights(userId),
+  ]);
+  const rightsByCollection = new Map(rights.map((entry) => [entry.collectionId, entry]));
+  return listResponse(
+    collections
+      .filter((collection) => collection.orgId === orgId)
+      .map((collection) => {
+        const entry = rightsByCollection.get(collection.id);
+        return {
+          id: collection.id,
+          organizationId: collection.orgId,
+          name: collection.name,
+          externalId: null,
+          type: 0,
+          // The fallback grants nothing: a collection whose rights did not
+          // arrive is reported as the most restrictive reading.
+          readOnly: entry?.readOnly ?? true,
+          hidePasswords: entry?.hidePasswords ?? true,
+          manage: entry?.manage ?? false,
+          object: 'collectionDetails',
+        };
+      })
   );
 }
 
