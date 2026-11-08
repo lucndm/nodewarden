@@ -230,6 +230,24 @@ Kiểm chứng này tìm ra và đã sửa **5 lỗi tương thích thật**:
 
 Ngoài ra Web Vault nay **giải mã tên collection** bằng khóa organization (`decryptCollectionNames`), có fallback hiển thị nguyên văn cho collection cũ lưu plaintext — trước đó tên do client thật tạo sẽ hiện thành `2.xxx`.
 
+**Kiểm chứng bằng extension chính thức 2026.10.2 (đã chạy):**
+
+`npm run test:local-extension` nạp **gói extension chính thức, không sửa một byte** (`dist-chrome-2026.10.2.zip` từ release `bitwarden/clients`) vào Chromium, đăng nhập vào Worker/D1 local qua HTTPS, rồi **7 check**:
+
+- extension nạp được và trỏ về server local;
+- đăng nhập được bằng tài khoản thật;
+- **thấy item chia sẻ** trong vault của extension;
+- **thấy collection** của organization;
+- mở item → **tên organization** và **collection của item** hiện đúng.
+
+Cách làm: Chromium 154 đã chặn `--load-extension`, nên gói được nạp qua lệnh CDP `Extensions.loadUnpacked` (trả về đúng id của extension) thay vì cờ dòng lệnh. Màn hình mở đầu (xin làm trình quản lý mật khẩu) và carousel giới thiệu được bước qua; môi trường **self-hosted → Custom environment** rồi dán địa chỉ server.
+
+Cần Chromium + `Xvfb` + gói extension giải nén ở `/tmp/nw-ext` (thiếu thì check tự bỏ qua, không làm đỏ cả suite).
+
+**Sửa lỗi staleness của khóa organization (do test UI bắt được):**
+
+Danh sách organization trước đây được tải riêng với `staleTime` 60 giây. Nếu organization được tạo **sau** lúc đăng nhập, vault đã có item chia sẻ nhưng danh sách vẫn cũ → **item không mở được, tên rỗng** (test UI bắt được lúc sửa item). Nay **khóa organization đi kèm luôn với `/api/sync`** (`profile.organizations`), nên nó không bao giờ cũ hơn item: `VaultCoreSnapshot` mang theo organization, và `decryptVaultCore` ưu tiên bản đó.
+
 **Còn làm (P1-B):** chưa có endpoint quản lý group, và mời member bằng email còn thiếu bước **member tự chấp nhận** (hiện admin confirm ngay khi người mời đã có public key; nếu chưa có thì phải admin bấm lại sau).
 
 **Tham chiếu thực tế từ `dani-garcia/vaultwarden` (đọc source `17b159b`):** đây là server Bitwarden-compatible tự host, đã làm phần lớn P3/P4/P5 mà NodeWarden còn mở, nên nó cho biết hình hình thực tế trước khi chốt. Những gì **không** có trong vaultwarden, tức là phần NodeWarden đang đi trước: không có bảng `tags` (chỉ `folders`), không có cột usage/`last_used_at` cho cipher, không có bảng version của item (chỉ `password_history`), **không** có kiểm tra tên Folder plaintext — `folders.name` lưu thẳng chuỗi client gửi lên (`src/db/models/folder.rs:52-61`), nên NodeWarden phải tự kiểm tra ciphertext-vs-plaintext như đã làm. Những gì vaultwarden có: Organizations + Collections + Groups + Member Roles (Owner/Admin/Manager/User/Custom), Event Logs, Policies, Directory Connector, Emergency Access, SSO OIDC; SCIM thì **không** (`"useScim": false` vì không thuộc AGPLv3). Bài học dùng được cho P1-B/P3/P5: `/sync` chỉ trả cipher **visible** cho user — `Cipher::find_by_user_visible` (`src/db/models/cipher.rs:926`) và `get_access_restrictions` trả `None` khi user không có quyền, nên lọc quyền nằm ở tầng query chứ không ở UI; và **gán trực tiếp thắng gán qua group** cho cùng collection (upstream cũng vậy: `WHERE NOT EXISTS (SELECT 1 FROM CollectionUser ...)` trong SQL của server chính thức). Lưu ý: vaultwarden cộng dồn quyền bằng AND cho `read_only`/`hide_passwords` và OR cho `manage`, khác quy tắc rank của server chính thức; NodeWarden theo server chính thức, chi tiết ở mục P1.

@@ -1455,8 +1455,20 @@ export default function App() {
         // A shared item's key is protected by the organization key, which is
         // wrapped for this member: the decrypt needs both, and without them a
         // shared item reads as an item with no name.
+        // The organizations that came with the sync come first: they are
+        // never older than the items, so a shared item can be opened as soon
+        // as it arrives. A separately loaded list can lag behind, and then the
+        // item reads as an item with no name.
+        const syncedOrganizations = encryptedVaultCore?.organizations ?? [];
         const shareArgs = {
-          organizations: (organizationsQuery.data ?? []).map((organization) => ({
+          organizations: (
+            syncedOrganizations.length
+              ? syncedOrganizations
+              : (organizationsQuery.data ?? []).map((organization) => ({
+                  id: organization.id,
+                  key: organization.key,
+                }))
+          ).map((organization) => ({
             id: organization.id,
             key: organization.key,
           })),
@@ -1517,7 +1529,18 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [session?.symEncKey, session?.symMacKey, vaultCacheKey, encryptedFolders, encryptedCiphers, organizationsQuery.data, profileQuery.data?.privateKey]);
+  }, [
+    session?.symEncKey,
+    session?.symMacKey,
+    vaultCacheKey,
+    encryptedFolders,
+    encryptedCiphers,
+    // The organizations that came with the sync: a shared item needs its key
+    // to open, and that key is never older than the item.
+    encryptedVaultCore?.organizations,
+    organizationsQuery.data,
+    profileQuery.data?.privateKey,
+  ]);
 
   useEffect(() => {
     if (IS_DEMO_MODE) return;
