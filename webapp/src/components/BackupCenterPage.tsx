@@ -442,9 +442,14 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
   }
 
   function applySavedDestinationToDrafts(saved: AdminBackupSettings, destinationId: string | null) {
+    // The saved passphrase comes back redacted. The draft takes it, so the
+    // field shows that a passphrase is set and saving again keeps it instead
+    // of clearing it.
+    const savedPassphrase = saved.archivePassphrase ?? '';
     if (!destinationId) {
       setSettings((current) => ({
         destinations: current.destinations.filter((destination) => !savedSettings?.destinations.some((savedDestination) => savedDestination.id === destination.id)),
+        archivePassphrase: savedPassphrase || current.archivePassphrase || '',
       }));
       return;
     }
@@ -453,6 +458,7 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
       destinations: current.destinations.map((destination) => (
         destination.id === destinationId && savedDestination ? savedDestination : destination
       )),
+      archivePassphrase: savedPassphrase || current.archivePassphrase || '',
     }));
   }
 
@@ -540,6 +546,7 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
     const destinationIdToDelete = selectedDestinationId;
     const nextSettings: AdminBackupSettings = {
       destinations: (savedSettings?.destinations || []).filter((destination) => destination.id !== destinationIdToDelete),
+      archivePassphrase: settings.archivePassphrase,
     };
 
     openBackupPasswordPrompt({ action: 'deleteDestination', destinationId: destinationIdToDelete, settings: nextSettings });
@@ -554,7 +561,7 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
       const nextDraftDestinations = settings.destinations.filter((destination) => destination.id !== destinationIdToDelete);
       const nextSelected = getFirstVisibleDestinationId({ destinations: nextDraftDestinations }) || getFirstVisibleDestinationId(saved);
       setSavedSettings(saved);
-      setSettings({ destinations: nextDraftDestinations });
+      setSettings({ destinations: nextDraftDestinations, archivePassphrase: saved.archivePassphrase ?? settings.archivePassphrase ?? '' });
       setRemoteBrowserCache((current) => invalidateRemoteBrowserCacheForDestination(
         destinationIdToDelete,
         current,
