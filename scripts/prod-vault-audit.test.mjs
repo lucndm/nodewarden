@@ -77,7 +77,13 @@ async function startStandIn(vault) {
       });
       request.on('end', () => {
         const sql = JSON.parse(body || '{}').sql || '';
-        const rows = sql.includes('sqlite_master')
+        const rows = sql.includes('FROM attachments')
+          ? (vault.attachments || [])
+          : sql.includes('FROM cipher_versions')
+            ? (vault.versions || [])
+            : sql.includes('FROM sends')
+              ? (vault.sends || [])
+              : sql.includes('sqlite_master')
           ? (vault.tables || []).map((name) => ({ name }))
           : sql.includes('FROM folders')
           ? vault.folders
