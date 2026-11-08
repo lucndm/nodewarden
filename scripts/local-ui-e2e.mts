@@ -540,6 +540,13 @@ async function main() {
     })()`);
     await waitFor(`document.body.textContent.includes('Excluded from the check')`, 'the excluded badge', 15000);
     checks.ok('the item can be kept out of the password check', true);
+    // The badge says the password is not sent to the breach database, so the
+    // button that sends it cannot be there ready to be pressed.
+    const checkDisabled = await evaluate(`(() => {
+      const button = [...document.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === 'Check breach');
+      return !!button && button.disabled;
+    })()`);
+    checks.ok('and the password is not sent while the item is kept out', checkDisabled === true);
     const exclusions = await api(worker.baseUrl, '/api/security/scan-exclusions', { token: seeded.token });
     checks.ok(
       'the server holds the exclusion',

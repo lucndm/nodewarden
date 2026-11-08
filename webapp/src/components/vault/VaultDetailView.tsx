@@ -644,7 +644,15 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   >
                     {props.scanExcluded ? t('txt_scan_include_again') : t('txt_scan_exclude')}
                   </button>
-                  <button type="button" className="btn btn-secondary small" disabled={checkingBreach || !props.selectedCipher.login?.decPassword} onClick={() => void checkBreach()}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary small"
+                    // An item that is kept out of the check is not checked:
+                    // the badge above says so, and the button to put it back
+                    // in is next to it.
+                    disabled={checkingBreach || !props.selectedCipher.login?.decPassword || props.scanExcluded}
+                    onClick={() => void checkBreach()}
+                  >
                     {checkingBreach ? <RefreshCw size={14} className="btn-icon spin" /> : <ShieldCheck size={14} className="btn-icon" />}
                     {checkingBreach ? t('txt_checking_password_security') : t('txt_check_password_breach')}
                   </button>
