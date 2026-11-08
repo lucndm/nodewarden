@@ -8,6 +8,7 @@ import {
   handleAdminSetUserStatus,
   handleAdminDeleteUser,
   handleAdminListAuditLogs,
+  handleAdminExportAuditLogs,
   handleAdminGetAuditLogSettings,
   handleAdminUpdateAuditLogSettings,
   handleAdminClearAuditLogs,
@@ -19,6 +20,7 @@ function isKnownAdminPath(path: string): boolean {
   return (
     path === '/api/admin/users' ||
     path === '/api/admin/logs' ||
+    path === '/api/admin/logs/export' ||
     path === '/api/admin/logs/settings' ||
     path === '/api/admin/invites' ||
     path.startsWith('/api/admin/backup') ||
@@ -51,6 +53,10 @@ export async function handleAdminRoute(
 
   if (path === '/api/admin/logs' && method === 'GET') {
     return handleAdminListAuditLogs(request, env, actorUser);
+  }
+
+  if (path === '/api/admin/logs/export' && method === 'GET') {
+    return handleAdminExportAuditLogs(request, env, actorUser);
   }
 
   if (path === '/api/admin/logs' && method === 'DELETE') {

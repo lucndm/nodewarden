@@ -31,7 +31,7 @@ import {
   listPendingAuthRequests,
   respondToAuthRequest,
 } from '@/lib/api/auth-requests';
-import { clearAuditLogs, getAuditLogSettings, listAdminInvites, listAdminUsers, listAuditLogs, saveAuditLogSettings, type AuditLogFilters } from '@/lib/api/admin';
+import { clearAuditLogs, exportAuditLogs, getAuditLogSettings, listAdminInvites, listAdminUsers, listAuditLogs, saveAuditLogSettings, type AuditLogFilters } from '@/lib/api/admin';
 import { getDomainRules, saveDomainRules } from '@/lib/api/domains';
 import { getSendById, getSends } from '@/lib/api/send';
 import { getCipherById, getCipherUsage, getFolderById, mergeCipherUsageEntry, recordCipherUsage, repairCipherKeyMismatches, repairCipherUriChecksums, type CipherUsageMap } from '@/lib/api/vault';
@@ -2376,6 +2376,7 @@ export default function App() {
     onLoadAuditLogSettings: () => getAuditLogSettings(authedFetch),
     onSaveAuditLogSettings: (settings: AuditLogSettings) => saveAuditLogSettings(authedFetch, settings),
     onClearAuditLogs: () => clearAuditLogs(authedFetch),
+    onExportAuditLogs: (filters: AuditLogFilters) => exportAuditLogs(authedFetch, filters),
     onExportBackup: async (masterPassword: string, includeAttachments?: boolean) => {
       const hash = await deriveCurrentMasterPasswordHash(masterPassword);
       return backupActions.exportBackup(hash, includeAttachments);

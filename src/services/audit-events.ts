@@ -124,7 +124,13 @@ export function auditRequestMetadata(request: Request): Record<string, unknown> 
   };
 }
 
-function sanitizeMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+/**
+ * The metadata of an event, with everything that is not on the allowlist
+ * dropped. Events are cleaned when they are written, so a stored event is
+ * already clean; this is used again before an event leaves the server, so a
+ * row that was written before the rule existed cannot carry a secret out.
+ */
+export function sanitizeMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
   const clean: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(metadata)) {
     if (!ALLOWED_METADATA_KEYS.has(key)) continue;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks';
-import { ChevronLeft, ChevronRight, Database, RefreshCw, Save, Search, Server, Settings2, ShieldAlert, Smartphone, Trash2, UserRound } from 'lucide-preact';
+import { ChevronLeft, ChevronRight, Database, Download, RefreshCw, Save, Search, Server, Settings2, ShieldAlert, Smartphone, Trash2, UserRound } from 'lucide-preact';
 import LoadingState from '@/components/LoadingState';
 import type { AuditLogFilters } from '@/lib/api/admin';
 import { t } from '@/lib/i18n';
@@ -10,6 +10,8 @@ interface LogCenterPageProps {
   onLoadSettings: () => Promise<AuditLogSettings>;
   onSaveSettings: (settings: AuditLogSettings) => Promise<AuditLogSettings>;
   onClearLogs: () => Promise<number>;
+  /** The audit log as a CSV file, with the filters that are on screen. */
+  onExportLogs: (filters: AuditLogFilters) => Promise<{ csv: string; rows: number; truncated: boolean }>;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
   mobileLayout?: boolean;
   onMobileBack?: () => void;
@@ -184,6 +186,20 @@ function inferRetentionMode(settings: AuditLogSettings): RetentionMode {
   return settings.retentionDays === null && settings.maxEntries !== null ? 'entries' : 'days';
 }
 
+/** Hands the file to the browser as a download. */
+function downloadAuditCsv(csv: string): void {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export default function LogCenterPage(props: LogCenterPageProps) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -198,6 +214,7 @@ export default function LogCenterPage(props: LogCenterPageProps) {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [retentionMode, setRetentionMode] = useState<RetentionMode>('days');
   const [settings, setSettings] = useState<AuditLogSettings>({ retentionDays: 90, maxEntries: null });
   const [error, setError] = useState('');
@@ -282,6 +299,23 @@ export default function LogCenterPage(props: LogCenterPageProps) {
       props.onNotify('error', t('txt_log_settings_save_failed'));
     } finally {
       setSettingsSaving(false);
+    }
+  }
+
+  async function exportLogs(): Promise<void> {
+    setExporting(true);
+    try {
+      const rangeFilter = buildRange(range);
+      const result = await props.onExportLogs({ category, level, q: search, ...rangeFilter });
+      downloadAuditCsv(result.csv);
+      props.onNotify(
+        'success',
+        result.truncated ? t('txt_log_export_truncated', { rows: result.rows }) : t('txt_log_export_done', { rows: result.rows })
+      );
+    } catch {
+      props.onNotify('error', t('txt_log_export_failed'));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -390,6 +424,10 @@ export default function LogCenterPage(props: LogCenterPageProps) {
             <button type="button" className="btn btn-secondary" disabled={loading} onClick={() => void load(offset)}>
               <RefreshCw size={14} className="btn-icon" />
               {t('txt_refresh')}
+            </button>
+            <button type="button" className="btn btn-secondary" disabled={loading || exporting} onClick={() => void exportLogs()}>
+              <Download size={14} className="btn-icon" />
+              {exporting ? t('txt_log_exporting') : t('txt_log_export')}
             </button>
             <button
               type="button"

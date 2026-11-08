@@ -32,6 +32,7 @@ import {
   deleteAllInvites as deleteStoredInvites,
   getInvite as findStoredInvite,
   listAuditLogs as listStoredAuditLogs,
+  listAuditLogsForExport as listStoredAuditLogsForExport,
   listInvites as listStoredInvites,
   markInviteUsed as markStoredInviteUsed,
   pruneAuditLogs as pruneStoredAuditLogs,
@@ -462,6 +463,14 @@ export class StorageService {
 
   async listAuditLogs(options: AuditLogListOptions): Promise<{ logs: AuditLog[]; total: number; hasMore: boolean }> {
     return listStoredAuditLogs(this.db, options);
+  }
+
+  async listAuditLogsForExport(
+    userId: string,
+    options: AuditLogListOptions,
+    maxRows: number
+  ): Promise<{ logs: AuditLog[]; truncated: boolean }> {
+    return listStoredAuditLogsForExport(this.db, options, maxRows);
   }
 
   async pruneAuditLogs(beforeIso: string): Promise<number> {
