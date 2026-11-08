@@ -521,6 +521,13 @@ async function main() {
     const sharedDetail = await evaluate(`document.body.textContent`);
     checks.ok('the detail names the organization', sharedDetail.includes(seeded.organizationName));
     checks.ok('the detail marks the item as shared', sharedDetail.includes('Shared'));
+    // A password nobody looked at is not a safe password, so the item says it
+    // was not checked and never shows a clean verdict for it.
+    checks.ok('the item says the password was not checked', sharedDetail.includes('Not checked'));
+    checks.ok(
+      'and does not call an unchecked password safe',
+      !sharedDetail.includes('Not found in the breach database')
+    );
 
     // Back to everything, so the history check can find the personal item.
     await evaluate(`(() => {

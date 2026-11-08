@@ -1587,6 +1587,8 @@ const zhTW: Record<string, string> = {
 };
 
 Object.assign(zhTW, {
+  "txt_password_security_expired": "這次檢查已超過一天。重新檢查以取得最新結果。",
+  "txt_password_health_breach_only": "此密碼僅檢查了洩漏資料庫，未評估強度弱和重複使用。",
   "nav_password_security": "密碼安全",
   "txt_password_security": "密碼安全檢查",
   "txt_password_security_privacy": "密碼僅在本機前端檢查；只有匿名雜湊前綴會傳送到外洩密碼庫。",

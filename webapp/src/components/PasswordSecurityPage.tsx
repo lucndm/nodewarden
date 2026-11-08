@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { AlertTriangle, CheckCircle2, ExternalLink, Eye, EyeOff, RefreshCw, ScanSearch, ShieldAlert, ShieldCheck, Unplug } from 'lucide-preact';
 import { Link } from 'wouter';
 import { maskSecret } from '@/components/vault/vault-page-helpers';
-import { getPasswordSecurityState, readPasswordSecurityState, startPasswordSecurityScan, subscribePasswordSecurityState } from '@/lib/password-security-cache';
+import {
+  getPasswordSecurityState,
+  isPasswordSecurityExpired,
+  readPasswordSecurityState,
+  startPasswordSecurityScan,
+  subscribePasswordSecurityState,
+} from '@/lib/password-security-cache';
 import { getEmailBreachStatus, type EmailBreachInfo, type EmailBreachStatusResponse } from '@/lib/api/auth';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { t } from '@/lib/i18n';
@@ -88,7 +94,10 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
   const { report, scannedAt, scanning, progress, scanError } = securityState;
   // A scan that could not reach the breach database for every password is not
   // a clean scan, so it must never be dressed up as one.
-  const reportComplete = !!report && report.unavailableCount === 0;
+  // A result that is too old is not a result: the password may have changed
+  // and the breach corpus moves on. It is shown as "not checked" instead.
+  const expired = !!report && isPasswordSecurityExpired(scannedAt);
+  const reportComplete = !!report && report.unavailableCount === 0 && !expired;
 
   const eligibleCount = useMemo(
     () => props.ciphers.filter((cipher) => Number(cipher.type) === 1 && !cipher.deletedDate && !(cipher as { deletedAt?: string | null }).deletedAt && !!cipher.login?.decPassword).length,
@@ -102,7 +111,9 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
     : scanning
       ? t('txt_checking_password_security')
       : report
-        ? t('txt_password_security_last_checked', { value: formatCheckedAt(scannedAt || 0) })
+        ? expired
+          ? t('txt_password_security_expired')
+          : t('txt_password_security_last_checked', { value: formatCheckedAt(scannedAt || 0) })
         : scanError
           ? ''
           : eligibleCount
@@ -162,14 +173,16 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
 
       {!props.loading && (
         <div className="password-security-summary" aria-live="polite">
-          <SecurityMetric icon={<ShieldAlert size={18} />} tone="danger" label={t('txt_exposed_passwords')} value={report ? report.exposedCount : '—'} active={filter === 'exposed'} disabled={!report} onClick={() => setFilter('exposed')} />
-          <SecurityMetric icon={<AlertTriangle size={18} />} tone="warning" label={t('txt_reused_passwords')} value={report ? report.reusedCount : '—'} active={filter === 'reused'} disabled={!report} onClick={() => setFilter('reused')} />
-          <SecurityMetric icon={<AlertTriangle size={18} />} tone="warning" label={t('txt_weak_passwords')} value={report ? report.weakCount : '—'} active={filter === 'weak'} disabled={!report} onClick={() => setFilter('weak')} />
-          <SecurityMetric icon={<CheckCircle2 size={18} />} tone="primary" label={t('txt_passwords_checked')} value={scanning ? `${progress.checked} / ${progress.total}` : report ? `${report.checkedCount} / ${report.eligibleCount}` : `0 / ${eligibleCount}`} active={filter === 'all'} disabled={!report} onClick={() => setFilter('all')} />
+          <SecurityMetric icon={<ShieldAlert size={18} />} tone="danger" label={t('txt_exposed_passwords')} value={report && !expired ? report.exposedCount : '—'} active={filter === 'exposed'} disabled={!report || expired} onClick={() => setFilter('exposed')} />
+          <SecurityMetric icon={<AlertTriangle size={18} />} tone="warning" label={t('txt_reused_passwords')} value={report && !expired ? report.reusedCount : '—'} active={filter === 'reused'} disabled={!report || expired} onClick={() => setFilter('reused')} />
+          <SecurityMetric icon={<AlertTriangle size={18} />} tone="warning" label={t('txt_weak_passwords')} value={report && !expired ? report.weakCount : '—'} active={filter === 'weak'} disabled={!report || expired} onClick={() => setFilter('weak')} />
+          <SecurityMetric icon={<CheckCircle2 size={18} />} tone="primary" label={t('txt_passwords_checked')} value={scanning ? `${progress.checked} / ${progress.total}` : report && !expired ? `${report.checkedCount} / ${report.eligibleCount}` : `0 / ${eligibleCount}`} active={filter === 'all'} disabled={!report || expired} onClick={() => setFilter('all')} />
         </div>
       )}
 
       {scanError && <div className="password-security-notice warning card" role="alert"><Unplug size={16} />{t('txt_password_security_check_failed')}</div>}
+
+      {expired && <div className="password-security-notice warning card" role="status"><Unplug size={16} />{t('txt_password_security_expired')}</div>}
 
       {report && report.unavailableCount > 0 && (
         <div className="password-security-notice warning" role="status"><Unplug size={16} />{t('txt_password_security_unavailable', { count: report.unavailableCount })}</div>
@@ -221,7 +234,9 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
 
       {report && (
         <section className="password-security-results card">
-          {!report.items.length ? (
+          {expired ? (
+            <div className="password-security-empty compact"><AlertTriangle size={25} /><strong>{t('txt_password_security_not_checked')}</strong></div>
+          ) : !report.items.length ? (
             reportComplete
               ? <div className="password-security-empty compact"><CheckCircle2 size={25} /><strong>{t('txt_no_password_risks')}</strong></div>
               : <div className="password-security-empty compact"><AlertTriangle size={25} /><strong>{t('txt_password_security_not_checked')}</strong></div>

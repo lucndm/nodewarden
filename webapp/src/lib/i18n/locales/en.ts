@@ -1622,6 +1622,8 @@ Object.assign(en, {
   "txt_password_security_weak_short": "Weak password",
   "txt_password_security_reused_short": "Reused",
   "txt_password_security_unavailable": "{count} password checks could not reach the breach database. They are not marked safe.",
+  "txt_password_security_expired": "This check is older than a day. Run it again to get current results.",
+  "txt_password_health_breach_only": "Only the breach database was checked for this password. Weakness and reuse were not looked at.",
   "txt_password_security_not_checked": "Not checked",
   "txt_password_exposed_count": "Found in {count} breaches",
   "txt_password_reused_count": "Used {count} times",

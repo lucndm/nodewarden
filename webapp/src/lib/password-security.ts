@@ -13,9 +13,58 @@ export interface PasswordBreachResult {
 
 export interface PasswordSecurityItem {
   cipherId: string;
+  /** The revision of the item when it was checked: a result belongs to one
+   * state of an item, not to the item in general. */
+  revisionDate: string;
   exposedCount: number | null;
   reusedCount: number;
   weak: boolean;
+}
+
+/**
+ * What is known about the password of one item.
+ *
+ * `source` says how much was looked at: the whole vault check knows about
+ * breaches, weakness and reuse, while a check of this password alone only
+ * knows whether the breach database knows it.
+ */
+export interface PasswordSecurityFinding {
+  cipherId: string;
+  revisionDate: string;
+  source: 'scan' | 'breach';
+  /** null when the breach database never answered. */
+  exposedCount: number | null;
+  /** null when reuse was not looked at. */
+  reusedCount: number | null;
+  /** null when weakness was not looked at. */
+  weak: boolean | null;
+  checkedAt: number;
+}
+
+/**
+ * What may be said about the password of an item.
+ *
+ * `unknown` is the answer whenever there is no valid result: not scanned,
+ * failed, expired, or the item changed since. It must never be dressed up as
+ * a clean password, because a password nobody looked at is not a safe one.
+ */
+export type PasswordHealthState =
+  | { kind: 'unknown'; reason: 'not-checked' | 'unavailable' }
+  | { kind: 'breach-only'; exposed: boolean; exposedCount: number }
+  | { kind: 'risks'; exposedCount: number; weak: boolean; reusedCount: number }
+  | { kind: 'clean' };
+
+export function passwordHealthState(finding: PasswordSecurityFinding | null): PasswordHealthState {
+  if (!finding) return { kind: 'unknown', reason: 'not-checked' };
+  if (finding.exposedCount === null) return { kind: 'unknown', reason: 'unavailable' };
+  if (finding.source === 'breach') {
+    return { kind: 'breach-only', exposed: finding.exposedCount > 0, exposedCount: finding.exposedCount };
+  }
+  const exposedCount = finding.exposedCount;
+  const weak = finding.weak === true;
+  const reusedCount = finding.reusedCount || 0;
+  if (exposedCount > 0 || weak || reusedCount > 1) return { kind: 'risks', exposedCount, weak, reusedCount };
+  return { kind: 'clean' };
 }
 
 export interface PasswordSecurityReport {
@@ -30,6 +79,7 @@ export interface PasswordSecurityReport {
 
 type Candidate = {
   cipherId: string;
+  revisionDate: string;
   name: string;
   hash: string;
   weak: boolean;
@@ -136,7 +186,8 @@ export function isWeakPassword(password: string, username: string = ''): boolean
   return password.length < 14 && classes < 3;
 }
 
-function isEligibleCipher(cipher: Cipher): boolean {
+/** A login item with a password, still in the vault. */
+export function isEligibleCipher(cipher: Cipher): boolean {
   return Number(cipher.type) === 1 && !cipher.deletedDate && !(cipher as { deletedAt?: string | null }).deletedAt && !!cipher.login?.decPassword;
 }
 
@@ -175,6 +226,7 @@ export async function inspectVaultPasswordSecurity(
     const username = String(cipher.login?.decUsername || '');
     return {
       cipherId: cipher.id,
+      revisionDate: String(cipher.revisionDate || ''),
       name: String(cipher.decName || cipher.name || ''),
       hash: await sha1Password(password),
       weak: isWeakPassword(password, username),
@@ -212,6 +264,7 @@ export async function inspectVaultPasswordSecurity(
     const exposure = exposureByHash.get(candidate.hash) || { count: null, available: false };
     return {
       cipherId: candidate.cipherId,
+      revisionDate: candidate.revisionDate,
       exposedCount: exposure.count,
       reusedCount: candidatesByHash.get(candidate.hash)?.length || 1,
       weak: candidate.weak,
