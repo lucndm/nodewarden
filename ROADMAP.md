@@ -318,15 +318,33 @@ Danh sách organization trước đây được tải riêng với `staleTime` 6
 
 Lập **plan riêng cho từng lát**; không biến Pass Monitor thành tập hợp card báo “an toàn” không có dữ liệu.
 
-| Lát | Nguồn/cổng bắt buộc và nghiệm thu |
-|---|---|
-| Password Health inline | Tái sử dụng kết quả quét thủ công trong `webapp/src/lib/password-security-cache.ts`, gắn revision/fingerprint item; chưa quét/lỗi/hết hạn ≠ Strong/Safe. Exposed/Weak/Reused chỉ hiện khi có kết quả hợp lệ. |
-| Credential monitoring | Xác định corpus/provider, dữ liệu gửi ra, đồng ý người dùng, tần suất/quota và định nghĩa kết quả theo từng credential; kiểm tra rò rỉ **email tài khoản** hiện tại không đồng nghĩa Dark Web Monitoring cho toàn vault. |
-| Inactive 2FA | Chỉ kết luận website hỗ trợ 2FA từ nguồn đáng tin; item không có TOTP không đủ làm bằng chứng. Tách không rõ/không hỗ trợ/chưa bật. |
-| Excluded items | Chốt nơi lưu trạng thái theo item, phạm vi từng phép quét, sync, opt-in/out và audit; item excluded không được báo safe. |
-| Account protection | Định nghĩa biện pháp bật/tắt có thực thi ở auth/API và cách khôi phục khi mất thiết bị; new-device verification hiện bị từ chối khi thiếu kênh email (`src/handlers/accounts.ts:870-910`). |
-| Emergency Access | Threat model riêng: người nhận, thời gian chờ, hủy, xác thực, thông báo, cấp/thu hồi khóa và audit; không gửi master password/secret thô. |
-| Passkey/2FA/zero-knowledge | Phân biệt passkey tài khoản và passkey website; TOTP item và 2FA đăng nhập; autofill ở client Bitwarden. Rà mô hình mã hóa thực tế trước khi tuyên bố tương đương Proton. |
+### Đã làm — lát Password Health inline
+
+**Vấn đề thật đã tìm ra:** cache quét (`webapp/src/lib/password-security-cache.ts`) **chỉ có một người dùng** (trang Password Security). Trang chi tiết item gọi HIBP **riêng** và hiện một **lá chắn xanh** "Not found in the breach database" — đúng cái mà ROADMAP cấm: kết quả **chỉ về breach**, không nói gì về yếu hay trùng lặp, lại đọc như "an toàn". Sửa item một chỗ làm **mất kết quả của mọi item**.
+
+**Cách làm (đo được, không phải suy đoán):**
+
+- **Kết quả gắn với revision của item:** `PasswordSecurityItem` mang `revisionDate` (revision của item lúc quét). Item đổi → kết quả cũ **không còn trả lời cho item hiện tại**; item khác **không bị mất** kết quả.
+- **Cache theo từng item, không theo cả vault:** map `cipherId → finding`; trạng thái vault đổi chỉ làm mất *báo cáo tổng*, không xoá kết quả của item không đổi.
+- **Có thời hạn:** kết quả cũ hơn **24 giờ** là **không còn là kết quả** → hiện "Not checked", không phải "sạch".
+- **Một hàm quyết định, một chỗ:** `passwordHealthState(finding)` trả `unknown` | `breach-only` | `risks` | `clean`. **`unknown` không bao giờ thành `clean`** — đó là luật của ROADMAP, nằm trong code chứ không nằm trong lời.
+- **Trang chi tiết item dùng lại kết quả của lần quét vault:** Exposed / Weak / Reused lấy từ cache; không có kết quả hợp lệ → "Not checked" (xám, **không xanh**). Lá chắn xanh bị bỏ hẳn.
+- **Nút "Check breach" giữ lại** (check một mật khoá, 1 request thay vì quét cả vault) nhưng câu trả lời của nó là **breach-only**: "Not found in the breach database" + ghi rõ *"chỉ bảng rò rỉ được kiểm, chưa xét yếu và trùng lặp"*. Nó **không** được màu xanh và **không** được gọi là an toàn.
+- **Trang Password Security** cũng theo luật hạn: quét cũ hơn 24 giờ → số đếm về "—", danh sách về "Not checked", có dòng "kiểm tra này cũ hơn một ngày".
+
+**Kiểm chứng:** `scripts/password-security.test.ts` (**7/7**): quét thật với **stub bảng rò rỉ** (tính SHA-1 thật) tìm ra exposed / reused / weak và mang revision của item; bảng rò rỉ **không trả lời** → `unknown` chứ không phải sạch; item đổi revision → kết quả cũ không còn hiệu lực; kết quả quá hạn → `unknown`; check một mật khoá → chỉ nói điều bảng rò rỉ biết, yếu/trùng lặp là **null**; item chưa ai quét → `unknown` (không bao giờ `clean`). Thêm 2 check UI trong Chromium: item hiện **"Not checked"** và **không** hiện "Not found in the breach database".
+
+### Plan từng lát (đã khảo sát code, 2026-11-08)
+
+| Lát | Hiện trạng đo được | Bước kế tiếp |
+|---|---|---|
+| **Password Health inline** | ✅ xong (trên) | — |
+| **Excluded items** | **Chưa có gì**: không có khái niệm loại trừ theo item, không có bảng, không có cờ. Cache quét **chỉ trong RAM** nên cờ loại trừ không thể đặt ở đó. | Chốt nơi lưu: (A) trường ẩn trong `cipher.fields` (mã hoá, sync sẵn, nhưng lọt sang client khác và vào export) hoặc (B) bảng riêng `cipher_scan_exclusions(user_id, cipher_id, scope)` + audit `security.scan.exclude` (theo tiền lệ `usage_count`/`last_used_at`: dữ liệu phụ **không** chạm payload/revision/sync). Item bị loại phải **bị gỡ khỏi kết quả**, không được hạ xuống "không có rủi ro". |
+| **Inactive 2FA** | **Chưa có gì**: không nơi nào kết luận website có hỗ trợ 2FA hay không; mọi TOTP/2FA hiện có là 2FA **đăng nhập tài khoản**. Dữ liệu trong vault chỉ chứng minh **người dùng có** TOTP/passkey cho site đó — thiếu TOTP **không** chứng minh site không hỗ trợ. | Chỉ làm được phần vault nói thật: trạng thái `twoFactorState` = `enabled` (có TOTP **hoặc** passkey) | `unknown`; **không** có nhãn "site không hỗ trợ" (chưa có nguồn đáng tin). "Inactive" cần **cột last-used mới** cho TOTP (migration) — chưa có. |
+| **Credential monitoring** | Có **hai đường khác nhau**, không được lẫn: (1) Password Health — **trình duyệt** băm SHA-1 và chỉ gửi **5 ký tự tiền tố** tới `api.pwnedpasswords.com`, kết quả **chỉ trong RAM trình duyệt**; (2) Email breach — **server** gửi **email tài khoản** của người dùng tới HIBP (cần `HIBP_API_KEY`) hoặc XposedOrNot (miễn phí), cache `email_breach_cache` 5 phút quét cron. | Chốt rõ: email tài khoản **không** phải Dark Web Monitoring cả vault. Muốn theo dõi **từng credential** thì phải chọn corpus, dữ liệu gửi đi, sự đồng ý, tần suất và định nghĩa kết quả — chưa làm gì cả. |
+| **Account protection** | Có thật và **có thực thi**: 2FA đăng nhập (TOTP/YubiKey/WebAuthn/recovery code, có chống replay), phiên thiết bị tin cậy, `securityStamp` xoay khi đổi mật khẩu, thu hồi thiết bị. **Riêng "xác minh thiết bị mới" thì không**: `PUT /api/accounts/verify-devices` **luôn từ chối 400** (không có kênh email), và cột `verify_devices` luôn bằng `0`. | Hoặc bỏ hẳn (không có kênh email thì không hứa được), hoặc làm thật: cần kênh email + cửa sổ chờ + cách khôi phục khi mất thiết bị. **Không** bật cờ rồi không ai kiểm tra. |
+| **Emergency Access** | **Chưa có gì**: không bảng, không route, không UI, không test — chỉ có dòng trong ROADMAP. | Cần threat model riêng (người nhận, thời gian chờ, hủy, xác thực, thông báo, cấp/thu khoá, audit) và **không** gửi master password/secret thô. Lớn nhất trong P4. |
+| **Passkey / 2FA / zero-knowledge** | Passkey **tài khoản** có (`account-passkeys.ts`, `purpose: login | twoFactor`); `cipher.login.fido2Credentials` là passkey **website** (người dùng tự lưu) — hai thứ khác nhau. Mã hoá: server giữ payload mã hoá + khoá bọc, khoá tổ chức bọc theo RSA cho từng thành viên, xoay khoá mã hoá lại từng item. | Không cần gì mới về mã hoá; chỉ cần **rà lại** và **không tuyên bố tương đương Proton** khi chưa đo. Autofill thuộc client Bitwarden, không thuộc server. |
 
 Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi log/export, và review bảo mật trước phát hành. Card giáo dục F-56 là nội dung tùy chọn sau khi luồng thật ổn định.
 

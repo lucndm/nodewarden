@@ -1537,6 +1537,8 @@ const zhCN: Record<string, string> = {
 };
 
 Object.assign(zhCN, {
+  "txt_password_security_expired": "这次检查已超过一天。重新检查以获取最新结果。",
+  "txt_password_health_breach_only": "此密码仅检查了泄露数据库，未评估强度弱和重复使用。",
   "nav_password_security": "安全检测",
   "txt_password_security": "安全检测",
   "txt_password_security_privacy": "密码仅在本地前端检查；只有匿名哈希前缀会发送到泄露密码库。",

@@ -1,9 +1,95 @@
-import { inspectVaultPasswordSecurity, type PasswordSecurityReport } from '@/lib/password-security';
+import {
+  inspectVaultPasswordSecurity,
+  isEligibleCipher,
+  type PasswordSecurityFinding,
+  type PasswordSecurityReport,
+} from '@/lib/password-security';
 import type { Cipher } from '@/lib/types';
 
 // The report lives in this module's memory only. It is never written to
 // localStorage or IndexedDB and never leaves the browser, so a reload clears
 // it. SPA navigation keeps it because the module stays loaded.
+
+// A result that is older than this is no longer a result: the password may
+// have changed and the breach corpus moves on.
+export const PASSWORD_SECURITY_TTL_MS = 24 * 60 * 60 * 1000;
+
+// What is known about the password of each item, bound to the revision of
+// that item. A result for one item does not say anything about the others,
+// so a change elsewhere in the vault does not throw it away.
+const findings = new Map<string, PasswordSecurityFinding>();
+
+function isExpired(checkedAt: number, now: number = Date.now()): boolean {
+  return now - checkedAt > PASSWORD_SECURITY_TTL_MS;
+}
+
+/**
+ * The valid result for an item, or null.
+ *
+ * Null means there is nothing to say: the item was never checked, the check
+ * failed, the result is too old, or the item changed since it was checked.
+ */
+export function getPasswordSecurityFinding(
+  cipherId: string,
+  revisionDate: string | null | undefined
+): PasswordSecurityFinding | null {
+  const finding = findings.get(cipherId);
+  if (!finding) return null;
+  if (finding.revisionDate !== String(revisionDate || '')) return null;
+  if (isExpired(finding.checkedAt)) return null;
+  return finding;
+}
+
+/** Whether a scan is too old to be shown as a current result. */
+export function isPasswordSecurityExpired(scannedAt: number | null | undefined): boolean {
+  return !scannedAt || isExpired(scannedAt);
+}
+
+/**
+ * Records what the vault check found.
+ *
+ * The report only lists the items that carry a finding, so the items it does
+ * not mention were checked and came out clean.
+ */
+export function recordPasswordSecurityFindings(
+  report: PasswordSecurityReport,
+  ciphers: Cipher[],
+  checkedAt: number
+): void {
+  const byCipher = new Map(report.items.map((item) => [item.cipherId, item]));
+  for (const cipher of ciphers) {
+    if (!isEligibleCipher(cipher)) continue;
+    const item = byCipher.get(cipher.id);
+    findings.set(cipher.id, {
+      cipherId: cipher.id,
+      revisionDate: item ? item.revisionDate : String(cipher.revisionDate || ''),
+      source: 'scan',
+      exposedCount: item ? item.exposedCount : 0,
+      reusedCount: item ? item.reusedCount : 1,
+      weak: item ? item.weak : false,
+      checkedAt,
+    });
+  }
+  notify();
+}
+
+/** Records the result of a check of one password alone. */
+export function recordPasswordBreachFinding(
+  cipherId: string,
+  revisionDate: string,
+  exposedCount: number | null
+): void {
+  findings.set(cipherId, {
+    cipherId,
+    revisionDate,
+    source: 'breach',
+    exposedCount,
+    reusedCount: null,
+    weak: null,
+    checkedAt: Date.now(),
+  });
+  notify();
+}
 
 export interface PasswordSecurityState {
   fingerprint: string;
@@ -52,7 +138,7 @@ export function startPasswordSecurityScan(fingerprint: string, ciphers: Cipher[]
   const current = ensurePasswordSecurityState(fingerprint);
   current.controller?.abort();
   const controller = new AbortController();
-  const total = ciphers.filter((cipher) => Number(cipher.type) === 1 && !cipher.deletedDate && !(cipher as { deletedAt?: string | null }).deletedAt && !!cipher.login?.decPassword).length;
+  const total = ciphers.filter(isEligibleCipher).length;
   state = { ...current, report: null, scannedAt: null, scanning: true, progress: { checked: 0, total }, scanError: false, controller };
   notify();
 
@@ -64,7 +150,9 @@ export function startPasswordSecurityScan(fingerprint: string, ciphers: Cipher[]
         notify();
       }, fetch, controller.signal);
       if (controller.signal.aborted || state?.controller !== controller) return;
-      state = { ...state, report, scannedAt: Date.now() };
+      const scannedAt = Date.now();
+      state = { ...state, report, scannedAt };
+      recordPasswordSecurityFindings(report, ciphers, scannedAt);
     } catch (error) {
       if (controller.signal.aborted || (error as { name?: string } | null)?.name === 'AbortError') return;
       if (state?.controller === controller) state = { ...state, scanError: true };
@@ -78,5 +166,6 @@ export function startPasswordSecurityScan(fingerprint: string, ciphers: Cipher[]
 export function clearPasswordSecurityCache(): void {
   state?.controller?.abort();
   state = null;
+  findings.clear();
   notify();
 }

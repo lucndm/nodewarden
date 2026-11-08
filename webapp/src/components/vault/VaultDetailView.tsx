@@ -6,7 +6,12 @@ import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import ItemHistoryDialog from '@/components/vault/ItemHistoryDialog';
 import { looksLikeCipherString } from '@/lib/app-support';
 import type { TotpCodeResult } from '@/lib/crypto';
-import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
+import { checkPasswordLeaked, passwordHealthState } from '@/lib/password-security';
+import {
+  getPasswordSecurityFinding,
+  recordPasswordBreachFinding,
+  subscribePasswordSecurityState,
+} from '@/lib/password-security-cache';
 import type { CipherUsageEntry } from '@/lib/api/vault';
 import type { ItemHistoryEntry, ItemHistoryVersion } from '@/lib/item-history';
 import type { Cipher } from '@/lib/types';
@@ -169,8 +174,10 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
   const [itemHistoryVersionLoading, setItemHistoryVersionLoading] = useState(false);
   const [itemHistoryRestoring, setItemHistoryRestoring] = useState(false);
   const [itemHistoryError, setItemHistoryError] = useState('');
-  const [breachResult, setBreachResult] = useState<PasswordBreachResult | null>(null);
   const [checkingBreach, setCheckingBreach] = useState(false);
+  // The password health of an item comes from the vault check, so the view has
+  // to hear when that check finishes or when the item changes.
+  const [securityTick, setSecurityTick] = useState(0);
   const breachControllerRef = useRef<AbortController | null>(null);
   const isArchived = !!(props.selectedCipher.archivedDate || (props.selectedCipher as { archivedAt?: string | null }).archivedAt);
   const isDeleted = isCipherDeleted(props.selectedCipher);
@@ -202,7 +209,6 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     setItemHistoryVersion(null);
     setItemHistoryError('');
     itemHistoryRequestRef.current += 1;
-    setBreachResult(null);
     setCheckingBreach(false);
     return () => {
       breachControllerRef.current?.abort();
@@ -235,14 +241,21 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     const controller = new AbortController();
     breachControllerRef.current = controller;
     setCheckingBreach(true);
-    setBreachResult(null);
     try {
       const result = await checkPasswordLeaked(password, fetch, controller.signal);
       if (controller.signal.aborted) return;
-      setBreachResult(result);
+      recordPasswordBreachFinding(
+        String(props.selectedCipher.id),
+        String(props.selectedCipher.revisionDate || ''),
+        result.available ? result.count : null
+      );
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) return;
-      setBreachResult({ count: null, available: false });
+      recordPasswordBreachFinding(
+        String(props.selectedCipher.id),
+        String(props.selectedCipher.revisionDate || ''),
+        null
+      );
     } finally {
       if (breachControllerRef.current === controller) {
         breachControllerRef.current = null;
@@ -250,6 +263,16 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
       }
     }
   };
+  useEffect(() => subscribePasswordSecurityState(() => setSecurityTick((tick) => tick + 1)), []);
+  // What may be said about the password of this item. Without a valid result
+  // this is "unknown", and unknown is never shown as a clean password.
+  const passwordHealth = useMemo(
+    () =>
+      passwordHealthState(
+        getPasswordSecurityFinding(props.selectedCipher.id, props.selectedCipher.revisionDate)
+      ),
+    [props.selectedCipher.id, props.selectedCipher.revisionDate, securityTick]
+  );
   const formatDownloadLabel = (attachmentId: string) => {
     const downloadKey = `${props.selectedCipher.id}:${attachmentId}`;
     if (props.downloadingAttachmentKey !== downloadKey) return t('txt_download');
@@ -578,12 +601,34 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                 {props.usageError && (
                   <div className="detail-sub" role="status">{t('txt_usage_metrics_unavailable')}</div>
                 )}
-                {breachResult && (
-                  <div className={`password-breach-inline ${breachResult.available ? (breachResult.count ? 'danger' : 'safe') : 'warning'}`} role="status">
-                    {breachResult.available ? (breachResult.count ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />) : <AlertTriangle size={15} />}
-                    <span>{breachResult.available ? (breachResult.count ? t('txt_password_exposed_count', { count: breachResult.count }) : t('txt_password_not_found_in_breaches')) : t('txt_password_security_check_failed')}</span>
-                  </div>
-                )}
+                <div className="password-security-badges" role="status">
+                  {passwordHealth.kind === 'unknown' && (
+                    <span className="risk-badge muted">
+                      {passwordHealth.reason === 'unavailable'
+                        ? t('txt_password_security_check_failed')
+                        : t('txt_password_security_not_checked')}
+                    </span>
+                  )}
+                  {passwordHealth.kind === 'breach-only' && passwordHealth.exposed && (
+                    <span className="risk-badge danger">{t('txt_password_exposed_count', { count: passwordHealth.exposedCount })}</span>
+                  )}
+                  {passwordHealth.kind === 'breach-only' && !passwordHealth.exposed && (
+                    <>
+                      <span className="risk-badge muted">{t('txt_password_not_found_in_breaches')}</span>
+                      <span className="detail-sub">{t('txt_password_health_breach_only')}</span>
+                    </>
+                  )}
+                  {passwordHealth.kind === 'risks' && (
+                    <>
+                      {passwordHealth.exposedCount > 0 && (
+                        <span className="risk-badge danger">{t('txt_password_security_exposed_short', { count: passwordHealth.exposedCount })}</span>
+                      )}
+                      {passwordHealth.weak && <span className="risk-badge weak">{t('txt_password_security_weak_short')}</span>}
+                      {passwordHealth.reusedCount > 1 && <span className="risk-badge reused">{t('txt_password_security_reused_short')}</span>}
+                    </>
+                  )}
+                  {passwordHealth.kind === 'clean' && <span className="risk-badge muted">{t('txt_no_password_risks')}</span>}
+                </div>
                 <div className="detail-card-actions">
                   <button type="button" className="btn btn-secondary small" disabled={checkingBreach || !props.selectedCipher.login?.decPassword} onClick={() => void checkBreach()}>
                     {checkingBreach ? <RefreshCw size={14} className="btn-icon spin" /> : <ShieldCheck size={14} className="btn-icon" />}
