@@ -371,6 +371,16 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
           name: cipher.name,
           notes: cipher.notes,
           data: (cipher.data ?? {}) as Record<string, unknown>,
+          // The attachments and the history are sealed with the item key, so
+          // they are re-sealed with the item's new key in the same rotation.
+          attachments: cipher.attachments,
+          versions: cipher.versions.map((version) => ({
+            id: version.id,
+            key: version.key,
+            name: version.name,
+            notes: version.notes,
+            data: (version.data ?? {}) as Record<string, unknown>,
+          })),
         })),
       });
 

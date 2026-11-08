@@ -87,6 +87,16 @@ export interface OrganizationRotationData {
     name: string | null;
     notes: string | null;
     data: unknown;
+    /** The item's attachments; each has a key sealed with the item key. */
+    attachments: Array<{ id: string; key: string | null }>;
+    /** The item's history; every entry is sealed with the item key. */
+    versions: Array<{
+      id: string;
+      key: string | null;
+      name: string | null;
+      notes: string | null;
+      data: unknown;
+    }>;
   }>;
 }
 
@@ -117,6 +127,21 @@ export async function getOrganizationRotationData(
       name: typeof entry.name === 'string' ? entry.name : null,
       notes: typeof entry.notes === 'string' ? entry.notes : null,
       data: entry.data,
+      attachments: Array.isArray(entry.attachments)
+        ? (entry.attachments as Record<string, unknown>[]).map((attachment) => ({
+            id: String(attachment.id || ''),
+            key: typeof attachment.key === 'string' ? attachment.key : null,
+          }))
+        : [],
+      versions: Array.isArray(entry.versions)
+        ? (entry.versions as Record<string, unknown>[]).map((version) => ({
+            id: String(version.id || ''),
+            key: typeof version.key === 'string' ? version.key : null,
+            name: typeof version.name === 'string' ? version.name : null,
+            notes: typeof version.notes === 'string' ? version.notes : null,
+            data: version.data,
+          }))
+        : [],
     })),
   };
 }

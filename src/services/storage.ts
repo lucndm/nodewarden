@@ -798,7 +798,23 @@ export class StorageService {
 
   async getOrganizationCiphersForRotation(
     orgId: string
-  ): Promise<Array<{ id: string; key: string | null; name: string | null; notes: string | null; data: unknown }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      key: string | null;
+      name: string | null;
+      notes: string | null;
+      data: unknown;
+      attachments: Array<{ id: string; key: string | null }>;
+      versions: Array<{
+        id: string;
+        key: string | null;
+        name: string | null;
+        notes: string | null;
+        data: unknown;
+      }>;
+    }>
+  > {
     return listStoredOrganizationCiphersForRotation(this.db, orgId);
   }
 

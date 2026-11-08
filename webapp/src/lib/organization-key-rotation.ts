@@ -44,6 +44,29 @@ export interface RotationCipherInput {
   notes: string | null;
   /** The stored payload; every encrypted string in it is re-encrypted. */
   data: Record<string, unknown>;
+  /**
+   * The item's attachments. Each attachment has a key of its own, sealed with
+   * the item key, so the attachment travels with the item's new key or it
+   * stops opening.
+   */
+  attachments?: RotationAttachmentInput[];
+  /** The item's history. Every entry is sealed with the item key as well. */
+  versions?: RotationVersionInput[];
+}
+
+/** An attachment: its key, sealed with the item key. */
+export interface RotationAttachmentInput {
+  id: string;
+  key: string | null;
+}
+
+/** One entry of the item's history, sealed with the item key. */
+export interface RotationVersionInput {
+  id: string;
+  key: string | null;
+  name: string | null;
+  notes: string | null;
+  data: Record<string, unknown>;
 }
 
 export interface RotationResult {
@@ -58,6 +81,16 @@ export interface RotationResult {
     name: string | null;
     notes: string | null;
     data: Record<string, unknown>;
+    /** The attachments' keys, re-sealed under the item's new key. */
+    attachments: Array<{ id: string; key: string | null }>;
+    /** The history entries, re-encrypted under the item's new key. */
+    versions: Array<{
+      id: string;
+      key: string | null;
+      name: string | null;
+      notes: string | null;
+      data: Record<string, unknown>;
+    }>;
   }>;
 }
 
@@ -168,13 +201,7 @@ export async function rotateOrganizationKey(input: {
     });
   }
 
-  const ciphers: Array<{
-    id: string;
-    key: string;
-    name: string | null;
-    notes: string | null;
-    data: Record<string, unknown>;
-  }> = [];
+  const ciphers: RotationResult['ciphers'] = [];
   for (const cipher of input.ciphers) {
     // An item without its own key used the organization key directly, so its
     // payload is under that key today.
@@ -183,12 +210,60 @@ export async function rotateOrganizationKey(input: {
       : oldKey;
     const newItemKeyRaw = randomKey();
     const newItemKey = splitKey(newItemKeyRaw);
+    const newCipherKey = await encryptBw(newItemKeyRaw, newKey.encKey, newKey.macKey);
+
+    // An attachment and a history entry are sealed with the item key, so they
+    // are re-sealed with the item's new key. Leaving them behind would keep
+    // them readable only by whoever holds the old key.
+    const attachments: Array<{ id: string; key: string | null }> = [];
+    for (const attachment of cipher.attachments ?? []) {
+      attachments.push({
+        id: attachment.id,
+        key: (await reencryptPayload(
+          attachment.key,
+          oldItemKey,
+          newItemKey,
+          `${cipher.id}.attachment.${attachment.id}.key`
+        )) as string | null,
+      });
+    }
+    const versions: RotationResult['ciphers'][number]['versions'] = [];
+    for (const version of cipher.versions ?? []) {
+      versions.push({
+        id: version.id,
+        // The history entry carries the item's wrapped key, not a payload
+        // sealed with the item key, so it follows the item's new key. Its
+        // name, notes and payload are sealed with the item key.
+        key: newCipherKey,
+        name: (await reencryptPayload(
+          version.name,
+          oldItemKey,
+          newItemKey,
+          `${cipher.id}.version.${version.id}.name`
+        )) as string | null,
+        notes: (await reencryptPayload(
+          version.notes,
+          oldItemKey,
+          newItemKey,
+          `${cipher.id}.version.${version.id}.notes`
+        )) as string | null,
+        data: (await reencryptPayload(
+          version.data,
+          oldItemKey,
+          newItemKey,
+          `${cipher.id}.version.${version.id}.data`
+        )) as Record<string, unknown>,
+      });
+    }
+
     ciphers.push({
       id: cipher.id,
-      key: await encryptBw(newItemKeyRaw, newKey.encKey, newKey.macKey),
+      key: newCipherKey,
       name: (await reencryptPayload(cipher.name, oldItemKey, newItemKey, `${cipher.id}.name`)) as string | null,
       notes: (await reencryptPayload(cipher.notes, oldItemKey, newItemKey, `${cipher.id}.notes`)) as string | null,
       data: (await reencryptPayload(cipher.data, oldItemKey, newItemKey, cipher.id)) as Record<string, unknown>,
+      attachments,
+      versions,
     });
   }
 
@@ -280,6 +355,17 @@ export async function applyOrganizationKeyRotation(input: {
           name: entry.name,
           notes: entry.notes,
           data: JSON.stringify(entry.data),
+          attachments: entry.attachments.map((attachment) => ({
+            id: attachment.id,
+            key: attachment.key,
+          })),
+          versions: entry.versions.map((version) => ({
+            id: version.id,
+            key: version.key,
+            name: version.name,
+            notes: version.notes,
+            data: JSON.stringify(version.data),
+          })),
         })),
       }),
     }
