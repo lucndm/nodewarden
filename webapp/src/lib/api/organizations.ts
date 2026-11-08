@@ -121,6 +121,24 @@ export async function getOrganizationRotationData(
   };
 }
 
+/**
+ * Accepts the invitation to an organization.
+ *
+ * Accepting says the member wants in. The organization key is wrapped with
+ * the member's own RSA key, so the owner hands that over separately.
+ */
+export async function acceptOrganizationInvitation(
+  authedFetch: AuthedFetch,
+  organizationId: string
+): Promise<void> {
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(organizationId)}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_accept_invitation_failed')));
+}
+
 /** A member of an organization, with the rights they hold on each collection. */
 export interface OrganizationMember {
   id: string;

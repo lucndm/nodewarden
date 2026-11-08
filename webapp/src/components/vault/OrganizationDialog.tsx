@@ -10,7 +10,7 @@
 // the removal mean anything.
 import { useEffect, useState } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
-import { ShieldAlert, Trash2, X } from 'lucide-preact';
+import { KeyRound, ShieldAlert, Trash2, X } from 'lucide-preact';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { t } from '@/lib/i18n';
 import type { OrganizationMember, VaultCollection, VaultOrganization } from '@/lib/api/organizations';
@@ -65,6 +65,8 @@ interface OrganizationDialogProps {
     patch: { type?: number; collections?: MemberRights[] }
   ) => Promise<boolean>;
   onRemoveMember: (membershipId: string) => Promise<boolean>;
+  /** Hands the organization key to a member who has none yet. */
+  onGiveKey: (membershipId: string) => Promise<boolean>;
   onRotate: () => void;
 }
 
@@ -175,6 +177,18 @@ export default function OrganizationDialog(props: OrganizationDialogProps) {
                       <option value="1">{t('txt_role_admin')}</option>
                       <option value="2">{t('txt_role_user')}</option>
                     </select>
+                    {member.status !== 2 && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary small org-member-give-key"
+                        disabled={props.busy}
+                        title={t('txt_give_organization_key')}
+                        aria-label={`${t('txt_give_organization_key')} - ${label}`}
+                        onClick={() => void props.onGiveKey(member.id)}
+                      >
+                        <KeyRound size={14} className="btn-icon" />
+                      </button>
+                    )}
                     {member.userId !== props.currentUserId && member.type !== 0 && (
                       <button
                         type="button"

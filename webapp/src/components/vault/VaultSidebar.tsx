@@ -19,6 +19,7 @@ import {
   Tag,
   TagX,
   Trash2,
+  UserCheck,
   X,
 } from 'lucide-preact';
 import { Link } from 'wouter';
@@ -39,6 +40,8 @@ export interface SidebarOrganization {
   keyRotationRequired: boolean;
   /** Only an owner or an admin may manage the organization. */
   canManage: boolean;
+  /** True while the invitation is still unanswered, so it has no key yet. */
+  pending: boolean;
   collections: Array<{ id: string; name: string; count: number }>;
 }
 
@@ -55,6 +58,8 @@ interface VaultSidebarProps {
   onOpenCreateTag: () => void;
   /** The owner or an admin opens the organization to manage it. */
   onManageOrganization: (organizationId: string) => void;
+  /** The invited member accepts the invitation. */
+  onAcceptOrganization: (organizationId: string) => void;
   onOpenRenameTag: (tag: SidebarTag) => void;
   onOpenDeleteTag: (tag: SidebarTag) => void;
 }
@@ -121,6 +126,16 @@ export default function VaultSidebar(props: VaultSidebarProps) {
                 )}
                 <span className="tree-count">{organization.count}</span>
               </button>
+              {organization.pending && (
+                <button
+                  type="button"
+                  className="tree-btn tree-btn-child"
+                  onClick={() => props.onAcceptOrganization(organization.id)}
+                >
+                  <UserCheck size={13} className="tree-icon" />
+                  <span className="tree-label">{t('txt_accept_invitation')}</span>
+                </button>
+              )}
               {organization.canManage && (
                 <button
                   type="button"

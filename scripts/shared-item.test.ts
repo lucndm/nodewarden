@@ -53,36 +53,7 @@ async function fixture(): Promise<{ env: Env; storage: StorageService }> {
     [READER, 'reader@example.test'],
     [OUTSIDER, 'outsider@example.test'],
   ]) {
-    await storage.createUser({
-      id,
-      email,
-      name: null,
-      masterPasswordHint: null,
-      masterPasswordHash: 'hash',
-      key: 'key',
-      privateKey: null,
-      publicKey: null,
-      kdfType: 0,
-      kdfIterations: 600000,
-      kdfMemory: null,
-      kdfParallelism: null,
-      securityStamp: 'stamp',
-      role: 'user',
-      status: 'active',
-      verifyDevices: false,
-      totpSecret: null,
-      totpRecoveryCode: null,
-      yubikeyKey1: null,
-      yubikeyKey2: null,
-      yubikeyKey3: null,
-      yubikeyKey4: null,
-      yubikeyKey5: null,
-      yubikeyNfc: false,
-      apiKey: null,
-      userKeyId: null,
-      createdAt: NOW,
-      updatedAt: NOW,
-    } as never);
+    await createUser(storage, id, email);
   }
 
   for (const id of [ORG, OTHER_ORG]) {
@@ -134,6 +105,39 @@ async function fixture(): Promise<{ env: Env; storage: StorageService }> {
   }
 
   return { env, storage };
+}
+
+/** An account, so a member can be invited before they join an organization. */
+async function createUser(storage: StorageService, id: string, email: string): Promise<void> {
+  await storage.createUser({
+    id,
+    email,
+    name: null,
+    masterPasswordHint: null,
+    masterPasswordHash: 'hash',
+    key: 'key',
+    privateKey: null,
+    publicKey: null,
+    kdfType: 0,
+    kdfIterations: 600000,
+    kdfMemory: null,
+    kdfParallelism: null,
+    securityStamp: 'stamp',
+    role: 'user',
+    status: 'active',
+    verifyDevices: false,
+    totpSecret: null,
+    totpRecoveryCode: null,
+    yubikeyKey1: null,
+    yubikeyKey2: null,
+    yubikeyKey3: null,
+    yubikeyKey4: null,
+    yubikeyNfc: false,
+    apiKey: null,
+    userKeyId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  } as never);
 }
 
 async function call(
@@ -978,4 +982,71 @@ test('sharing a personal item into a collection needs write rights on it', async
   });
   void moved;
   assert.equal(moved.status, 403, 'a read-only collection cannot take the item');
+});
+
+test('an invited member accepts their own invitation', async () => {
+  const { env, storage } = await fixture();
+  // A member who is not in the organization yet, so the invitation is the
+  // first thing they see of it.
+  await createUser(storage, 'user-newcomer', 'newcomer@example.test');
+
+  const invited = await call(env, `https://vault.example.test/api/organizations/${ORG}/users`, 'POST', OWNER, {
+    emails: ['newcomer@example.test'],
+  });
+  assert.equal(invited.status, 200, await invited.clone().text());
+  const membership = await storage.getOrganizationUserForUser(ORG, 'user-newcomer');
+  assert.ok(membership);
+  assert.equal(membership.status, 0, 'the member is invited, not a member yet');
+
+  // Somebody outside the organization has nothing to accept.
+  const outsider = await call(env, `https://vault.example.test/api/organizations/${ORG}/accept`, 'POST', OUTSIDER);
+  assert.equal(outsider.status, 404);
+
+  // The invited member accepts.
+  const accepted = await call(env, `https://vault.example.test/api/organizations/${ORG}/accept`, 'POST', 'user-newcomer');
+  assert.equal(accepted.status, 200, await accepted.clone().text());
+  assert.equal((await storage.getOrganizationUserForUser(ORG, 'user-newcomer'))?.status, 1, 'the member accepted');
+
+  // Accepting twice is refused: the invitation is not on offer any more.
+  const again = await call(env, `https://vault.example.test/api/organizations/${ORG}/accept`, 'POST', 'user-newcomer');
+  assert.equal(again.status, 400);
+
+  // A member who is already confirmed has nothing to accept either.
+  const confirmed = await call(env, `https://vault.example.test/api/organizations/${ORG}/accept`, 'POST', OWNER);
+  assert.equal(confirmed.status, 400);
+});
+
+test('the organization list shows an invitation as unanswered', async () => {
+  const { env, storage } = await fixture();
+  await createUser(storage, 'user-newcomer', 'newcomer@example.test');
+  await call(env, `https://vault.example.test/api/organizations/${ORG}/users`, 'POST', OWNER, {
+    emails: ['newcomer@example.test'],
+  });
+
+  const listed = await call(env, 'https://vault.example.test/api/organizations', 'GET', 'user-newcomer');
+  assert.equal(listed.status, 200);
+  const organizations = (await listed.json()) as { data: Array<{ id: string; status: number; key: string | null }> };
+  const own = organizations.data.find((entry) => entry.id === ORG);
+  assert.ok(own, 'the invited member sees the organization');
+  assert.equal(own.status, 0, 'the invitation is not answered yet');
+  assert.equal(own.key, null, 'there is no key to open yet');
+
+  // Once the owner hands the key over, the member is confirmed and the key
+  // comes with the list.
+  const membership = await storage.getOrganizationUserForUser(ORG, 'user-newcomer');
+  assert.ok(membership);
+  const confirmed = await call(
+    env,
+    `https://vault.example.test/api/organizations/${ORG}/users/${membership.id}/confirm`,
+    'POST',
+    OWNER,
+    { key: '4.wrapped' }
+  );
+  assert.equal(confirmed.status, 200);
+  const after = await call(env, 'https://vault.example.test/api/organizations', 'GET', 'user-newcomer');
+  const row = ((await after.json()) as { data: Array<{ id: string; status: number; key: string | null }> }).data.find(
+    (entry) => entry.id === ORG
+  );
+  assert.equal(row?.status, 2);
+  assert.equal(row?.key, '4.wrapped');
 });
