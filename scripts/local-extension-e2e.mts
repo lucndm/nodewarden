@@ -220,7 +220,7 @@ async function seedVault(baseUrl) {
   if (shared.status !== 200) {
     throw new Error(`shared item create failed: ${shared.status} ${JSON.stringify(shared.body)}`);
   }
-  return { organizationId: organization.body.id, collectionId };
+  return { organizationId: organization.body.id, collectionId, token };
 }
 
 // A very small CDP client: the browser's own websocket, one target, and the
@@ -609,6 +609,131 @@ async function main() {
     const detailText = await evaluate(`document.body.textContent`);
     checks.ok('the extension names the organization', detailText.includes('Extension Team'), detailText.slice(0, 400));
     checks.ok('the extension names the collection of the item', detailText.includes('Extension Shared'), detailText.slice(0, 400));
+
+    // The Send tab of the official extension: it creates a Send against this
+    // server. The client encrypts the name and the text with the vault key,
+    // so what the server keeps is ciphertext, and the link keeps the key.
+    await evaluate(`(() => {
+      const deep = (root) => {
+        const out = [...root.querySelectorAll('*')];
+        for (const el of out) if (el.shadowRoot) out.push(...el.shadowRoot.querySelectorAll('*'));
+        return out;
+      };
+      for (const el of deep(document)) {
+        if (el.getAttribute('aria-label') === 'Back') el.click();
+      }
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await evaluate(`(() => {
+      const deep = (root) => {
+        const out = [...root.querySelectorAll('*')];
+        for (const el of out) if (el.shadowRoot) out.push(...el.shadowRoot.querySelectorAll('*'));
+        return out;
+      };
+      for (const el of deep(document)) {
+        if (el.getAttribute('aria-label') === 'Send') el.click();
+      }
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const onSendPage = await evaluate(`document.body.textContent.includes('Create Send')`);
+    checks.ok('the extension has a Send tab', onSendPage === true, String(onSendPage));
+
+    // The composer: a name, the text to share, and the Save button.
+    await evaluate(`(() => {
+      const deep = (root) => {
+        const out = [...root.querySelectorAll('*')];
+        for (const el of out) if (el.shadowRoot) out.push(...el.shadowRoot.querySelectorAll('*'));
+        return out;
+      };
+      for (const el of deep(document)) {
+        if (el.tagName === 'BUTTON' && (el.textContent || '').trim() === 'Create Send') el.click();
+      }
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await evaluate(`(() => {
+      const deep = (root) => {
+        const out = [...root.querySelectorAll('*')];
+        for (const el of out) if (el.shadowRoot) out.push(...el.shadowRoot.querySelectorAll('*'));
+        return out;
+      };
+      for (const el of deep(document)) {
+        if ((el.textContent || '').trim() === 'Text' && el.tagName !== 'BUTTON') el.click();
+      }
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const composed = await evaluate(`(() => {
+      const deep = (root) => {
+        const out = [...root.querySelectorAll('*')];
+        for (const el of out) if (el.shadowRoot) out.push(...el.shadowRoot.querySelectorAll('*'));
+        return out;
+      };
+      const all = deep(document);
+      const setValue = (el, value) => {
+        const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const name = all.find((el) => el.tagName === 'INPUT' && el.id === 'bit-form-field-11');
+      const text = all.find((el) => el.tagName === 'TEXTAREA' && el.id === 'text');
+      if (!name || !text) return false;
+      setValue(name, 'Extension Send');
+      setValue(text, 'Shared through the official extension');
+      return true;
+    })()`);
+    checks.ok('the extension opens the Send composer', composed === true, String(composed));
+
+    await evaluate(`(() => {
+      const deep = (root) => {
+        const out = [...root.querySelectorAll('*')];
+        for (const el of out) if (el.shadowRoot) out.push(...el.shadowRoot.querySelectorAll('*'));
+        return out;
+      };
+      for (const el of deep(document)) {
+        if (el.tagName === 'BUTTON' && (el.textContent || '').trim() === 'Save') el.click();
+      }
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+
+    // The server is the one that holds the Send: the client only asked for it.
+    const sends = await api(worker.baseUrl, '/api/sends', { token: seeded.token });
+    const created = (sends.body?.data || [])[0];
+    checks.ok(
+      'the extension writes the Send to the server',
+      sends.status === 200 && !!created,
+      JSON.stringify(sends.body?.data || []).slice(0, 200)
+    );
+    // The client encrypts the name and the text with the vault key, so the
+    // server holds ciphertext and never the words of the Send.
+    checks.ok(
+      'the server holds the Send encrypted',
+      !!created &&
+        typeof created.name === 'string' &&
+        created.name.startsWith('2.') &&
+        typeof created.key === 'string' &&
+        created.key.startsWith('2.') &&
+        String(created.text?.text || '').startsWith('2.'),
+      created ? String(created.name).slice(0, 30) : ''
+    );
+    checks.ok(
+      'the server hands out the access id the link carries',
+      !!created && typeof created.accessId === 'string' && created.accessId.length > 10,
+      created ? String(created.accessId) : ''
+    );
+
+    // The extension says the Send was made and offers the link. The link
+    // itself goes to the clipboard, which a background popup cannot hand back.
+    const doneText = await evaluate(`document.body.textContent`);
+    checks.ok(
+      'the extension says the Send was created and offers the link',
+      doneText.includes('Send created') && doneText.includes('Copy link'),
+      doneText.slice(-200)
+    );
 
     return checks.finish() ? 0 : 1;
   } finally {

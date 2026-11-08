@@ -297,11 +297,22 @@ Danh sách organization trước đây được tải riêng với `staleTime` 6
 
 ## P3 — Sharing (F-05, F-80–81)
 
-**Phụ thuộc P1.** `/api/ciphers/:id/share` hiện chỉ trả lại item; organizations/collections rỗng (`src/router-authenticated.ts:364,428-438`). Bitwarden Send chia sẻ text/file tạm, không cấp quyền đọc/sửa item.
+**Đã chốt: hai kiểu chia sẻ, và chúng khác nhau.** (1) **Quyền thành viên** trên item/organization — phần P1-B đã làm xong và đã kiểm chứng bằng CLI chính thức (mời → nhận → cấp khoá → đọc item → xoay khoá → vẫn đọc được). (2) **Link chia sẻ bản sao** — đây là **Bitwarden Send**: một bản sao có khoá riêng, người giữ link đọc được, **không cấp quyền nào lên vault**. Không gọi link Send là "share vault"; nó là link của một bản sao.
 
-1. Quyết định **link chia sẻ bản sao** hay **quyền thành viên trên item/vault**; không gọi link Send là vault share. Nếu P1-A, không đưa ra lời hứa chia sẻ vault có ACL.
-2. Với quyền thành viên: hợp đồng invitation/accept/expiry, read/edit role, phân phối khóa client-side, revoke/rotate, attachment, audit, quyền ở từng endpoint và `/sync`; không gửi khóa plaintext cho server. Với link: payload xác định, khóa, hết hạn, giới hạn lượt, revoke và lộ metadata.
-3. Xây authorization và API thật trước UI; route stub không được trả thành công giả. Test owner/invitee/người lạ, link hết hạn, nhiều thiết bị, offline, revoke, import/export và attachment. Nêu rõ thiết bị từng tải plaintext không thể bị xóa từ xa.
+**Send đã có đủ API và mã hoá (không có stub):**
+
+- **Hợp đồng:** client sinh khoá Send, mã hoá payload bằng khoá đó, gửi lên `key` **đã bọc bằng khoá vault** → server **không bao giờ thấy khoá**. Link mang khoá ở **fragment** (`#/send/<accessId>/<key>`), nên khoá không nằm trong log, không nằm trong `Referer`, không nằm ở server.
+- **Endpoint:** `GET/POST /api/sends`, `GET/DELETE /api/sends/:id`, `POST /api/sends/delete`, `POST /api/sends/file/v2` (tải file lên), `POST /api/sends/access/:accessId` (mở link, có mật khoá), `POST /identity/connect/token` với `grant_type=send_access` (đổi access id + mật khoá lấy token), `POST /api/sends/access` và `POST /api/sends/access/file/:fileId` (theo token), `GET /api/sends/:id/:fileId?t=` (tải file, token **dùng một lần**). `/sync` trả `sends`.
+- **Ràng buộc:** hết hạn → 404; hết lượt xem (`maxAccessCount`) → 404; bị tắt (`disabled`) → 404; chủ **xoá** → link chết; mật khoá sai → 400 và **đếm theo IP** (khoá sau N lần sai); ẩn email → link không nói ai là người gửi; **xác minh email không hỗ trợ** → 501 chứ không giả vờ thành công.
+
+**Kiểm chứng mới của P3:**
+
+- `scripts/sends.test.ts` (**11/11**) — hợp đồng đầy đủ qua router thật: chủ tạo Send và thấy nó trong list + `/sync`; tài khoản khác **không thấy gì**; link mở ra bản sao và **câu trả lời không có khoá**; Send có mật khoá thì hỏi mật khoá; đổi `grant_type=send_access` lấy token rồi mở bằng Bearer; **hết hạn** → 404; **hết lượt xem** → 404; **bị tắt** → 404; **xoá** → link chết; chủ thấy **số lần link được mở**; ẩn email → không lộ người gửi.
+- **Extension chính thức 2026.10.2** (gói nguyên bản, Chromium, Worker/D1 local) — **4 check mới**: extension **có tab Send**, **mở được trình soạn**, **ghi Send vào server ta**, và server chỉ giữ **ciphertext** (tên, nội dung, khoá đều bắt đầu bằng `2.`) + có `accessId` cho link. Extension báo *"Send created successfully"* và đưa link vào clipboard (popup nền không trả lại clipboard được, nên check đọc phần **server giữ**, không đoán nội dung link).
+- **Giới hạn đã nói rõ:** một thiết bị đã tải bản rõ của link thì **không thu hồi được từ xa** — thu hồi chỉ chặn được lần mở **tiếp theo**. Đây là giới hạn của mô hình "bản sao có khoá", không phải lỗi cài đặt.
+- **Backup không chứa Send:** Send là thứ tạm, không đưa vào archive (đúng như export của Bitwarden).
+
+**Còn mở:** chưa có check tự động cho **public page** mở link Send trong trình duyệt (`PublicSendPage.tsx` đã có trong Web Vault); chưa kiểm chứng Send **tải file** với extension (mới kiểm chứng dạng text).
 
 ## P4 — bảo mật sản phẩm (F-50–56, F-60–64)
 
