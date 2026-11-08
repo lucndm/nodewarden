@@ -301,10 +301,10 @@ test('the whole rotation runs through the real endpoint', async () => {
   const ownerVault = halves(randomKey());
   const memberVault = halves(randomKey());
 
-  for (const [id, email] of [
-    ['user-owner', 'owner@example.test'],
-    ['user-member', 'member@example.test'],
-  ]) {
+  for (const [id, email, publicKey] of [
+    ['user-owner', 'owner@example.test', owner.publicKey],
+    ['user-member', 'member@example.test', member.publicKey],
+  ] as const) {
     await storage.createUser({
       id,
       email,
@@ -313,7 +313,7 @@ test('the whole rotation runs through the real endpoint', async () => {
       masterPasswordHash: 'hash',
       key: 'key',
       privateKey: null,
-      publicKey: null,
+      publicKey,
       kdfType: 0,
       kdfIterations: 600000,
       kdfMemory: null,
@@ -408,6 +408,44 @@ test('the whole rotation runs through the real endpoint', async () => {
     .bind('cipher-1', 'col-1')
     .run();
 
+  // An attachment and a history entry: both are sealed with the item key, so
+  // a rotation that changes the item key has to carry them along.
+  const attachmentKey = randomKey();
+  await env.DB.prepare('INSERT INTO attachments (id, cipher_id, file_name, size, size_name, key) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(
+      'attachment-1',
+      'cipher-1',
+      'note.txt',
+      12,
+      '12 Bytes',
+      await encryptBw(attachmentKey, itemHalves.encKey, itemHalves.macKey)
+    )
+    .run();
+  await env.DB.prepare(
+    'INSERT INTO cipher_versions (id, cipher_id, user_id, kind, revision_date, created_at, type, name, notes, key, reprompt, data) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind(
+      'version-1',
+      'cipher-1',
+      'user-owner',
+      'modified',
+      now,
+      now,
+      1,
+      await encryptBw(new TextEncoder().encode('Older name'), itemHalves.encKey, itemHalves.macKey),
+      await encryptBw(new TextEncoder().encode('Older notes'), itemHalves.encKey, itemHalves.macKey),
+      await encryptBw(itemKey, organizationHalves.encKey, organizationHalves.macKey),
+      0,
+      JSON.stringify({
+        login: {
+          password: await encryptBw(new TextEncoder().encode('older-password'), itemHalves.encKey, itemHalves.macKey),
+        },
+        tags: [],
+      })
+    )
+    .run();
+
   // The owner's client: open the key, rotate, send. A tiny authedFetch drives
   // the real router, so this is the client library against the real endpoint.
   const authedFetch = async (url: string, init?: RequestInit) => {
@@ -424,6 +462,26 @@ test('the whole rotation runs through the real endpoint', async () => {
     return response;
   };
 
+  // The rotation data comes from the server, the way the owner's client asks
+  // for it: the item as stored, with the attachment and the history entry.
+  const rotationResponse = await authedFetch('/api/organizations/org-1/rotation-data');
+  assert.ok(rotationResponse.ok, 'the rotation data is served');
+  const rotationData = (await rotationResponse.json()) as {
+    organization: { privateKey: string | null };
+    members: Array<{ membershipId: string; publicKey: string | null }>;
+    ciphers: Array<{
+      id: string;
+      key: string | null;
+      name: string | null;
+      notes: string | null;
+      data: unknown;
+      attachments: Array<{ id: string; key: string | null }>;
+      versions: Array<{ id: string; key: string | null; name: string | null; notes: string | null; data: unknown }>;
+    }>;
+  };
+  assert.equal(rotationData.ciphers[0].attachments.length, 1, 'the rotation carries the attachment');
+  assert.equal(rotationData.ciphers[0].versions.length, 1, 'the rotation carries the history entry');
+
   const result = await applyOrganizationKeyRotation({
     authedFetch,
     organization: {
@@ -437,22 +495,26 @@ test('the whole rotation runs through the real endpoint', async () => {
     ),
     userEncKey: ownerVault.encKey,
     userMacKey: ownerVault.macKey,
-    organizationPrivateKey: null,
-    members: [
-      { membershipId: 'ou-owner', publicKey: owner.publicKey },
-      { membershipId: 'ou-member', publicKey: member.publicKey },
-    ],
-    ciphers: [
-      {
-        id: 'cipher-1',
-        key: await encryptBw(itemKey, organizationHalves.encKey, organizationHalves.macKey),
-        name: encryptedName,
-        notes: null,
-        data: JSON.parse(
-          (await env.DB.prepare('SELECT data FROM ciphers WHERE id = ?').bind('cipher-1').first<{ data: string }>())!.data
-        ) as Record<string, unknown>,
-      },
-    ],
+    organizationPrivateKey: rotationData.organization.privateKey,
+    members: rotationData.members.map((member) => ({
+      membershipId: member.membershipId,
+      publicKey: member.publicKey as string,
+    })),
+    ciphers: rotationData.ciphers.map((cipher) => ({
+      id: cipher.id,
+      key: cipher.key,
+      name: cipher.name,
+      notes: cipher.notes,
+      data: (cipher.data ?? {}) as Record<string, unknown>,
+      attachments: cipher.attachments,
+      versions: cipher.versions.map((version) => ({
+        id: version.id,
+        key: version.key,
+        name: version.name,
+        notes: version.notes,
+        data: (version.data ?? {}) as Record<string, unknown>,
+      })),
+    })),
   });
   assert.equal(result.members, 2);
   assert.equal(result.ciphers, 1);
@@ -491,4 +553,50 @@ test('the whole rotation runs through the real endpoint', async () => {
 
   // The key that was in place before no longer opens anything of the item.
   await assert.rejects(() => decryptBw(storedCipher.key, organizationHalves.encKey, organizationHalves.macKey));
+
+  // The attachment opens with the item's new key, and with no other.
+  const attachmentRow = (await env.DB.prepare('SELECT key FROM attachments WHERE id = ?')
+    .bind('attachment-1')
+    .first<{ key: string }>())!;
+  assert.deepEqual(
+    await decryptBw(attachmentRow.key, newItemHalves.encKey, newItemHalves.macKey),
+    attachmentKey,
+    'the attachment opens with the item key the rotation installed'
+  );
+  await assert.rejects(
+    () => decryptBw(attachmentRow.key, itemHalves.encKey, itemHalves.macKey),
+    'the old item key must not open the attachment'
+  );
+
+  // The history entry follows the item's new key, and its payload is readable
+  // under that key and under no other.
+  const versionRow = (await env.DB.prepare('SELECT key, name, notes, data FROM cipher_versions WHERE id = ?')
+    .bind('version-1')
+    .first<{ key: string; name: string; notes: string; data: string }>())!;
+  assert.equal(versionRow.key, storedCipher.key, 'the history entry follows the item key');
+  assert.equal(
+    new TextDecoder().decode(await decryptBw(versionRow.name, newItemHalves.encKey, newItemHalves.macKey)),
+    'Older name',
+    'the history keeps its name'
+  );
+  assert.equal(
+    new TextDecoder().decode(await decryptBw(versionRow.notes, newItemHalves.encKey, newItemHalves.macKey)),
+    'Older notes',
+    'the history keeps its notes'
+  );
+  assert.equal(
+    new TextDecoder().decode(
+      await decryptBw(
+        (JSON.parse(versionRow.data) as { login: { password: string } }).login.password,
+        newItemHalves.encKey,
+        newItemHalves.macKey
+      )
+    ),
+    'older-password',
+    'the history keeps its payload'
+  );
+  await assert.rejects(
+    () => decryptBw(versionRow.name, itemHalves.encKey, itemHalves.macKey),
+    'the old item key must not read the history'
+  );
 });

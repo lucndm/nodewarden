@@ -626,6 +626,10 @@ export async function handleGetOrganizationRotationData(
         name: cipher.name,
         notes: cipher.notes,
         data: cipher.data,
+        // The attachments and the history travel with the item: their keys are
+        // sealed with the item key, so the client has to re-seal them too.
+        attachments: cipher.attachments,
+        versions: cipher.versions,
       })),
     },
     200
@@ -993,6 +997,29 @@ export async function handleRotateOrganizationKey(
           name: entry?.name === undefined ? undefined : strict(entry.name, ROTATION_FIELD_MAX) || null,
           notes: entry?.notes === undefined ? undefined : strict(entry.notes, ROTATION_NOTES_MAX) || null,
           data: strict(entry?.data, ROTATION_DATA_MAX),
+          // The attachments and the history are sealed with the item key, so
+          // they are re-sealed with it and stored in the same batch.
+          attachments: Array.isArray((entry as { attachments?: unknown }).attachments)
+            ? ((entry as { attachments: unknown[] }).attachments
+                .map((attachment) => attachment as { id?: unknown; key?: unknown })
+                .map((attachment) => ({
+                  id: text(attachment?.id).trim(),
+                  key: strict(attachment?.key, ROTATION_KEY_MAX).trim() || null,
+                }))
+                .filter((attachment) => attachment.id))
+            : [],
+          versions: Array.isArray((entry as { versions?: unknown }).versions)
+            ? ((entry as { versions: unknown[] }).versions
+                .map((version) => version as { id?: unknown; key?: unknown; name?: unknown; notes?: unknown; data?: unknown })
+                .map((version) => ({
+                  id: text(version?.id).trim(),
+                  key: strict(version?.key, ROTATION_KEY_MAX).trim() || null,
+                  name: version?.name === undefined ? undefined : strict(version.name, ROTATION_FIELD_MAX) || null,
+                  notes: version?.notes === undefined ? undefined : strict(version.notes, ROTATION_NOTES_MAX) || null,
+                  data: strict(version?.data, ROTATION_DATA_MAX),
+                }))
+                .filter((version) => version.id && version.data))
+            : [],
         }))
         .filter((entry) => entry.cipherId && entry.data)
     : [];
@@ -1018,7 +1045,18 @@ export async function handleRotateOrganizationKey(
     return errorResponse('Rotate fewer items at a time', 413);
   }
   const totalBytes = ciphers.reduce(
-    (sum, entry) => sum + entry.data.length + (entry.name?.length ?? 0) + (entry.notes?.length ?? 0) + (entry.key?.length ?? 0),
+    (sum, entry) =>
+      sum +
+      entry.data.length +
+      (entry.name?.length ?? 0) +
+      (entry.notes?.length ?? 0) +
+      (entry.key?.length ?? 0) +
+      entry.attachments.reduce((inner, attachment) => inner + (attachment.key?.length ?? 0), 0) +
+      entry.versions.reduce(
+        (inner, version) =>
+          inner + version.data.length + (version.name?.length ?? 0) + (version.notes?.length ?? 0) + (version.key?.length ?? 0),
+        0
+      ),
     members.reduce((sum, entry) => sum + entry.key.length, 0) + (privateKey?.length ?? 0)
   );
   if (totalBytes > ROTATION_MAX_TOTAL_BYTES) {
@@ -1051,7 +1089,30 @@ export async function handleRotateOrganizationKey(
     orgId,
     privateKey,
     memberKeys: members,
-    cipherKeys: ciphers,
+    cipherKeys: ciphers.map((entry) => ({
+      cipherId: entry.cipherId,
+      key: entry.key,
+      name: entry.name,
+      notes: entry.notes,
+      data: entry.data,
+    })),
+    attachmentKeys: ciphers.flatMap((entry) =>
+      entry.attachments.map((attachment) => ({
+        attachmentId: attachment.id,
+        cipherId: entry.cipherId,
+        key: attachment.key,
+      }))
+    ),
+    versions: ciphers.flatMap((entry) =>
+      entry.versions.map((version) => ({
+        versionId: version.id,
+        cipherId: entry.cipherId,
+        key: version.key,
+        name: version.name,
+        notes: version.notes,
+        data: version.data,
+      }))
+    ),
     now,
   });
 

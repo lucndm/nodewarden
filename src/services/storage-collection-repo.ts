@@ -673,12 +673,30 @@ export async function getOrganizationUserForUser(
 export async function getOrganizationCiphersForRotation(
   db: D1Database,
   orgId: string
-): Promise<Array<{ id: string; key: string | null; name: string | null; notes: string | null; data: unknown }>> {
+): Promise<
+  Array<{
+    id: string;
+    key: string | null;
+    name: string | null;
+    notes: string | null;
+    data: unknown;
+    /** The item's attachments; each has a key sealed with the item key. */
+    attachments: Array<{ id: string; key: string | null }>;
+    /** The item's history; every entry is sealed with the item key. */
+    versions: Array<{
+      id: string;
+      key: string | null;
+      name: string | null;
+      notes: string | null;
+      data: unknown;
+    }>;
+  }>
+> {
   const res = await db
     .prepare('SELECT id, key, name, notes, data FROM ciphers WHERE organization_id = ?')
     .bind(orgId)
     .all<{ id: string; key: string | null; name: string | null; notes: string | null; data: string }>();
-  return (res.results || []).map((row) => {
+  const ciphers = (res.results || []).map((row) => {
     let data: unknown = {};
     try {
       data = JSON.parse(row.data) as unknown;
@@ -687,6 +705,59 @@ export async function getOrganizationCiphersForRotation(
     }
     return { id: row.id, key: row.key, name: row.name, notes: row.notes, data };
   });
+
+  // An attachment's key and a history entry are sealed with the item key, so
+  // the rotation has to carry them too: re-sealing only the item would leave
+  // them readable only under the old key.
+  const attachmentsByCipher = new Map<string, Array<{ id: string; key: string | null }>>();
+  const attachmentRows = await db
+    .prepare(
+      'SELECT a.id AS id, a.cipher_id AS cipher_id, a.key AS key FROM attachments a ' +
+        'JOIN ciphers c ON c.id = a.cipher_id WHERE c.organization_id = ?'
+    )
+    .bind(orgId)
+    .all<{ id: string; cipher_id: string; key: string | null }>();
+  for (const row of attachmentRows.results || []) {
+    const list = attachmentsByCipher.get(row.cipher_id) ?? [];
+    list.push({ id: row.id, key: row.key });
+    attachmentsByCipher.set(row.cipher_id, list);
+  }
+
+  const versionsByCipher = new Map<
+    string,
+    Array<{ id: string; key: string | null; name: string | null; notes: string | null; data: unknown }>
+  >();
+  const versionRows = await db
+    .prepare(
+      'SELECT v.id AS id, v.cipher_id AS cipher_id, v.key AS key, v.name AS name, v.notes AS notes, v.data AS data ' +
+        'FROM cipher_versions v JOIN ciphers c ON c.id = v.cipher_id WHERE c.organization_id = ?'
+    )
+    .bind(orgId)
+    .all<{
+      id: string;
+      cipher_id: string;
+      key: string | null;
+      name: string | null;
+      notes: string | null;
+      data: string;
+    }>();
+  for (const row of versionRows.results || []) {
+    let data: unknown = {};
+    try {
+      data = JSON.parse(row.data) as unknown;
+    } catch {
+      data = {};
+    }
+    const list = versionsByCipher.get(row.cipher_id) ?? [];
+    list.push({ id: row.id, key: row.key, name: row.name, notes: row.notes, data });
+    versionsByCipher.set(row.cipher_id, list);
+  }
+
+  return ciphers.map((cipher) => ({
+    ...cipher,
+    attachments: attachmentsByCipher.get(cipher.id) ?? [],
+    versions: versionsByCipher.get(cipher.id) ?? [],
+  }));
 }
 
 /**
@@ -1073,6 +1144,17 @@ export interface OrganizationKeyRotation {
   memberKeys: Array<{ membershipId: string; key: string }>;
   /** Each shared item, with its item key re-wrapped under the new key. */
   cipherKeys: Array<{ cipherId: string; key: string | null; name?: string | null; notes?: string | null; data: string }>;
+  /** Each attachment's key, re-sealed under its item's new key. */
+  attachmentKeys?: Array<{ attachmentId: string; cipherId: string; key: string | null }>;
+  /** Each history entry, re-encrypted under its item's new key. */
+  versions?: Array<{
+    versionId: string;
+    cipherId: string;
+    key: string | null;
+    name?: string | null;
+    notes?: string | null;
+    data: string;
+  }>;
   now: string;
 }
 
@@ -1126,6 +1208,34 @@ export async function rotateOrganizationKey(
         )
     );
   }
+  // The attachments and the history are sealed with the item key, so they are
+  // replaced in the same batch: a rotation that changed the item key but left
+  // them behind would make them readable only under the old key.
+  for (const attachment of rotation.attachmentKeys ?? []) {
+    statements.push(
+      db
+        .prepare('UPDATE attachments SET key = ? WHERE id = ? AND cipher_id = ?')
+        .bind(attachment.key, attachment.attachmentId, attachment.cipherId)
+    );
+  }
+  for (const version of rotation.versions ?? []) {
+    statements.push(
+      db
+        .prepare(
+          'UPDATE cipher_versions SET key = COALESCE(?, key), name = COALESCE(?, name), ' +
+            'notes = COALESCE(?, notes), data = ? WHERE id = ? AND cipher_id = ?'
+        )
+        .bind(
+          version.key,
+          version.name ?? null,
+          version.notes ?? null,
+          version.data,
+          version.versionId,
+          version.cipherId
+        )
+    );
+  }
+
   // A rotation is what makes a removal count, so it clears the marker.
   statements.push(
     db
