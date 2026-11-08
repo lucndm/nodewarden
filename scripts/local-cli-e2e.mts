@@ -18,6 +18,7 @@ import { webcrypto } from 'node:crypto';
 
 import { startLocalWorker, startTlsProxy, createChecks } from './local-worker.mjs';
 import { bytesToBase64, decryptBw, decryptStr, encryptBw, hkdfExpand, pbkdf2 } from '../webapp/src/lib/crypto.ts';
+import { applyOrganizationKeyRotation } from '../webapp/src/lib/organization-key-rotation.ts';
 
 const EMAIL = 'local-cli@example.test';
 const PASSWORD = 'Local-CLI-Check-2026!';
@@ -81,9 +82,9 @@ async function api(baseUrl, path, options = {}) {
 
 // The key material the Web Vault would derive, so the CLI can log in with the
 // same password later.
-async function createAccount(baseUrl) {
+async function createAccount(baseUrl, email = EMAIL, inviteCode = null) {
   const subtle = webcrypto.subtle;
-  const masterKey = await pbkdf2(PASSWORD, EMAIL, KDF_ITERATIONS, 32);
+  const masterKey = await pbkdf2(PASSWORD, email, KDF_ITERATIONS, 32);
   const masterHash = await pbkdf2(masterKey, PASSWORD, 1, 32);
   const encKey = await hkdfExpand(masterKey, 'enc', 32);
   const macKey = await hkdfExpand(masterKey, 'mac', 32);
@@ -101,8 +102,9 @@ async function createAccount(baseUrl) {
     method: 'POST',
     headers: { Origin: baseUrl },
     body: {
-      email: EMAIL,
+      email,
       name: 'Local CLI',
+      inviteCode,
       masterPasswordHash: bytesToBase64(masterHash),
       key: await encryptBw(vaultKey, encKey, macKey),
       kdf: 0,
@@ -113,7 +115,17 @@ async function createAccount(baseUrl) {
       },
     },
   });
-  return { status: response.status, body: response.body, masterHash, vaultKey, publicKey, privateKey };
+  return {
+    status: response.status,
+    body: response.body,
+    masterHash,
+    vaultKey,
+    publicKey,
+    privateKey,
+    // The RSA private key as the account stores it: encrypted under the
+    // member's own vault key, in the shape an encrypted string has.
+    encryptedPrivateKey: await encryptBw(privateKey, vaultKey.slice(0, 32), vaultKey.slice(32, 64)),
+  };
 }
 
 // The client encrypts item fields with the item key and stores that key under
@@ -498,6 +510,171 @@ async function run(baseUrl, checks, cli, cliEnv, workerLog = () => '') {
     Array.isArray(stored?.collectionIds) && stored.collectionIds.includes(collectionId),
     JSON.stringify(stored?.collectionIds)
   );
+
+  // The real question about sharing: does the item travel from one member to
+  // another? A second account joins the organization, and the CLI reads the
+  // item the owner wrote - through the organization key wrapped for that
+  // second member.
+  const memberEmail = 'cli-member@example.test';
+  const invite = await api(baseUrl, '/api/admin/invites', {
+    method: 'POST',
+    token,
+    body: { masterPasswordHash: bytesToBase64(account.masterHash), expiresInHours: 24 },
+  });
+  if (!checks.equal('the owner can make an invite', invite.status, 201, JSON.stringify(invite.body))) return;
+  const memberAccount = await createAccount(baseUrl, memberEmail, invite.body?.code);
+  if (!checks.equal('the second account registers', memberAccount.status, 200, JSON.stringify(memberAccount.body))) return;
+
+  // The organization key is wrapped for the second member with their own RSA
+  // key, exactly as an admin's client does when it invites somebody.
+  const importedSecondMemberKey = await subtle.importKey(
+    'spki',
+    memberAccount.publicKey.buffer.slice(
+      memberAccount.publicKey.byteOffset,
+      memberAccount.publicKey.byteOffset + memberAccount.publicKey.byteLength
+    ),
+    { name: 'RSA-OAEP', hash: 'SHA-1' },
+    false,
+    ['encrypt']
+  );
+  const wrappedForMember = `4.${bytesToBase64(
+    new Uint8Array(
+      await subtle.encrypt(
+        { name: 'RSA-OAEP' },
+        importedSecondMemberKey,
+        organizationKey.buffer.slice(0, 64)
+      )
+    )
+  )}`;
+  const invited = await api(baseUrl, `/api/organizations/${organizationId}/users`, {
+    method: 'POST',
+    token,
+    body: { emails: [memberEmail], keys: { [memberEmail]: wrappedForMember } },
+  });
+  if (!checks.equal('the second member is invited', invited.status, 200, JSON.stringify(invited.body))) return;
+  const memberList = await api(baseUrl, `/api/organizations/${organizationId}/users`, { token });
+  const memberRow = (memberList.body?.data || []).find((entry) => entry?.email === memberEmail);
+  checks.equal('the second member is confirmed', memberRow?.status, 2);
+
+  // A member reaches an item through the collections they hold rights on, so
+  // the owner gives the second member the collection.
+  const assigned = await api(
+    baseUrl,
+    `/api/organizations/${organizationId}/users/${memberRow?.id}`,
+    {
+      method: 'PUT',
+      token,
+      body: {
+        collections: [
+          { id: collectionId, readOnly: false, hidePasswords: false, manage: false },
+        ],
+      },
+    }
+  );
+  if (!checks.equal('the owner gives the second member the collection', assigned.status, 200, JSON.stringify(assigned.body).slice(0, 300))) return;
+
+  // The second member logs in with the official CLI, in its own data
+  // directory, and reads the item the owner wrote.
+  const memberDataDir = await mkdtemp(join(tmpdir(), 'nodewarden-bw-cli-member-'));
+  const memberEnv = {
+    ...cliEnv,
+    BITWARDENCLI_APPDATA_DIR: memberDataDir,
+  };
+  await runCli(cli, ['config', 'server', cliEnv.BW_SERVER], { env: memberEnv });
+  const memberLogin = await runCli(cli, ['login', memberEmail, PASSWORD, '--raw'], { env: memberEnv });
+  const memberSession = memberLogin.stdout.trim();
+  if (!checks.ok('the second member logs in', memberLogin.code === 0 && memberSession.length > 0, memberLogin.stderr.trim())) return;
+  const memberCliEnv = { ...memberEnv, BW_SESSION: memberSession };
+  await runCli(cli, ['sync'], { env: memberCliEnv });
+  const memberItems = await runCli(cli, ['list', 'items', '--organizationid', organizationId, '--raw'], { env: memberCliEnv });
+  let itemsForMember = [];
+  try {
+    itemsForMember = JSON.parse(memberItems.stdout || '[]');
+  } catch {
+    itemsForMember = [];
+  }
+  const sharedWithMember = itemsForMember.find((entry) => entry?.id === sharedItemId);
+  checks.equal(
+    'the second member reads the item the owner wrote',
+    sharedWithMember?.name,
+    'Web Vault Shared Login'
+  );
+  checks.equal('the second member reads its username', sharedWithMember?.login?.username, 'shared-user');
+
+  // Rotating the key replaces the key every member holds. The member that was
+  // not removed has to be able to open the items again with the new key, so
+  // this is where the rotation is checked against the official client.
+  const rotationData = await api(baseUrl, `/api/organizations/${organizationId}/rotation-data`, { token });
+  if (!checks.equal('the owner reads the rotation data', rotationData.status, 200, JSON.stringify(rotationData.body).slice(0, 300))) return;
+  const rotation = await applyOrganizationKeyRotation({
+    authedFetch: async (url, init) => {
+      const response = await api(baseUrl, url, {
+        method: init?.method || 'GET',
+        token,
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      return new Response(JSON.stringify(response.body ?? {}), {
+        status: response.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+    organization: { id: organizationId, wrappedKey: wrappedOrganizationKey },
+    encryptedPrivateKey: account.encryptedPrivateKey,
+    userEncKey: account.vaultKey.slice(0, 32),
+    userMacKey: account.vaultKey.slice(32, 64),
+    organizationPrivateKey: rotationData.body?.organization?.privateKey ?? null,
+    members: (rotationData.body?.members ?? []).map((member) => ({
+      membershipId: member.membershipId,
+      publicKey: member.publicKey,
+    })),
+    ciphers: (rotationData.body?.ciphers ?? []).map((cipher) => ({
+      id: cipher.id,
+      key: cipher.key,
+      name: cipher.name,
+      notes: cipher.notes,
+      data: cipher.data ?? {},
+    })),
+  });
+  checks.ok('the key is rotated', !!rotation?.rotatedAt, JSON.stringify(rotation).slice(0, 300));
+
+  await runCli(cli, ['sync'], { env: memberCliEnv });
+  const afterRotation = await runCli(cli, ['list', 'items', '--organizationid', organizationId, '--raw'], { env: memberCliEnv });
+  let itemsAfterRotation = [];
+  try {
+    itemsAfterRotation = JSON.parse(afterRotation.stdout || '[]');
+  } catch {
+    itemsAfterRotation = [];
+  }
+  const sharedAfterRotation = itemsAfterRotation.find((entry) => entry?.id === sharedItemId);
+  checks.equal(
+    'the member reads the item again after the key was rotated',
+    sharedAfterRotation?.name,
+    'Web Vault Shared Login'
+  );
+  checks.equal(
+    'the item still holds its username after the rotation',
+    sharedAfterRotation?.login?.username,
+    'shared-user'
+  );
+
+  // The member that stayed must also still read the items the owner wrote.
+  await runCli(cli, ['sync'], { env });
+  const ownerAfterRotation = await runCli(cli, ['list', 'items', '--organizationid', organizationId, '--raw'], { env });
+  let ownerItemsAfterRotation = [];
+  try {
+    ownerItemsAfterRotation = JSON.parse(ownerAfterRotation.stdout || '[]');
+  } catch {
+    ownerItemsAfterRotation = [];
+  }
+  const ownerItemAfterRotation = ownerItemsAfterRotation.find((entry) => entry?.id === personalId);
+  checks.equal(
+    'the owner reads the item it shared after the rotation',
+    ownerItemAfterRotation?.name,
+    'CLI Shared Login'
+  );
+
+  await runCli(cli, ['logout'], { env: memberEnv });
+  await rm(memberDataDir, { recursive: true, force: true });
 }
 
 const cli = findCli();
