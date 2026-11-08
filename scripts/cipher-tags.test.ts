@@ -396,6 +396,75 @@ test('the revision endpoint runs the tag repair once and moves the revision', as
   }
 });
 
+test('the tag repair moves the revision even when the clock stands still', async (ctx) => {
+  // A repair that runs in the same millisecond as the revision before it
+  // would leave the revision standing, and a client that caches by revision
+  // would keep the payload it already has. The clock is frozen here so that
+  // case is the only case.
+  installTestGlobals();
+  ctx.mock.timers.enable({ apis: ['Date'] });
+  ctx.mock.timers.setTime(Date.parse('2026-11-08T00:00:00.000Z'));
+  const sqlite = new DatabaseSync(':memory:');
+  try {
+    const db = sqliteD1(sqlite);
+    await ensureStorageSchema(db);
+    const envArg = {
+      DB: db,
+      NOTIFICATIONS_HUB: { idFromName: (name: string) => name, get: () => ({ fetch: async () => new Response(null, { status: 204 }) }) },
+    } as unknown as Env;
+    const storage = new StorageService(db);
+    const now = new Date().toISOString();
+    await storage.saveUser({
+      id: 'user-1', email: 'user-1@example.test', name: null, masterPasswordHint: null,
+      masterPasswordHash: 'hash', key: '2.key', privateKey: null, publicKey: null,
+      kdfType: 0, kdfIterations: 600000, securityStamp: 'stamp', role: 'user', status: 'active',
+      totpSecret: null, totpRecoveryCode: null, yubikeyKey1: null, yubikeyKey2: null,
+      yubikeyKey3: null, yubikeyKey4: null, yubikeyKey5: null, yubikeyNfc: false, apiKey: null,
+      createdAt: now, updatedAt: now,
+    } as never);
+
+    const folderName = ENC('Shared');
+    await storage.saveFolder({ id: 'folder-enc', userId: 'user-1', name: folderName, tagName: null, createdAt: now, updatedAt: now });
+    await db
+      .prepare('INSERT INTO ciphers(id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind('dirty', 'user-1', 1, 'folder-enc', ENC('Item'), null, 0, JSON.stringify({ type: 1, name: ENC('Item'), tags: [folderName] }), 0, null, now, now, null, null)
+      .run();
+
+    const before = await storage.getRevisionDate('user-1');
+    assert.equal((await handleSync(new Request('https://vault.example.test/api/sync'), envArg, 'user-1')).status, 200);
+    const after = await storage.getRevisionDate('user-1');
+    assert.notEqual(after, before, 'the repair must move the revision even with a frozen clock');
+    assert.deepEqual((await storage.getCipherForUser('dirty', 'user-1'))?.tags ?? [], []);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test('the revision moves even when the change lands in the same millisecond', async () => {
+  // Clients cache the payload by revision, so a change that leaves the
+  // revision standing is a change they never see. The clock has millisecond
+  // resolution, so two changes can easily share one millisecond.
+  const db = new MemoryD1();
+  const storage = new StorageService(db);
+  const now = new Date().toISOString();
+  await storage.saveUser({
+    id: 'user-1', email: 'user-1@example.test', name: null, masterPasswordHint: null,
+    masterPasswordHash: 'hash', key: '2.key', privateKey: null, publicKey: null,
+    kdfType: 0, kdfIterations: 600000, securityStamp: 'stamp', role: 'user', status: 'active',
+    totpSecret: null, totpRecoveryCode: null, yubikeyKey1: null, yubikeyKey2: null,
+    yubikeyKey3: null, yubikeyKey4: null, yubikeyKey5: null, yubikeyNfc: false, apiKey: null,
+    createdAt: now, updatedAt: now,
+  } as never);
+
+  const before = await storage.getRevisionDate('user-1');
+  const moved = await storage.moveRevisionDate('user-1');
+  assert.ok(
+    new Date(moved).getTime() > new Date(before).getTime(),
+    'the revision has to move, whatever the clock says'
+  );
+  assert.equal(await storage.getRevisionDate('user-1'), moved);
+});
+
 test('folder create endpoint registers tags for empty folders', async () => {
   const db = new MemoryD1();
   const envArg = { DB: db } as unknown as Env;

@@ -934,11 +934,7 @@ export class StorageService {
       // The revision is the signal that makes clients download the repaired
       // payload, so it has to move even when the repair lands in the same
       // millisecond as the revision before it.
-      const previous = Date.parse(await this.getRevisionDate(userId));
-      await this.updateRevisionDate(
-        userId,
-        new Date(Math.max(Date.now(), previous + 1)).toISOString()
-      );
+      await this.moveRevisionDate(userId);
     }
     await this.setConfigValue(markerKey, 'done');
     return changed;
@@ -1324,6 +1320,21 @@ export class StorageService {
 
   async updateRevisionDate(userId: string, revisionDate?: string): Promise<string> {
     return updateStoredRevisionDate(this.db, userId, revisionDate);
+  }
+
+  /**
+   * Moves the revision of a vault that just changed.
+   *
+   * The revision is what tells a client the payload it holds is stale, so it
+   * has to move even when the change lands in the same millisecond as the
+   * revision before it. A revision that stays put is a client that keeps the
+   * payload it already has.
+   */
+  async moveRevisionDate(userId: string): Promise<string> {
+    const previous = Date.parse(await this.getRevisionDate(userId));
+    const next = new Date(Math.max(Date.now(), previous + 1)).toISOString();
+    await this.updateRevisionDate(userId, next);
+    return next;
   }
 
   // --- One-time attachment download tokens ---

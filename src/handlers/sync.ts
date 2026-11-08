@@ -65,7 +65,7 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
   // cipher payloads, so the account revision has to move: the sync cache is
   // keyed by it and would otherwise keep serving the pre-repair bodies.
   if (await storage.migrateFolderCiphersToTags(userId)) {
-    await storage.updateRevisionDate(userId);
+    await storage.moveRevisionDate(userId);
   }
 
   const [revisionDate, accountPasskeys] = await Promise.all([

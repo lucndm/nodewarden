@@ -64,7 +64,7 @@ export async function handleGetFolders(request: Request, env: Env, userId: strin
   const migrated = await storage.migrateFolderCiphersToTags(userId);
   if (migrated) {
     // Backfilled tags changed cipher data; bump so clients resync.
-    await storage.updateRevisionDate(userId);
+    await storage.moveRevisionDate(userId);
   }
 
   let folders: Folder[];
