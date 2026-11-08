@@ -2049,6 +2049,98 @@ export async function handleBulkPermanentDeleteCiphers(request: Request, env: En
   return new Response(null, { status: 204 });
 }
 
+// --- Password scan exclusions ---
+//
+// A scan sends a hash prefix of a password to a breach database. The user may
+// not want that for one item, so the exclusion is kept beside the item: it is
+// a setting of the account, not a property of the item, and other clients
+// and exports never see it.
+
+export const SCAN_SCOPES = ['password-health'] as const;
+
+function readScanScope(request: Request, body?: unknown): { ok: true; scope: string } | { ok: false; response: Response } {
+  const url = new URL(request.url);
+  const raw =
+    (typeof body === 'object' && body !== null ? (body as { scope?: unknown }).scope : undefined) ??
+    url.searchParams.get('scope') ??
+    'password-health';
+  const scope = String(raw || '').trim();
+  if (!SCAN_SCOPES.includes(scope as (typeof SCAN_SCOPES)[number])) {
+    return {
+      ok: false,
+      response: errorResponse('Unknown scan scope', 400),
+    };
+  }
+  return { ok: true, scope };
+}
+
+// GET /api/security/scan-exclusions
+export async function handleGetScanExclusions(request: Request, env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const scope = readScanScope(request);
+  if (!scope.ok) return scope.response;
+  const exclusions = await storage.getScanExclusions(userId, scope.scope);
+  return jsonResponse({ data: exclusions, object: 'list' });
+}
+
+// PUT /api/security/scan-exclusions/:cipherId
+export async function handleSetScanExclusion(
+  request: Request,
+  env: Env,
+  userId: string,
+  cipherId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  let body: unknown = {};
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+  const scope = readScanScope(request, body);
+  if (!scope.ok) return scope.response;
+  // The item has to be one this account may read: an exclusion for an item
+  // nobody can reach would only hide the fact that the item is missing.
+  const cipher = await storage.getCipherForUser(cipherId, userId);
+  if (!cipher) {
+    return errorResponse('Cipher not found', 404);
+  }
+  const exclusion = await storage.excludeCipherFromScan(userId, cipherId, scope.scope);
+  await writeAuditEvent(storage, {
+    actorUserId: userId,
+    action: 'security.scan.exclude',
+    category: 'security',
+    level: 'info',
+    targetType: 'cipher',
+    targetId: cipherId,
+    metadata: { scope: scope.scope, ...auditRequestMetadata(request) },
+  });
+  return jsonResponse(exclusion);
+}
+
+// DELETE /api/security/scan-exclusions/:cipherId
+export async function handleDeleteScanExclusion(
+  request: Request,
+  env: Env,
+  userId: string,
+  cipherId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const scope = readScanScope(request);
+  if (!scope.ok) return scope.response;
+  await storage.includeCipherInScan(userId, cipherId, scope.scope);
+  await writeAuditEvent(storage, {
+    actorUserId: userId,
+    action: 'security.scan.include',
+    category: 'security',
+    level: 'info',
+    targetType: 'cipher',
+    targetId: cipherId,
+    metadata: { scope: scope.scope, ...auditRequestMetadata(request) },
+  });
+  return new Response(null, { status: 204 });
+}
+
 // GET /api/ciphers/usage
 // Password-copy counters for the current owner, keyed by cipher id. Ciphers
 // that were never copied are omitted.

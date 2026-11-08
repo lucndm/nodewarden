@@ -65,6 +65,9 @@ import {
   getCiphersByIds as listStoredCiphersByIds,
   getCiphersPage as listStoredCiphersPage,
   getCipherUsageMap as listStoredCipherUsageMap,
+  excludeCipherFromScan as excludeStoredCipherFromScan,
+  includeCipherInScan as includeStoredCipherInScan,
+  listScanExclusions as listStoredScanExclusions,
   getCipherVersion as findStoredCipherVersion,
   incrementCipherUsage as bumpStoredCipherUsage,
   listCipherVersions as listStoredCipherVersions,
@@ -73,6 +76,7 @@ import {
   updateCipherIfUnchanged as updateStoredCipherIfUnchanged,
   deleteCipher as deleteStoredCipher,
   type CipherVersionInput,
+  type ScanExclusion,
 } from './storage-cipher-repo';
 import {
   addAttachmentToCipher as attachStoredAttachmentToCipher,
@@ -233,7 +237,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-07-organization-collections';
+const STORAGE_SCHEMA_VERSION = '2026-11-08-scan-exclusions';
 const REQUIRED_SCHEMA_TABLES = [
   'webauthn_credentials',
   'webauthn_challenges',
@@ -245,6 +249,9 @@ const REQUIRED_SCHEMA_TABLES = [
   'organizations',
   'collections',
   'collection_ciphers',
+  // The password scan exclusions: an install that claims this schema version
+  // but is missing the table was upgraded only halfway.
+  'cipher_scan_exclusions',
 ] as const;
 
 // D1-backed storage.
@@ -639,6 +646,20 @@ export class StorageService {
 
   async incrementCipherUsage(id: string, userId: string): Promise<CipherUsage | null> {
     return bumpStoredCipherUsage(this.db, id, userId);
+  }
+
+  // --- Password scan exclusions ---
+
+  async getScanExclusions(userId: string, scope: string): Promise<ScanExclusion[]> {
+    return listStoredScanExclusions(this.db, userId, scope);
+  }
+
+  async excludeCipherFromScan(userId: string, cipherId: string, scope: string): Promise<ScanExclusion> {
+    return excludeStoredCipherFromScan(this.db, userId, cipherId, scope);
+  }
+
+  async includeCipherInScan(userId: string, cipherId: string, scope: string): Promise<void> {
+    await includeStoredCipherInScan(this.db, userId, cipherId, scope);
   }
 
   async bulkSoftDeleteCiphers(ids: string[], userId: string): Promise<string | null> {

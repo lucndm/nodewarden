@@ -1534,6 +1534,14 @@ const fr: Record<string, string> = {
 };
 
 Object.assign(fr, {
+  "txt_scan_excluded_badge": "Exclu de la vérification",
+  "txt_scan_exclude": "Exclure de la vérification",
+  "txt_scan_include_again": "Inclure dans la vérification",
+  "txt_scan_excluded": "L'élément n'est plus vérifié",
+  "txt_scan_included": "L'élément est vérifié de nouveau",
+  "txt_scan_exclusion_failed": "La modification n'a pas pu être enregistrée",
+  "txt_scan_excluded_items": "Éléments exclus de cette vérification",
+  "txt_scan_excluded_items_help": "Ces éléments ne sont pas vérifiés. Leurs mots de passe ne sont pas envoyés à la base de données des fuites.",
   "txt_password_security_expired": "Cette vérification date de plus d'un jour. Relancez-la pour obtenir des résultats à jour.",
   "txt_password_health_breach_only": "Seule la base de données des fuites a été vérifiée pour ce mot de passe. La faiblesse et la réutilisation n'ont pas été évaluées.",
   "nav_password_security": "Sécurité des mots de passe", "txt_password_security": "Vérification de sécurité", "txt_password_security_privacy": "Les mots de passe sont vérifiés localement. Seul un préfixe de hachage anonyme est envoyé à la base de fuites après le démarrage.", "txt_check_password_security": "Lancer la vérification", "txt_checking_password_security": "Vérification", "txt_recheck_password_security": "Vérifier à nouveau", "txt_password_security_ready": "Votre coffre est prêt pour une vérification de sécurité.", "txt_password_security_no_login": "Aucun mot de passe de connexion à vérifier.", "txt_password_security_manual": "La vérification ne démarre que sur votre demande. Les résultats restent sur cette page.", "txt_password_security_no_login_help": "Ajoutez une connexion avec mot de passe, puis revenez ici pour la vérifier.", "txt_exposed_passwords": "Exposés", "txt_reused_passwords": "Réutilisés", "txt_weak_passwords": "Faibles", "txt_passwords_checked": "Vérifiés", "txt_password_security_unavailable": "{count} vérifications n'ont pas pu joindre la base de fuites. Elles ne sont pas marquées comme sûres.", "txt_password_security_not_checked": "Non vérifié", "txt_password_exposed_count": "Trouvé dans {count} fuites", "txt_password_reused_count": "Utilisé {count} fois", "txt_weak_password": "Mot de passe faible", "txt_no_password_risks": "Aucun risque de mot de passe détecté", "txt_open_vault": "Ouvrir le coffre", "txt_check_password_breach": "Vérifier la fuite", "txt_password_not_found_in_breaches": "Introuvable dans la base de fuites", "txt_password_security_check_failed": "La vérification de fuite n'a pas pu être terminée.",

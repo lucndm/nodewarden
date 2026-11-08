@@ -6,6 +6,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import OrganizationDialog from '@/components/vault/OrganizationDialog';
 import type { OrganizationActions } from '@/hooks/useOrganizationActions';
 import type { OrganizationGroup, OrganizationMember } from '@/lib/api/organizations';
+import { getPasswordSecurityExclusions, subscribePasswordSecurityExclusions } from '@/lib/password-security-exclusions';
 import VaultDetailView from '@/components/vault/VaultDetailView';
 import VaultEditor from '@/components/vault/VaultEditor';
 import VaultListPanel from '@/components/vault/VaultListPanel';
@@ -58,6 +59,8 @@ interface VaultPageProps {
   collections: import('@/lib/api/organizations').VaultCollection[];
   collectionsError: string;
   onTrackPasswordCopy: (cipherId: string) => void;
+  /** Keeps an item out of the password check, or puts it back in. */
+  onToggleScanExclusion: (cipherId: string, exclude: boolean) => void;
   onRefresh: () => Promise<void>;
   /** The actions an owner or an admin takes on an organization. */
   organizationActions: OrganizationActions;
@@ -685,6 +688,14 @@ export default function VaultPage(props: VaultPageProps) {
   }, [filteredCiphers, filteredCipherIds, selectedCipherId, isCreating, isMobileLayout]);
 
   const selectedCipher = useMemo(() => cipherById.get(selectedCipherId) || null, [cipherById, selectedCipherId]);
+  // Whether the item on screen is kept out of the password check. The list
+  // lives in a module, so the view hears about it when it changes.
+  const [scanExclusions, setScanExclusions] = useState<string[]>(() => getPasswordSecurityExclusions());
+  useEffect(
+    () => subscribePasswordSecurityExclusions(() => setScanExclusions(getPasswordSecurityExclusions())),
+    []
+  );
+  const scanExcluded = !!selectedCipher && scanExclusions.includes(selectedCipher.id);
   const virtualRange = useMemo(() => {
     if (isMobileLayout) return { start: 0, end: filteredCiphers.length, padTop: 0, padBottom: 0 };
     if (!filteredCiphers.length) {
@@ -1518,6 +1529,8 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 usageError={props.cipherUsageError}
                 sharedWith={sharedWithByCipher.get(selectedCipher.id) ?? null}
                 onPasswordCopied={props.onTrackPasswordCopy}
+                onToggleScanExclusion={props.onToggleScanExclusion}
+                scanExcluded={scanExcluded}
                 hiddenFieldVisibleMap={hiddenFieldVisibleMap}
                 folderName={folderName}
                 onOpenReprompt={() => setRepromptOpen(true)}

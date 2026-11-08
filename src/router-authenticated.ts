@@ -8,7 +8,7 @@ import {
   handleUpdateProfile,
   handleGetKeys,
   handleSetKeys,
-  handleGetRevisionDate,
+    handleGetRevisionDate,
   handleSetUserKeyId,
   handleVerifyPassword,
   handleChangePassword,
@@ -52,6 +52,9 @@ import {
   handleUnarchiveCipher,
   handleGetCipherUsage,
   handleRecordCipherUsage,
+  handleDeleteScanExclusion,
+  handleGetScanExclusions,
+  handleSetScanExclusion,
 } from './handlers/ciphers';
 import {
   handleGetCipherVersion,
@@ -67,7 +70,7 @@ import {
   handleBulkDeleteFolders,
 } from './handlers/folders';
 import {
-  handleGetSends,
+    handleGetSends,
   handleGetSend,
   handleCreateSend,
   handleCreateFileSendV2,
@@ -345,6 +348,21 @@ export async function handleAuthenticatedRoute(
 
   if (path === '/api/ciphers/usage' && method === 'GET') {
     return handleGetCipherUsage(request, env, userId);
+  }
+
+  // Which items the user does not want checked by the password scan.
+  if (path === '/api/security/scan-exclusions' && method === 'GET') {
+    return handleGetScanExclusions(request, env, userId);
+  }
+
+  const scanExclusionMatch = path.match(/^\/api\/security\/scan-exclusions\/([^/]+)$/i);
+  if (scanExclusionMatch) {
+    if (method === 'PUT' || method === 'POST') {
+      return handleSetScanExclusion(request, env, userId, scanExclusionMatch[1]);
+    }
+    if (method === 'DELETE') {
+      return handleDeleteScanExclusion(request, env, userId, scanExclusionMatch[1]);
+    }
   }
 
   if (path === '/api/ciphers/delete' && (method === 'PUT' || method === 'POST')) {

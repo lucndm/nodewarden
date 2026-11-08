@@ -62,6 +62,8 @@ export interface AppMainRoutesProps {
   collections: import('@/lib/api/organizations').VaultCollection[];
   collectionsError: string;
   onTrackPasswordCopy: (cipherId: string) => void;
+  /** Keeps an item out of the password check, or puts it back in. */
+  onToggleScanExclusion: (cipherId: string, exclude: boolean) => void;
   /** The actions an owner or an admin takes on an organization. */
   organizationActions: OrganizationActions;
   /** The member who is looking at the vault. */
@@ -285,6 +287,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             collections={props.collections}
             collectionsError={props.collectionsError}
             onTrackPasswordCopy={props.onTrackPasswordCopy}
+            onToggleScanExclusion={props.onToggleScanExclusion}
             organizationActions={props.organizationActions}
             currentUserId={props.currentUserId}
             onRefresh={props.onRefreshVault}

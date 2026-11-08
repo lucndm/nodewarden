@@ -4,6 +4,7 @@ import {
   type PasswordSecurityFinding,
   type PasswordSecurityReport,
 } from '@/lib/password-security';
+import { isPasswordSecurityExcluded } from '@/lib/password-security-exclusions';
 import type { Cipher } from '@/lib/types';
 
 // The report lives in this module's memory only. It is never written to
@@ -35,6 +36,9 @@ export function getPasswordSecurityFinding(
 ): PasswordSecurityFinding | null {
   const finding = findings.get(cipherId);
   if (!finding) return null;
+  // An item the user keeps out of the check has no result to show. It is
+  // never downgraded to "no risks": the check simply did not look at it.
+  if (isPasswordSecurityExcluded(cipherId)) return null;
   if (finding.revisionDate !== String(revisionDate || '')) return null;
   if (isExpired(finding.checkedAt)) return null;
   return finding;
@@ -138,13 +142,16 @@ export function startPasswordSecurityScan(fingerprint: string, ciphers: Cipher[]
   const current = ensurePasswordSecurityState(fingerprint);
   current.controller?.abort();
   const controller = new AbortController();
-  const total = ciphers.filter(isEligibleCipher).length;
+  // An item the user keeps out of the check is not checked, not counted and
+  // not part of the report.
+  const scanned = ciphers.filter((cipher) => !isPasswordSecurityExcluded(cipher.id));
+  const total = scanned.filter(isEligibleCipher).length;
   state = { ...current, report: null, scannedAt: null, scanning: true, progress: { checked: 0, total }, scanError: false, controller };
   notify();
 
   void (async () => {
     try {
-      const report = await inspectVaultPasswordSecurity(ciphers, (checked, total) => {
+      const report = await inspectVaultPasswordSecurity(scanned, (checked, total) => {
         if (controller.signal.aborted || state?.controller !== controller) return;
         state = { ...state, progress: { checked, total } };
         notify();
@@ -152,7 +159,7 @@ export function startPasswordSecurityScan(fingerprint: string, ciphers: Cipher[]
       if (controller.signal.aborted || state?.controller !== controller) return;
       const scannedAt = Date.now();
       state = { ...state, report, scannedAt };
-      recordPasswordSecurityFindings(report, ciphers, scannedAt);
+      recordPasswordSecurityFindings(report, scanned, scannedAt);
     } catch (error) {
       if (controller.signal.aborted || (error as { name?: string } | null)?.name === 'AbortError') return;
       if (state?.controller === controller) state = { ...state, scanError: true };

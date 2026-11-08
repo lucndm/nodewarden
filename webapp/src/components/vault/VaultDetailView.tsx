@@ -47,6 +47,10 @@ interface VaultDetailViewProps {
   usageAvailable: boolean;
   usageError: boolean;
   onPasswordCopied: (cipherId: string) => void;
+  /** Whether the item is kept out of the password check. */
+  scanExcluded: boolean;
+  /** Keeps the item out of the password check, or puts it back in. */
+  onToggleScanExclusion: (cipherId: string, exclude: boolean) => void;
   hiddenFieldVisibleMap: Record<number, boolean>;
   folderName: (id: string | null | undefined) => string;
   /** The organization and collections the item belongs to, when it is shared. */
@@ -602,23 +606,26 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   <div className="detail-sub" role="status">{t('txt_usage_metrics_unavailable')}</div>
                 )}
                 <div className="password-security-badges" role="status">
-                  {passwordHealth.kind === 'unknown' && (
+                  {props.scanExcluded && (
+                    <span className="risk-badge muted">{t('txt_scan_excluded_badge')}</span>
+                  )}
+                  {!props.scanExcluded && passwordHealth.kind === 'unknown' && (
                     <span className="risk-badge muted">
                       {passwordHealth.reason === 'unavailable'
                         ? t('txt_password_security_check_failed')
                         : t('txt_password_security_not_checked')}
                     </span>
                   )}
-                  {passwordHealth.kind === 'breach-only' && passwordHealth.exposed && (
+                  {!props.scanExcluded && passwordHealth.kind === 'breach-only' && passwordHealth.exposed && (
                     <span className="risk-badge danger">{t('txt_password_exposed_count', { count: passwordHealth.exposedCount })}</span>
                   )}
-                  {passwordHealth.kind === 'breach-only' && !passwordHealth.exposed && (
+                  {!props.scanExcluded && passwordHealth.kind === 'breach-only' && !passwordHealth.exposed && (
                     <>
                       <span className="risk-badge muted">{t('txt_password_not_found_in_breaches')}</span>
                       <span className="detail-sub">{t('txt_password_health_breach_only')}</span>
                     </>
                   )}
-                  {passwordHealth.kind === 'risks' && (
+                  {!props.scanExcluded && passwordHealth.kind === 'risks' && (
                     <>
                       {passwordHealth.exposedCount > 0 && (
                         <span className="risk-badge danger">{t('txt_password_security_exposed_short', { count: passwordHealth.exposedCount })}</span>
@@ -627,9 +634,18 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                       {passwordHealth.reusedCount > 1 && <span className="risk-badge reused">{t('txt_password_security_reused_short')}</span>}
                     </>
                   )}
-                  {passwordHealth.kind === 'clean' && <span className="risk-badge muted">{t('txt_no_password_risks')}</span>}
+                  {!props.scanExcluded && passwordHealth.kind === 'clean' && (
+                    <span className="risk-badge muted">{t('txt_no_password_risks')}</span>
+                  )}
                 </div>
                 <div className="detail-card-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary small"
+                    onClick={() => props.onToggleScanExclusion(props.selectedCipher.id, !props.scanExcluded)}
+                  >
+                    {props.scanExcluded ? t('txt_scan_include_again') : t('txt_scan_exclude')}
+                  </button>
                   <button type="button" className="btn btn-secondary small" disabled={checkingBreach || !props.selectedCipher.login?.decPassword} onClick={() => void checkBreach()}>
                     {checkingBreach ? <RefreshCw size={14} className="btn-icon spin" /> : <ShieldCheck size={14} className="btn-icon" />}
                     {checkingBreach ? t('txt_checking_password_security') : t('txt_check_password_breach')}
