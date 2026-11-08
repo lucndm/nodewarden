@@ -1809,7 +1809,9 @@ async function buildCipherListResponse(
 ): Promise<Response> {
   // Read each item through the permission check instead of trusting the ids
   // the client sent: an item the member may not reach is simply not returned.
-  const loaded = await Promise.all(ids.map((id) => storage.getCipherForUser(id, userId)));
+  // A repeated id is one item, so it is listed once.
+  const unique = Array.from(new Set(ids));
+  const loaded = await Promise.all(unique.map((id) => storage.getCipherForUser(id, userId)));
   const ciphers = loaded.filter((cipher): cipher is NonNullable<typeof cipher> => !!cipher);
   const attachmentsByCipher = await storage.getAttachmentsByCipherIds(ciphers.map((cipher) => cipher.id));
 
@@ -1991,7 +1993,9 @@ export async function handleBulkRestoreCiphers(request: Request, env: Env, userI
   }
 
   const ids = await storage.filterWritableCipherIds(body.ids, userId);
-  if (!ids.length) return new Response(null, { status: 204 });
+  // Nothing to restore is still answered with the same shape as a restore
+  // that did something, so a client does not have to special-case it.
+  if (!ids.length) return buildCipherListResponse(request, storage, userId, []);
 
   const revisionDate = await storage.bulkRestoreCiphers(ids, userId);
   if (revisionDate) {

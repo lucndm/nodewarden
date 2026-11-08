@@ -26,6 +26,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The deploy is the last step, not the only one. These are the offline
+      # contract tests: the vault layout, the tags and folders, the item
+      # history, the rights on a shared item. A change that breaks one of them
+      # must not reach production.
+      - name: Test
+        run: npm run test:unit
+
       # The deploy does not touch secrets. Cloudflare refuses a secret edit
       # while the newest version of the worker is not the deployed one, which
       # happens right after a deploy, so writing the secret here turned a
