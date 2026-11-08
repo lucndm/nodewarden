@@ -123,7 +123,6 @@ class MemoryStatement {
     );
     if (!match) throw new Error(`MemoryD1: unsupported SELECT: ${this.sql}`);
 
-    const wherePlaceholders = (match[3]?.match(/\?/g) ?? []).length;
     const rows = this.matches(this.db.rows(match[2]), match[3], 0);
     const columns = match[1].trim() === '*' ? null : topLevelSplit(match[1], /,/);
     const results = rows.map((row) => {

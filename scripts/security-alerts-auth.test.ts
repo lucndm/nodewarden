@@ -273,7 +273,7 @@ test('an unrecognized client session reports once, a known client stays silent',
   const first = await postToken(env, signInParams(user, 'device-alpha'), '203.0.113.10');
   assert.equal(first.status, 200);
   assert.equal(telegram.deliveries.length, 1, 'the first sign-in of a client must report');
-  assert.match(telegram.deliveries[0].url, /api\.telegram\.org/);
+  assert.match(telegram.deliveries[0].url, /^https:\/\/api\.telegram\.org\/bot[^/]+\/sendMessage$/);
   assert.match(telegram.deliveries[0].text, /unrecognized client session/);
   assert.match(telegram.deliveries[0].text, /Method: password/);
   // No credential, account address or device identifier may reach the channel.

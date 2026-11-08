@@ -971,10 +971,6 @@ async function main() {
       const aliasText = String(await evaluate('document.body.textContent'));
       checks.ok('and the mailbox they forward to is named', aliasText.includes('me@example.test'));
 
-      const aliasRow = `(() => {
-        const row = [...document.querySelectorAll('.generator-alias-row')].find((el) => el.textContent.includes('shop.cat@sl.test'));
-        return row ? row.textContent : '';
-      })()`;
       await evaluate(`(() => {
         const row = [...document.querySelectorAll('.generator-alias-row')].find((el) => el.textContent.includes('shop.cat@sl.test'));
         const button = [...row.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Disable');

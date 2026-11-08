@@ -12,13 +12,19 @@ on:
         type: string
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   sync-global-domains:
     runs-on: ubuntu-latest
+    # This job opens a pull request, so it needs to write — but only here, not
+    # for the whole workflow.
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
+      # The job pushes a branch through create-pull-request, so the checkout
+      # keeps its credentials.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e

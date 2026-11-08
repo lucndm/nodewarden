@@ -243,7 +243,7 @@ export default function App() {
   const [hashPathRaw, setHashPathRaw] = useState(() => (typeof window !== 'undefined' ? window.location.hash || '' : ''));
   const [unlockPassword, setUnlockPassword] = useState('');
   const [pendingTotp, setPendingTotp] = useState<PendingTotp | null>(null);
-  const [pendingTotpMode, setPendingTotpMode] = useState<'login' | 'unlock' | null>(null);
+  const [, setPendingTotpMode] = useState<'login' | 'unlock' | null>(null);
   const [pendingPasskeyPassword, setPendingPasskeyPassword] = useState<PendingPasskeyPassword | null>(null);
   const [passkeyPassword, setPasskeyPassword] = useState('');
   const [totpCode, setTotpCode] = useState('');

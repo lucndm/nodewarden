@@ -9,6 +9,14 @@ updates:
       time: "05:00"
       timezone: "Asia/Shanghai"
     open-pull-requests-limit: 5
+    # A fresh release is not offered for a week and a major bump waits a
+    # month: a version that was just published can still be broken or
+    # malicious.
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
     groups:
       npm-minor-and-patch:
         update-types:
@@ -30,6 +38,8 @@ updates:
       time: "05:10"
       timezone: "Asia/Shanghai"
     open-pull-requests-limit: 0
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns:
