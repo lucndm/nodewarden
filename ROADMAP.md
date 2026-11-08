@@ -352,6 +352,28 @@ Lập **plan riêng cho từng lát**; không biến Pass Monitor thành tập h
 
 **Kiểm chứng:** `scripts/scan-exclusions.test.ts` (**5/5**): chủ loại trừ → danh sách có; **tài khoản khác không thấy và không loại trừ được** (404); scope lạ → 400; bỏ loại trừ → danh sách rỗng; **loại trừ không đổi revision của item**; item bị loại **không có kết quả** và không bao giờ là "sạch". Thêm 4 check UI trong Chromium: loại trừ → badge "Excluded from the check" + **server giữ loại trừ** → bỏ loại trừ → badge biến mất + danh sách server rỗng.
 
+### Đã làm — lát Account protection
+
+**Nguyên tắc đã chốt:** biện pháp **không thực thi được thì không được hứa**. Mọi biện pháp đang có đều được **thực thi ở tầng auth/API**, và giờ đó **có test chứng minh**.
+
+**Hai lỗ hổng thật tìm ra khi rà từng điểm thực thi:**
+
+1. **Đổi mật khẩu không thu hồi "tin cậy thiết bị".** Server lưu token "nhớ thiết bị" (thiết bị được bỏ qua bước xác thực 2 lớp) trong bảng riêng. Đổi mật khẩu xoá refresh token + xoay `securityStamp` → mọi phiên khác chết, **nhưng token thiết bị tin cậy vẫn còn** → thiết bị đó vẫn đăng nhập **bằng mật khoá, không cần 2 lớp**. Đúng cái người dùng làm khi nghi ngờ mật khẩu bị lộ thì lại **không chặn** được kẻ đã cài thiết bị. Nay đổi mật khoá **thu hồi luôn token thiết bị tin cậy**.
+2. **Thay khoá tài khoản không chấm dứt phiên nào.** `PUT /api/accounts/keys` chỉ ghi khoá mới — refresh token còn, `securityStamp` không đổi → **mọi phiên mở trước đó vẫn sống**, và chúng vẫn mang khoá cũ. Thay khoá tài khoản là hành động "khoá cũ có thể đã lộ" → nay nó **làm như đổi mật khoá**: xoay `securityStamp`, xoá refresh token, thu hồi thiết bị tin cậy, xoá cache user.
+
+**Các biện pháp đã có và được thực thi (không đổi):** 2 lớp lúc đăng nhập (TOTP / YubiKey / WebAuthn / mã khôi phục, có chống replay), phiên thiết bị tin cậy, xoay `securityStamp` khi đổi mật khoá, thu hồi thiết bị, thu hồi session khi bật 2 lớp, xoay API key.
+
+**Xác minh thiết bị mới: giữ nguyên là từ chối trung thực.** `PUT /api/accounts/verify-devices` **luôn 400** kèm lý do ("không có kênh email") và ghi audit; `device-verification-settings` trả về trạng thái tắt. Cột `verify_devices` vẫn luôn `0` — **không** bật cờ rồi không ai kiểm tra. Muốn làm thật thì cần kênh email + cửa sổ chờ + cách khôi phục khi mất thiết bị; chưa làm gì cả.
+
+**Kiểm chứng:** `scripts/account-protection.test.ts` (**4/4**), chạy qua router thật:
+- thiết bị được tin cậy **đăng nhập được, bỏ qua bước 2 lớp** (200);
+- **đổi mật khoá** → thiết bị đó đăng nhập với mật khoá mới thì **bị hỏi 2 lớp trở lại** (không còn token tin cậy);
+- đổi mật khoá → **phiên khác chết** (refresh token còn 0);
+- **thay khoá tài khoản** → `securityStamp` đổi, phiên khác chết, **thiết bị tin cậy cũng chết**;
+- xác minh thiết bị mới → **400 kèm lý do**, không im lặng bỏ qua.
+
+(Test bắt được cả hai lỗ: bỏ hai lần gọi `deleteTrustedTwoFactorTokensByUserId` thì 2 case đỏ.)
+
 ### Plan từng lát (đã khảo sát code, 2026-11-08)
 
 | Lát | Hiện trạng đo được | Bước kế tiếp |
@@ -360,7 +382,7 @@ Lập **plan riêng cho từng lát**; không biến Pass Monitor thành tập h
 | **Excluded items** | ✅ xong (trên) | — |
 | **Inactive 2FA** | **Chưa có gì**: không nơi nào kết luận website có hỗ trợ 2FA hay không; mọi TOTP/2FA hiện có là 2FA **đăng nhập tài khoản**. Dữ liệu trong vault chỉ chứng minh **người dùng có** TOTP/passkey cho site đó — thiếu TOTP **không** chứng minh site không hỗ trợ. | Chỉ làm được phần vault nói thật: trạng thái `twoFactorState` = `enabled` (có TOTP **hoặc** passkey) | `unknown`; **không** có nhãn "site không hỗ trợ" (chưa có nguồn đáng tin). "Inactive" cần **cột last-used mới** cho TOTP (migration) — chưa có. |
 | **Credential monitoring** | Có **hai đường khác nhau**, không được lẫn: (1) Password Health — **trình duyệt** băm SHA-1 và chỉ gửi **5 ký tự tiền tố** tới `api.pwnedpasswords.com`, kết quả **chỉ trong RAM trình duyệt**; (2) Email breach — **server** gửi **email tài khoản** của người dùng tới HIBP (cần `HIBP_API_KEY`) hoặc XposedOrNot (miễn phí), cache `email_breach_cache` 5 phút quét cron. | Chốt rõ: email tài khoản **không** phải Dark Web Monitoring cả vault. Muốn theo dõi **từng credential** thì phải chọn corpus, dữ liệu gửi đi, sự đồng ý, tần suất và định nghĩa kết quả — chưa làm gì cả. |
-| **Account protection** | Có thật và **có thực thi**: 2FA đăng nhập (TOTP/YubiKey/WebAuthn/recovery code, có chống replay), phiên thiết bị tin cậy, `securityStamp` xoay khi đổi mật khẩu, thu hồi thiết bị. **Riêng "xác minh thiết bị mới" thì không**: `PUT /api/accounts/verify-devices` **luôn từ chối 400** (không có kênh email), và cột `verify_devices` luôn bằng `0`. | Hoặc bỏ hẳn (không có kênh email thì không hứa được), hoặc làm thật: cần kênh email + cửa sổ chờ + cách khôi phục khi mất thiết bị. **Không** bật cờ rồi không ai kiểm tra. |
+| **Account protection** | ✅ xong (trên): hai lỗ hổng đã đóng, mọi biện pháp có test chứng minh được thực thi. Xác minh thiết bị mới **giữ là từ chối trung thực** (cần kênh email mà server không có). | — |
 | **Emergency Access** | **Chưa có gì**: không bảng, không route, không UI, không test — chỉ có dòng trong ROADMAP. | Cần threat model riêng (người nhận, thời gian chờ, hủy, xác thực, thông báo, cấp/thu khoá, audit) và **không** gửi master password/secret thô. Lớn nhất trong P4. |
 | **Passkey / 2FA / zero-knowledge** | Passkey **tài khoản** có (`account-passkeys.ts`, `purpose: login | twoFactor`); `cipher.login.fido2Credentials` là passkey **website** (người dùng tự lưu) — hai thứ khác nhau. Mã hoá: server giữ payload mã hoá + khoá bọc, khoá tổ chức bọc theo RSA cho từng thành viên, xoay khoá mã hoá lại từng item. | Không cần gì mới về mã hoá; chỉ cần **rà lại** và **không tuyên bố tương đương Proton** khi chưa đo. Autofill thuộc client Bitwarden, không thuộc server. |
 
