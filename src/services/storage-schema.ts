@@ -102,6 +102,14 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_org_users_user_org ON organization_users(user_id, org_id)',
   'CREATE INDEX IF NOT EXISTS idx_org_users_org ON organization_users(org_id)',
 
+  // What an organization decides for its members, in the shape the official
+  // clients read: the Bitwarden policy type number and the policy's JSON.
+  'CREATE TABLE IF NOT EXISTS organization_policies (' +
+  'id TEXT PRIMARY KEY, org_id TEXT NOT NULL, type INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 0, ' +
+  "data TEXT NOT NULL DEFAULT '{}', revision_date TEXT NOT NULL, " +
+  'FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_organization_policies_org_type ON organization_policies(org_id, type)',
+
   'CREATE TABLE IF NOT EXISTS collections (' +
   'id TEXT PRIMARY KEY, org_id TEXT NOT NULL, name TEXT NOT NULL, ' +
   'created_at TEXT NOT NULL, updated_at TEXT NOT NULL, ' +

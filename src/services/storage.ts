@@ -22,6 +22,14 @@ import {
   upgradePasswordVerifier as upgradeStoredPasswordVerifier,
 } from './storage-user-repo';
 import {
+  listOrganizationPolicies as listStoredOrganizationPolicies,
+  getOrganizationPolicy as getStoredOrganizationPolicy,
+  saveOrganizationPolicy as saveStoredOrganizationPolicy,
+  listPoliciesForUser as listStoredPoliciesForUser,
+  userHasSendDisabled as userHasStoredSendDisabled,
+  type OrganizationPolicy,
+} from './storage-policy-repo';
+import {
   type AuditLogListOptions,
   createAuditLog as createStoredAuditLog,
   clearAuditLogs as clearStoredAuditLogs,
@@ -238,7 +246,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-08-scan-exclusions';
+const STORAGE_SCHEMA_VERSION = '2026-11-08-org-policies';
 const REQUIRED_SCHEMA_TABLES = [
   'webauthn_credentials',
   'webauthn_challenges',
@@ -248,6 +256,7 @@ const REQUIRED_SCHEMA_TABLES = [
   // missing these tables was upgraded only halfway, so the bootstrap runs
   // again instead of failing on the first query.
   'organizations',
+  'organization_policies',
   'collections',
   'collection_ciphers',
   // The password scan exclusions: an install that claims this schema version
@@ -716,6 +725,33 @@ export class StorageService {
 
   async getOrganizationUserForUser(orgId: string, userId: string): Promise<OrganizationUser | null> {
     return findStoredOrganizationUserForUser(this.db, orgId, userId);
+  }
+
+  async listOrganizationPolicies(orgId: string): Promise<OrganizationPolicy[]> {
+    return listStoredOrganizationPolicies(this.db, orgId);
+  }
+
+  async getOrganizationPolicy(orgId: string, type: number): Promise<OrganizationPolicy | null> {
+    return getStoredOrganizationPolicy(this.db, orgId, type);
+  }
+
+  async saveOrganizationPolicy(input: {
+    id: string;
+    orgId: string;
+    type: number;
+    enabled: boolean;
+    data: string;
+    revisionDate: string;
+  }): Promise<OrganizationPolicy> {
+    return saveStoredOrganizationPolicy(this.db, input);
+  }
+
+  async listPoliciesForUser(userId: string): Promise<OrganizationPolicy[]> {
+    return listStoredPoliciesForUser(this.db, userId);
+  }
+
+  async userHasSendDisabled(userId: string): Promise<boolean> {
+    return userHasStoredSendDisabled(this.db, userId);
   }
 
   async getMemberPublicKeys(userIds: string[]): Promise<Map<string, string | null>> {

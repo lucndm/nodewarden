@@ -71,6 +71,9 @@ interface OrganizationDialogProps {
   onSaveGroup: (group: { name: string; members: string[]; collections: Array<{ id: string }> }) => Promise<boolean>;
   onDeleteGroup: (groupId: string) => Promise<boolean>;
   onRotate: () => void;
+  /** The decisions this organization makes for its members. */
+  onLoadPolicies: () => Promise<Array<{ type: number; enabled: boolean; data: Record<string, unknown> }> | null>;
+  onSavePolicy: (type: number, enabled: boolean, data: Record<string, unknown>) => Promise<boolean>;
 }
 
 const ACCESS_LEVELS: Array<{ value: AccessLevel; label: string }> = [
@@ -81,6 +84,8 @@ const ACCESS_LEVELS: Array<{ value: AccessLevel; label: string }> = [
   { value: 'manage', label: 'txt_access_manage' },
 ];
 
+const SEND_CONTROLS_POLICY = 21;
+
 export default function OrganizationDialog(props: OrganizationDialogProps) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [pendingRemoval, setPendingRemoval] = useState<OrganizationMember | null>(null);
@@ -89,6 +94,8 @@ export default function OrganizationDialog(props: OrganizationDialogProps) {
   const [groupName, setGroupName] = useState('');
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [groupCollections, setGroupCollections] = useState<string[]>([]);
+  // Whether the members may use Send: null while the answer is still coming.
+  const [sendDisabled, setSendDisabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!props.open) return;
@@ -97,7 +104,13 @@ export default function OrganizationDialog(props: OrganizationDialogProps) {
     setGroupName('');
     setGroupMembers([]);
     setGroupCollections([]);
+    setSendDisabled(null);
     props.onLoad();
+    void props.onLoadPolicies().then((policies) => {
+      if (!policies) return;
+      const policy = policies.find((entry) => entry.type === SEND_CONTROLS_POLICY);
+      setSendDisabled(policy?.enabled === true && policy.data?.DisableSend === true);
+    });
   }, [props.open]);
 
   if (!props.open || !props.organization || typeof document === 'undefined') return null;
@@ -333,6 +346,29 @@ export default function OrganizationDialog(props: OrganizationDialogProps) {
                   {t('txt_add_group')}
                 </button>
               </div>
+            </div>
+          )}
+
+          {isAdmin && sendDisabled !== null && (
+            <div className="org-policies">
+              <div className="org-section-title">{t('txt_org_policies')}</div>
+              <label className="org-group-check">
+                <input
+                  type="checkbox"
+                  checked={sendDisabled}
+                  disabled={props.busy}
+                  onChange={(event) => {
+                    const on = (event.currentTarget as HTMLInputElement).checked;
+                    // The server has the last word: the box only moves once
+                    // the policy is stored.
+                    void props.onSavePolicy(SEND_CONTROLS_POLICY, on, { DisableSend: on }).then((saved) => {
+                      if (saved) setSendDisabled(on);
+                    });
+                  }}
+                />
+                <span>{t('txt_org_policy_disable_send')}</span>
+              </label>
+              <p className="org-policy-help">{t('txt_org_policy_disable_send_help')}</p>
             </div>
           )}
 

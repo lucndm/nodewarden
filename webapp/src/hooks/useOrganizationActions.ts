@@ -17,6 +17,9 @@ import {
   createOrganizationGroup,
   deleteOrganizationGroup,
   getOrganizationGroups,
+  getOrganizationPolicies,
+  setOrganizationPolicy,
+  type OrganizationPolicyState,
   getMemberPublicKeys,
   getOrganizationMembers,
   getOrganizationRotationData,
@@ -208,6 +211,40 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     }
   };
 
+  const loadPolicies = async (organizationId: string): Promise<OrganizationPolicyState[] | null> => {
+    try {
+      return await getOrganizationPolicies(input.authedFetch, organizationId);
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_organization_load_failed')
+      );
+      return null;
+    }
+  };
+
+  const savePolicy = async (
+    organizationId: string,
+    type: number,
+    enabled: boolean,
+    data: Record<string, unknown>
+  ): Promise<boolean> => {
+    setBusyOrganizationId(organizationId);
+    try {
+      await setOrganizationPolicy(input.authedFetch, organizationId, type, enabled, data);
+      input.onNotify('success', t('txt_policy_saved'));
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_policy_save_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
+
   const saveGroup = async (
     organizationId: string,
     group: { name: string; members: string[]; collections: Array<{ id: string }> }
@@ -358,6 +395,8 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     giveOrganizationKey,
     loadMembers,
     loadGroups,
+    loadPolicies,
+    savePolicy,
     saveGroup,
     removeGroup,
     inviteMember,

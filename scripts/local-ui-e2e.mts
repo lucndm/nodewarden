@@ -747,6 +747,36 @@ async function main() {
     checks.ok('the dialog names the organization', orgDialog.includes(seeded.organizationName));
     checks.ok('the dialog lists the member', orgDialog.includes('local-ui@example.test'));
 
+    // The organization can decide that its members may not use Send, and the
+    // server is what enforces it.
+    await waitFor(
+      `!![...document.querySelectorAll('label')].find((el) => el.textContent.includes('Members may not use Send'))`,
+      'the send policy',
+      20000
+    );
+    await evaluate(`(() => {
+      const label = [...document.querySelectorAll('label')].find((el) => el.textContent.includes('Members may not use Send'));
+      const box = label.querySelector('input[type=checkbox]');
+      box.click();
+      return true;
+    })()`);
+    await waitFor(`document.body.textContent.includes('Policy saved')`, 'the policy to be saved', 20000);
+    checks.ok('the owner can turn Send off for the members', true);
+    // Back to where the check found it.
+    await evaluate(`(() => {
+      const label = [...document.querySelectorAll('label')].find((el) => el.textContent.includes('Members may not use Send'));
+      label.querySelector('input[type=checkbox]').click();
+      return true;
+    })()`);
+    await waitFor(
+      `(() => {
+        const label = [...document.querySelectorAll('label')].find((el) => el.textContent.includes('Members may not use Send'));
+        return !!label && !label.querySelector('input[type=checkbox]').checked;
+      })()`,
+      'the policy to be turned back off',
+      20000
+    );
+
     // Inviting a member gives them the organization key, wrapped with their
     // own RSA key, so they can open the shared items.
     await evaluate(`(() => {

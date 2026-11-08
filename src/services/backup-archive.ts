@@ -76,6 +76,7 @@ export interface BackupPayload {
     webauthn_credentials?: SqlRow[];
     organizations?: SqlRow[];
     organization_users?: SqlRow[];
+    organization_policies?: SqlRow[];
     collections?: SqlRow[];
     groups?: SqlRow[];
     group_users?: SqlRow[];
@@ -279,6 +280,11 @@ function normalizeParsedBackupDb(value: unknown): BackupPayload['db'] {
   const source = value as Record<string, unknown>;
   // Restore uses an explicit allowlist. Extra tables from old or modified
   // archives, especially runtime authentication state, are intentionally ignored.
+  //
+  // Every table the export writes has to be listed here: a table that is
+  // written but not read back is silently lost on a restore, and the sharing
+  // structure is exactly the part nobody notices missing until the shared
+  // items are gone.
   return {
     config: source.config as SqlRow[],
     users: source.users as SqlRow[],
@@ -289,6 +295,15 @@ function normalizeParsedBackupDb(value: unknown): BackupPayload['db'] {
     cipher_versions: (source.cipher_versions ?? []) as SqlRow[],
     attachments: source.attachments as SqlRow[],
     webauthn_credentials: source.webauthn_credentials as SqlRow[] | undefined,
+    organizations: (source.organizations ?? []) as SqlRow[],
+    organization_users: (source.organization_users ?? []) as SqlRow[],
+    organization_policies: (source.organization_policies ?? []) as SqlRow[],
+    collections: (source.collections ?? []) as SqlRow[],
+    groups: (source.groups ?? []) as SqlRow[],
+    group_users: (source.group_users ?? []) as SqlRow[],
+    collection_users: (source.collection_users ?? []) as SqlRow[],
+    collection_groups: (source.collection_groups ?? []) as SqlRow[],
+    collection_ciphers: (source.collection_ciphers ?? []) as SqlRow[],
   };
 }
 
@@ -529,7 +544,7 @@ export async function buildBackupArchive(
     includeAttachments,
   });
   const encoder = new TextEncoder();
-  const [configRows, userRows, domainSettingsRows, revisionRows, folderRows, cipherRows, cipherVersionRows, attachmentRows, accountPasskeyRows, organizationRows, organizationUserRows, collectionRows, groupRows, groupUserRows, collectionUserRows, collectionGroupRows, collectionCipherRows] = await Promise.all([
+  const [configRows, userRows, domainSettingsRows, revisionRows, folderRows, cipherRows, cipherVersionRows, attachmentRows, accountPasskeyRows, organizationRows, organizationUserRows, organizationPolicyRows, collectionRows, groupRows, groupUserRows, collectionUserRows, collectionGroupRows, collectionCipherRows] = await Promise.all([
     queryRows(env.DB, 'SELECT key, value FROM config ORDER BY key ASC'),
     queryRows(env.DB, 'SELECT id, email, name, master_password_hint, master_password_hash, key, private_key, public_key, kdf_type, kdf_iterations, kdf_memory, kdf_parallelism, security_stamp, role, status, verify_devices, totp_secret, totp_recovery_code, yubikey_key1, yubikey_key2, yubikey_key3, yubikey_key4, yubikey_key5, yubikey_nfc, created_at, updated_at FROM users ORDER BY created_at ASC'),
     queryRows(env.DB, 'SELECT user_id, equivalent_domains, custom_equivalent_domains, excluded_global_equivalent_domains, updated_at FROM domain_settings ORDER BY user_id ASC'),
@@ -541,6 +556,7 @@ export async function buildBackupArchive(
     queryRows(env.DB, 'SELECT id, user_id, purpose, name, public_key, credential_id, counter, type, aa_guid, transports, encrypted_user_key, encrypted_public_key, encrypted_private_key, supports_prf, created_at, updated_at FROM webauthn_credentials ORDER BY created_at ASC'),
     queryRows(env.DB, 'SELECT id, name, private_key, public_key, created_at, updated_at FROM organizations ORDER BY created_at ASC'),
     queryRows(env.DB, 'SELECT id, user_id, org_id, type, status, key, created_at, updated_at FROM organization_users ORDER BY created_at ASC'),
+    queryRows(env.DB, 'SELECT id, org_id, type, enabled, data, revision_date FROM organization_policies ORDER BY org_id ASC, type ASC'),
     queryRows(env.DB, 'SELECT id, org_id, name, created_at, updated_at FROM collections ORDER BY created_at ASC'),
     queryRows(env.DB, 'SELECT id, org_id, name, created_at, updated_at FROM groups ORDER BY created_at ASC'),
     queryRows(env.DB, 'SELECT group_id, org_user_id FROM group_users ORDER BY group_id ASC, org_user_id ASC'),
@@ -578,6 +594,7 @@ export async function buildBackupArchive(
       webauthn_credentials: accountPasskeyRows.length,
       organizations: organizationRows.length,
       organization_users: organizationUserRows.length,
+      organization_policies: organizationPolicyRows.length,
       collections: collectionRows.length,
       groups: groupRows.length,
       group_users: groupUserRows.length,
@@ -610,6 +627,7 @@ export async function buildBackupArchive(
       webauthn_credentials: accountPasskeyRows,
       organizations: organizationRows,
       organization_users: organizationUserRows,
+      organization_policies: organizationPolicyRows,
       collections: collectionRows,
       groups: groupRows,
       group_users: groupUserRows,

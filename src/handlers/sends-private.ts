@@ -151,8 +151,23 @@ export async function handleGetSend(request: Request, env: Env, userId: string, 
   return jsonResponse(sendToResponse(send));
 }
 
+/**
+ * A policy can turn Send off for the members of an organization. The refusal
+ * is here, on the server, so a client that never reads the policy cannot
+ * ignore it; the same policy is also handed to the clients in the sync so
+ * they can grey the button out and say why.
+ */
+async function sendRefusedByPolicy(storage: StorageService, userId: string): Promise<Response | null> {
+  if (await storage.userHasSendDisabled(userId)) {
+    return errorResponse('Send is turned off for the members of your organization', 403);
+  }
+  return null;
+}
+
 export async function handleCreateSend(request: Request, env: Env, userId: string): Promise<Response> {
   const storage = new StorageService(env.DB);
+  const refused = await sendRefusedByPolicy(storage, userId);
+  if (refused) return refused;
 
   let body: unknown;
   try {
@@ -274,6 +289,8 @@ export async function handleCreateSend(request: Request, env: Env, userId: strin
 
 export async function handleCreateFileSendV2(request: Request, env: Env, userId: string): Promise<Response> {
   const storage = new StorageService(env.DB);
+  const refused = await sendRefusedByPolicy(storage, userId);
+  if (refused) return refused;
   const maxFileSize = getBlobStorageMaxBytes(env, LIMITS.send.maxFileSizeBytes);
 
   let body: unknown;
@@ -505,6 +522,8 @@ export async function handlePublicUploadSendFile(
 
 export async function handleUpdateSend(request: Request, env: Env, userId: string, sendId: string): Promise<Response> {
   const storage = new StorageService(env.DB);
+  const refused = await sendRefusedByPolicy(storage, userId);
+  if (refused) return refused;
   const send = await storage.getSendForUser(sendId, userId);
   if (!send || send.userId !== userId) {
     return errorResponse('Send not found', 404);

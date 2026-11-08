@@ -215,6 +215,48 @@ export interface OrganizationMember {
   collections: Array<{ id: string; readOnly: boolean; hidePasswords: boolean; manage: boolean }>;
 }
 
+/** The policy that decides what the members may do with Send. */
+export const SEND_CONTROLS_POLICY = 21;
+
+export interface OrganizationPolicyState {
+  type: number;
+  enabled: boolean;
+  data: Record<string, unknown>;
+}
+
+export async function getOrganizationPolicies(
+  authedFetch: AuthedFetch,
+  organizationId: string
+): Promise<OrganizationPolicyState[]> {
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(organizationId)}/policies`);
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_organization_load_failed')));
+  const body = await parseJson<{ data?: unknown }>(resp);
+  const rows = Array.isArray(body?.data) ? (body.data as Record<string, unknown>[]) : [];
+  return rows.map((entry) => ({
+    type: Number(entry.type || 0),
+    enabled: entry.enabled === true,
+    data: entry.data && typeof entry.data === 'object' ? (entry.data as Record<string, unknown>) : {},
+  }));
+}
+
+export async function setOrganizationPolicy(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  type: number,
+  enabled: boolean,
+  data: Record<string, unknown>
+): Promise<void> {
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(organizationId)}/policies/${type}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled, data }),
+    }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_policy_save_failed')));
+}
+
 export async function getOrganizationMembers(
   authedFetch: AuthedFetch,
   organizationId: string
