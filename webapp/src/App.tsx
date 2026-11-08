@@ -1983,6 +1983,12 @@ export default function App() {
       await queryClient.invalidateQueries({ queryKey: ['collections'] });
       await vaultSendActions.refreshVault();
     },
+    onChanged: async () => {
+      // A member came or went: the organization now reports whether its key
+      // has to be replaced.
+      await queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      await queryClient.invalidateQueries({ queryKey: ['collections'] });
+    },
   });
   const accountSecurityActions = useAccountSecurityActions({
     authedFetch,
@@ -2145,9 +2151,8 @@ export default function App() {
     collectionsError:
       organizationsQuery.isError || collectionsQuery.isError ? t('txt_collection_load_failed') : '',
     onTrackPasswordCopy: (cipherId: string) => { void trackPasswordCopy(cipherId); },
-    onRotateOrganizationKey: async (organizationId: string) => {
-      await organizationActions.rotateOrganizationKey(organizationId);
-    },
+    organizationActions,
+    currentUserId: String(profile?.id || ''),
     users: usersQuery.data || [],
     invites: invitesQuery.data || [],
     adminLoading: (usersQuery.isFetching && !usersQuery.data) || (invitesQuery.isFetching && !invitesQuery.data),

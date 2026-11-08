@@ -262,3 +262,86 @@
   background: rgba(18, 16, 32, 0.2);
   animation: toast-life 4.5s linear forwards;
 }
+
+/* The organization dialog: who is in the organization and what they may do. */
+.org-dialog {
+  @apply relative max-h-[86vh] overflow-y-auto text-left;
+  width: min(640px, 100%);
+}
+
+.org-dialog .dialog-title {
+  @apply pr-8 text-left text-xl;
+}
+
+.org-warning {
+  @apply mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold;
+  border: 1px solid rgba(180, 83, 9, 0.24);
+  background: rgba(251, 191, 36, 0.14);
+  color: #92400e;
+}
+
+.org-invite {
+  @apply mt-3 flex items-center gap-2;
+}
+
+.org-invite .input {
+  @apply flex-1;
+}
+
+.org-members {
+  @apply mt-3 grid gap-2;
+}
+
+.org-member {
+  @apply rounded-xl border p-3;
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, var(--surface));
+}
+
+.org-member-head {
+  @apply flex items-center gap-2;
+}
+
+.org-member-email {
+  @apply min-w-0 flex-1 truncate text-sm font-semibold;
+}
+
+.org-member-state {
+  @apply rounded-full px-2 py-0.5 text-xs font-bold;
+  background: rgba(100, 116, 139, 0.16);
+  color: var(--muted);
+}
+
+.org-member-role {
+  @apply h-9 w-32 py-0 text-sm;
+}
+
+.org-member-remove {
+  @apply h-9 w-9 shrink-0 px-0;
+}
+
+.org-member-collections {
+  @apply mt-2 grid gap-1.5;
+}
+
+.org-collection-row {
+  @apply flex items-center gap-2;
+}
+
+.org-collection-name {
+  @apply min-w-0 flex-1 truncate text-sm;
+  color: var(--muted);
+}
+
+.org-collection-row .input {
+  @apply h-9 w-44 py-0 text-sm;
+}
+
+.org-empty {
+  @apply py-3 text-center text-sm;
+  color: var(--muted);
+}
+
+.org-actions {
+  @apply mt-4 flex items-center justify-end gap-2;
+}

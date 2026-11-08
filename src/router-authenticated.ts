@@ -118,6 +118,7 @@ import {
   handleGetCollections,
   handleGetMemberPublicKeys,
   handleGetOrganizationRotationData,
+  handleGetOrganizationUsers,
   handleGetOrganizations,
   handleInviteOrganizationUser,
   handleUnsupportedOrganizationAction,
@@ -494,6 +495,8 @@ export async function handleAuthenticatedRoute(
     // POST /api/organizations/:orgId/users — invite one or more members.
     const inviteMatch = path.match(/^\/api\/organizations\/([^/]+)\/users$/i);
     if (inviteMatch) {
+      // GET reads the member list, POST invites.
+      if (method === 'GET') return handleGetOrganizationUsers(request, env, userId, inviteMatch[1]);
       if (method === 'POST') return handleInviteOrganizationUser(request, env, userId, inviteMatch[1]);
       return handleUnsupportedOrganizationAction();
     }

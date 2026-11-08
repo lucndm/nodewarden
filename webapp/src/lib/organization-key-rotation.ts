@@ -85,7 +85,7 @@ function toBufferSource(bytes: Uint8Array): ArrayBuffer {
  * Wraps the organization key for one member with their RSA public key, in the
  * `4.` form the official clients expect.
  */
-async function wrapKeyForMember(organizationKey: Uint8Array, publicKeyBase64: string): Promise<string> {
+export async function wrapKeyForMember(organizationKey: Uint8Array, publicKeyBase64: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'spki',
     toBufferSource(base64ToBytes(publicKeyBase64)),

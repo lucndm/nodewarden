@@ -875,3 +875,46 @@ test('a removed member is not part of the rotation', async () => {
   assert.equal(data.members.length, 2, 'the removed member is not in the rotation');
   assert.ok(!data.members.some((member) => member.userId === WRITER), 'the removed member keeps no key');
 });
+
+test('the owner reads the member list, and nobody else does', async () => {
+  const { env } = await fixture();
+
+  const owner = await call(env, `https://vault.example.test/api/organizations/${ORG}/users`, 'GET', OWNER);
+  assert.equal(owner.status, 200, await owner.clone().text());
+  const members = (await owner.json()) as {
+    data: Array<{ id: string; userId: string; email: string | null; type: number; collections: unknown[] }>;
+  };
+  assert.equal(members.data.length, 3, 'every membership comes back');
+  const ownerRow = members.data.find((member) => member.userId === OWNER);
+  assert.ok(ownerRow, 'the owner is in the list');
+  assert.equal(ownerRow.email, 'owner@example.test', 'the member is named by their address');
+  assert.equal(ownerRow.type, 0, 'the owner keeps their role');
+
+  // A plain member has no say in who is in the organization.
+  for (const memberId of [WRITER, READER]) {
+    const denied = await call(env, `https://vault.example.test/api/organizations/${ORG}/users`, 'GET', memberId);
+    assert.equal(denied.status, 404, `${memberId} must not read the member list`);
+  }
+});
+
+test('only the owner hands out a role', async () => {
+  const { env } = await fixture();
+
+  // The writer is a plain member, so it may not even try.
+  const byMember = await call(env, `https://vault.example.test/api/organizations/${ORG}/users/ou-writer`, 'PUT', WRITER, {
+    type: 1,
+  });
+  assert.equal(byMember.status, 404, 'a plain member may not change roles');
+
+  // The owner may.
+  const byOwner = await call(env, `https://vault.example.test/api/organizations/${ORG}/users/ou-writer`, 'PUT', OWNER, {
+    type: 1,
+  });
+  assert.equal(byOwner.status, 200, await byOwner.clone().text());
+
+  // Nobody becomes an owner through this route.
+  const toOwner = await call(env, `https://vault.example.test/api/organizations/${ORG}/users/ou-writer`, 'PUT', OWNER, {
+    type: 0,
+  });
+  assert.equal(toOwner.status, 400);
+});

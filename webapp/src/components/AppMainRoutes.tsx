@@ -9,6 +9,7 @@ import type { AuditLogFilters } from '@/lib/api/admin';
 import type { CiphersImportPayload, CipherUsageMap } from '@/lib/api/vault';
 import type { ItemHistoryEntry, ItemHistoryVersion } from '@/lib/item-history';
 import type { AuthedFetch } from '@/lib/api/shared';
+import type { OrganizationActions } from '@/hooks/useOrganizationActions';
 import { t } from '@/lib/i18n';
 import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
 import type { ExportRequest } from '@/lib/export-formats';
@@ -61,8 +62,10 @@ export interface AppMainRoutesProps {
   collections: import('@/lib/api/organizations').VaultCollection[];
   collectionsError: string;
   onTrackPasswordCopy: (cipherId: string) => void;
-  /** The owner replaces the key every member of the organization holds. */
-  onRotateOrganizationKey: (organizationId: string) => Promise<void>;
+  /** The actions an owner or an admin takes on an organization. */
+  organizationActions: OrganizationActions;
+  /** The member who is looking at the vault. */
+  currentUserId: string;
   users: AdminUser[];
   invites: AdminInvite[];
   adminLoading: boolean;
@@ -282,7 +285,8 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             collections={props.collections}
             collectionsError={props.collectionsError}
             onTrackPasswordCopy={props.onTrackPasswordCopy}
-            onRotateOrganizationKey={props.onRotateOrganizationKey}
+            organizationActions={props.organizationActions}
+            currentUserId={props.currentUserId}
             onRefresh={props.onRefreshVault}
             onCreate={props.onCreateVaultItem}
             onUpdate={props.onUpdateVaultItem}

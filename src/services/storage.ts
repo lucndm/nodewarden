@@ -190,6 +190,7 @@ import {
   getGroupsForUser as listStoredGroupsForUser,
   getItemAccess as getStoredItemAccess,
   getItemGrants as listStoredItemGrants,
+  getMemberEmails as listStoredMemberEmails,
   getMemberPublicKeys as listStoredMemberPublicKeys,
   getOrganizationUserForUser as findStoredOrganizationUserForUser,
   getOrganizationUsers as listStoredOrganizationUsers,
@@ -684,6 +685,10 @@ export class StorageService {
 
   async getMemberPublicKeys(userIds: string[]): Promise<Map<string, string | null>> {
     return listStoredMemberPublicKeys(this.db, userIds);
+  }
+
+  async getMemberEmails(userIds: string[]): Promise<Map<string, string>> {
+    return listStoredMemberEmails(this.db, userIds);
   }
 
   async getOrganizationCiphersForRotation(

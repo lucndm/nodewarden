@@ -272,6 +272,50 @@ export async function handleGetMemberPublicKeys(
 }
 
 /**
+ * GET /api/organizations/:orgId/users
+ *
+ * The members of the organization, with the role they hold and the rights
+ * they hold on each collection.
+ *
+ * Only an owner or an admin may read it: it is the list of who can reach the
+ * organization's items.
+ */
+export async function handleGetOrganizationUsers(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  const memberships = await storage.getOrganizationUsers(orgId);
+  const emails = await storage.getMemberEmails(memberships.map((membership) => membership.userId));
+  const users: Array<Record<string, unknown>> = [];
+  for (const membership of memberships) {
+    const assignments = await storage.getMembershipCollections(membership.id);
+    users.push({
+      id: membership.id,
+      userId: membership.userId,
+      email: emails.get(membership.userId) ?? null,
+      type: membership.type,
+      status: membership.status,
+      collections: assignments.map((entry) => ({
+        id: entry.collectionId,
+        readOnly: entry.readOnly,
+        hidePasswords: entry.hidePasswords,
+        manage: entry.manage,
+      })),
+      object: 'organizationUserDetails',
+    });
+  }
+
+  return jsonResponse({ object: 'list', data: users, continuationToken: null }, 200);
+}
+
+/**
  * GET /api/organizations/:orgId/rotation-data
  *
  * Everything a key rotation needs, in one read: the organization's encrypted
@@ -467,7 +511,8 @@ export async function handleUpdateOrganizationUser(
   membershipId: string
 ): Promise<Response> {
   const storage = new StorageService(env.DB);
-  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+  const requester = await requireOrgAdmin(storage, orgId, userId);
+  if (!requester) {
     return errorResponse('Organization not found', 404);
   }
 
@@ -489,6 +534,9 @@ export async function handleUpdateOrganizationUser(
     // Nobody becomes an owner through this route, and the owner of the
     // organization does not change here.
     if (type === 0) return errorResponse('An organization has one owner', 400);
+    // Only the owner hands out a role: an admin who could promote members
+    // would be able to hand their own powers on.
+    if (requester.type !== OWNER_TYPE) return errorResponse('Only the owner changes roles', 403);
     const target = (await storage.getOrganizationUsers(orgId)).find((entry) => entry.id === membershipId);
     if (target?.type === 0) return errorResponse('The owner role does not change here', 400);
     await storage.setOrganizationUserType(orgId, membershipId, type);

@@ -10,9 +10,16 @@
 import { useState } from 'preact/hooks';
 import { t } from '@/lib/i18n';
 import { base64ToBytes } from '@/lib/crypto';
-import { applyOrganizationKeyRotation } from '@/lib/organization-key-rotation';
+import { applyOrganizationKeyRotation, openOrganizationKey, wrapKeyForMember } from '@/lib/organization-key-rotation';
 import {
+  confirmOrganizationMember,
+  getMemberPublicKeys,
+  getOrganizationMembers,
   getOrganizationRotationData,
+  inviteOrganizationMember,
+  removeOrganizationMember,
+  updateOrganizationMember,
+  type OrganizationMember,
   type VaultOrganization,
 } from '@/lib/api/organizations';
 import type { AuthedFetch } from '@/lib/api/shared';
@@ -26,10 +33,142 @@ interface UseOrganizationActionsInput {
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
   /** Called after a rotation, so the vault and the organizations are read again. */
   onRotated: () => void | Promise<void>;
+  /** Called after a member changed, so the organization is read again. */
+  onChanged: () => void | Promise<void>;
 }
+
+/** The actions an owner or an admin takes on an organization. */
+export type OrganizationActions = ReturnType<typeof useOrganizationActions>;
 
 export default function useOrganizationActions(input: UseOrganizationActionsInput) {
   const [rotatingOrganizationId, setRotatingOrganizationId] = useState('');
+  const [busyOrganizationId, setBusyOrganizationId] = useState('');
+
+  /** The organization key, unwrapped: it is wrapped for this member alone. */
+  const openOrganizationKeyFor = async (organizationId: string): Promise<Uint8Array | null> => {
+    if (!input.session?.symEncKey || !input.session?.symMacKey || !input.profile?.privateKey) return null;
+    const organization = input.organizations.find((entry) => entry.id === organizationId);
+    if (!organization?.key) return null;
+    try {
+      return await openOrganizationKey({
+        encryptedPrivateKey: input.profile.privateKey,
+        userEncKey: base64ToBytes(input.session.symEncKey),
+        userMacKey: base64ToBytes(input.session.symMacKey),
+        wrappedOrganizationKey: organization.key,
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const loadMembers = async (organizationId: string): Promise<OrganizationMember[]> => {
+    try {
+      return await getOrganizationMembers(input.authedFetch, organizationId);
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_organization_load_failed')
+      );
+      return [];
+    }
+  };
+
+  /**
+   * Invites a member and gives them the organization key.
+   *
+   * The invite creates the membership; the key is what makes it a member. It
+   * is wrapped with the member's own RSA key, so a member without a public
+   * key stays invited until they have one.
+   */
+  const inviteMember = async (organizationId: string, email: string): Promise<boolean> => {
+    const address = String(email || '').trim().toLowerCase();
+    if (!address) return false;
+    setBusyOrganizationId(organizationId);
+    try {
+      const userIds = await inviteOrganizationMember(input.authedFetch, organizationId, address);
+      if (!userIds.length) {
+        input.onNotify('warning', t('txt_member_not_found'));
+        return false;
+      }
+      const members = await getOrganizationMembers(input.authedFetch, organizationId);
+      const invited = members.find((member) => member.userId === userIds[0]);
+      if (!invited) {
+        input.onNotify('warning', t('txt_member_not_found'));
+        return false;
+      }
+
+      const keys = await getMemberPublicKeys(input.authedFetch, organizationId, userIds);
+      const publicKey = keys.get(userIds[0]);
+      const organizationKey = await openOrganizationKeyFor(organizationId);
+      if (!publicKey || !organizationKey) {
+        // The member is invited but cannot be confirmed until they have a key
+        // of their own.
+        input.onNotify('warning', t('txt_member_invited_without_key'));
+        return true;
+      }
+      await confirmOrganizationMember(
+        input.authedFetch,
+        organizationId,
+        invited.id,
+        await wrapKeyForMember(organizationKey, publicKey)
+      );
+      await input.onChanged();
+      input.onNotify('success', t('txt_member_invited'));
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_invite_member_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
+
+  const updateMember = async (
+    organizationId: string,
+    membershipId: string,
+    patch: {
+      type?: number;
+      collections?: Array<{ id: string; readOnly: boolean; hidePasswords: boolean; manage: boolean }>;
+    }
+  ): Promise<boolean> => {
+    setBusyOrganizationId(organizationId);
+    try {
+      await updateOrganizationMember(input.authedFetch, organizationId, membershipId, patch);
+      await input.onChanged();
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_update_member_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
+
+  const removeMember = async (organizationId: string, membershipId: string): Promise<boolean> => {
+    setBusyOrganizationId(organizationId);
+    try {
+      await removeOrganizationMember(input.authedFetch, organizationId, membershipId);
+      // The organization now reports that its key has to be replaced, and the
+      // member list is read again.
+      await input.onChanged();
+      input.onNotify('success', t('txt_member_removed'));
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_remove_member_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
 
   const rotateOrganizationKey = async (organizationId: string) => {
     const organization = input.organizations.find((entry) => entry.id === organizationId);
@@ -91,5 +230,13 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     }
   };
 
-  return { rotateOrganizationKey, rotatingOrganizationId };
+  return {
+    rotateOrganizationKey,
+    rotatingOrganizationId,
+    loadMembers,
+    inviteMember,
+    updateMember,
+    removeMember,
+    busyOrganizationId,
+  };
 }
