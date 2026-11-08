@@ -120,6 +120,9 @@ async function main() {
   const ciphers = await queryAll(database.uuid, 'SELECT id, user_id, folder_id, data FROM ciphers');
   const users = await queryAll(database.uuid, 'SELECT id, email, role, status FROM users');
   const revisions = await queryAll(database.uuid, 'SELECT user_id, revision_date FROM user_revisions');
+  const organizations = await queryAll(database.uuid, 'SELECT id, name FROM organizations');
+  const organizationUsers = await queryAll(database.uuid, 'SELECT id, org_id, type, status FROM organization_users');
+  const collections = await queryAll(database.uuid, 'SELECT id, org_id FROM collections');
   const markers = await queryAll(
     database.uuid,
     "SELECT key, value FROM config WHERE key LIKE 'tags.legacy-repair.v1:%'"
@@ -157,6 +160,9 @@ async function main() {
     database: DB_NAME,
     vaultDigest: vaultDigest({ folders, ciphers, users, revisions }),
     accounts: users.length,
+    organizations: organizations.length,
+    organizationMembers: organizationUsers.length,
+    collections: collections.length,
     folders: folders.length,
     foldersWithPlainTextName: plainTextFolders.length,
     foldersWithoutTagName,
