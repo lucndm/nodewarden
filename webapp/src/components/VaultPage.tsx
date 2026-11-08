@@ -791,7 +791,25 @@ const folderName = useCallback((id: string | null | undefined): string => {
   }, []);
 
   const startCreate = useCallback((type: number): void => {
-    setDraft(createEmptyDraft(type));
+    // A new item belongs to the organization the member owns, so it lands
+    // where the rest of the vault is. The first organization they own is the
+    // one the vault was moved into.
+    const defaultOrganization = props.organizations.find((organization) => organization.type === 0);
+    const defaultCollection = defaultOrganization
+      ? props.collections.find(
+          (collection) => collection.organizationId === defaultOrganization.id && !collection.readOnly
+        )
+      : undefined;
+    setDraft(
+      defaultOrganization && defaultCollection
+        ? {
+            ...createEmptyDraft(type),
+            organizationId: defaultOrganization.id,
+            collectionIds: [defaultCollection.id],
+            tags: [],
+          }
+        : createEmptyDraft(type)
+    );
     setIsCreating(true);
     setIsEditing(true);
     setCreateMenuOpen(false);
@@ -804,7 +822,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
     if (isMobileLayout) setMobilePanel('edit');
     setMobileSidebarOpen(false);
     if (type === 5) void seedSshDefaults();
-  }, [isMobileLayout]);
+  }, [isMobileLayout, props.organizations, props.collections]);
 
   const startEdit = useCallback((): void => {
     if (!selectedCipher) return;
