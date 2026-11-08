@@ -161,6 +161,15 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'ALTER TABLE sends ADD COLUMN auth_type INTEGER NOT NULL DEFAULT 2',
   'ALTER TABLE sends ADD COLUMN emails TEXT',
 
+  // Which items the user does not want checked by the password scan. The
+  // exclusion is a setting of the account, not a property of the item, so it
+  // lives beside the item instead of inside its encrypted payload: other
+  // clients and exports never see it.
+  'CREATE TABLE IF NOT EXISTS cipher_scan_exclusions (user_id TEXT NOT NULL, cipher_id TEXT NOT NULL, scope TEXT NOT NULL, created_at TEXT NOT NULL, ' +
+  'PRIMARY KEY (user_id, cipher_id, scope), ' +
+  'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',
+  'CREATE INDEX IF NOT EXISTS idx_cipher_scan_exclusions_user ON cipher_scan_exclusions(user_id, scope)',
+
   'CREATE TABLE IF NOT EXISTS refresh_tokens (' +
   'token TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, device_identifier TEXT, device_session_stamp TEXT, security_stamp TEXT, created_at INTEGER, last_used_at INTEGER, absolute_expires_at INTEGER, client_type TEXT, ' +
   'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',

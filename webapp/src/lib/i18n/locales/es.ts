@@ -1534,6 +1534,14 @@ const es: Record<string, string> = {
 };
 
 Object.assign(es, {
+  "txt_scan_excluded_badge": "Excluido de la comprobación",
+  "txt_scan_exclude": "Mantener fuera de la comprobación",
+  "txt_scan_include_again": "Incluir en la comprobación",
+  "txt_scan_excluded": "El elemento ya no se comprueba",
+  "txt_scan_included": "El elemento se vuelve a comprobar",
+  "txt_scan_exclusion_failed": "No se pudo guardar el cambio",
+  "txt_scan_excluded_items": "Elementos excluidos de esta comprobación",
+  "txt_scan_excluded_items_help": "Estos elementos no se comprueban. Sus contraseñas no se envían a la base de datos de filtraciones.",
   "txt_password_security_expired": "Esta comprobación tiene más de un día. Vuelve a ejecutarla para obtener resultados actuales.",
   "txt_password_health_breach_only": "Solo se comprobó la base de datos de filtraciones para esta contraseña. No se evaluaron la debilidad ni la reutilización.",
   "nav_password_security": "Seguridad de contraseñas", "txt_password_security": "Comprobación de seguridad", "txt_password_security_privacy": "Las contraseñas se comprueban localmente. Solo se envía un prefijo de hash anónimo a la base de filtraciones al iniciar la comprobación.", "txt_check_password_security": "Iniciar comprobación", "txt_checking_password_security": "Comprobando", "txt_recheck_password_security": "Comprobar de nuevo", "txt_password_security_ready": "Tu bóveda está lista para una comprobación de seguridad.", "txt_password_security_no_login": "No hay contraseñas de inicio de sesión para comprobar.", "txt_password_security_manual": "La comprobación solo empieza cuando la eliges. Los resultados se conservan solo en esta página.", "txt_password_security_no_login_help": "Añade un inicio de sesión con contraseña y vuelve aquí para comprobarlo.", "txt_exposed_passwords": "Filtradas", "txt_reused_passwords": "Reutilizadas", "txt_weak_passwords": "Débiles", "txt_passwords_checked": "Comprobadas", "txt_password_security_unavailable": "{count} comprobaciones no pudieron acceder a la base de filtraciones. No se marcan como seguras.", "txt_password_security_not_checked": "Sin comprobar", "txt_password_exposed_count": "Encontrada en {count} filtraciones", "txt_password_reused_count": "Usada {count} veces", "txt_weak_password": "Contraseña débil", "txt_no_password_risks": "No se encontraron riesgos de contraseña", "txt_open_vault": "Abrir bóveda", "txt_check_password_breach": "Comprobar filtración", "txt_password_not_found_in_breaches": "No encontrada en la base de filtraciones", "txt_password_security_check_failed": "No se pudo completar la comprobación de filtraciones.",

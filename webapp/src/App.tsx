@@ -35,6 +35,12 @@ import { clearAuditLogs, getAuditLogSettings, listAdminInvites, listAdminUsers, 
 import { getDomainRules, saveDomainRules } from '@/lib/api/domains';
 import { getSendById, getSends } from '@/lib/api/send';
 import { getCipherById, getCipherUsage, getFolderById, mergeCipherUsageEntry, recordCipherUsage, repairCipherKeyMismatches, repairCipherUriChecksums, type CipherUsageMap } from '@/lib/api/vault';
+import { getScanExclusions } from '@/lib/api/security';
+import {
+  excludeFromPasswordScan,
+  includeInPasswordScan,
+  setPasswordSecurityExclusions,
+} from '@/lib/password-security-exclusions';
 import { getCollections, getOrganizations } from '@/lib/api/organizations';
 import { getCachedVaultCoreSnapshot, invalidateVaultCoreSyncSnapshot, loadVaultCoreSyncSnapshot, saveVaultCoreSyncSnapshot } from '@/lib/api/vault-sync';
 import { silentlyRepairBackupSettingsIfNeeded } from '@/lib/backup-settings-repair';
@@ -67,7 +73,7 @@ import useVaultSendActions from '@/hooks/useVaultSendActions';
 import useOrganizationActions from '@/hooks/useOrganizationActions';
 import { useToastManager } from '@/hooks/useToastManager';
 import { t } from '@/lib/i18n';
-import { APP_NOTIFY_EVENT, type AppNotifyDetail } from '@/lib/app-notify';
+import { APP_NOTIFY_EVENT, dispatchAppNotify, type AppNotifyDetail } from '@/lib/app-notify';
 import { dispatchBackupProgress, type BackupProgressDetail } from '@/lib/backup-restore-progress';
 import { clearOfflineUnlockRecord } from '@/lib/offline-auth';
 import { clearPasswordSecurityCache } from '@/lib/password-security-cache';
@@ -1156,6 +1162,25 @@ export default function App() {
     enabled: !IS_DEMO_MODE && phase === 'app' && !!session?.accessToken && !!session?.symEncKey && !!session?.symMacKey && !!vaultCacheKey,
     staleTime: 30_000,
   });
+  // The items this account keeps out of the password check. The list belongs
+  // to the account, not to the vault, so it is read on its own and never
+  // travels in the sync payload the official clients read.
+  const scanExclusionsQueryKey = useMemo(
+    () => ['scan-exclusions', vaultCacheKey || session?.email] as const,
+    [vaultCacheKey, session?.email]
+  );
+  const scanExclusionsQuery = useQuery({
+    queryKey: scanExclusionsQueryKey,
+    queryFn: () => getScanExclusions(authedFetch),
+    enabled: !IS_DEMO_MODE && phase === 'app' && !!session?.accessToken && !!session?.symEncKey && !!session?.symMacKey && !!vaultCacheKey,
+    staleTime: 60_000,
+  });
+  // The interface works with the copy in the module, so the item view and the
+  // security page read the same list.
+  useEffect(() => {
+    setPasswordSecurityExclusions((scanExclusionsQuery.data || []).map((entry) => entry.cipherId));
+  }, [scanExclusionsQuery.data]);
+
   // The organizations and collections the member belongs to. They change far
   // less often than the vault, so they are read on their own rather than
   // riding along with every sync.
@@ -1179,6 +1204,26 @@ export default function App() {
     enabled: !IS_DEMO_MODE && phase === 'app' && !!session?.accessToken && !!session?.symEncKey && !!session?.symMacKey && !!vaultCacheKey,
     staleTime: 60_000,
   });
+  // Keeping an item out of the password check, or putting it back in. The
+  // list is the account's, so it is written through the server and read
+  // again; a failure leaves the previous list standing.
+  async function toggleScanExclusion(cipherId: string, exclude: boolean) {
+    if (IS_DEMO_MODE) return;
+    const id = String(cipherId || '').trim();
+    if (!id) return;
+    try {
+      if (exclude) await excludeFromPasswordScan(authedFetch, id);
+      else await includeInPasswordScan(authedFetch, id);
+      await queryClient.invalidateQueries({ queryKey: scanExclusionsQueryKey });
+      dispatchAppNotify('success', exclude ? t('txt_scan_excluded') : t('txt_scan_included'));
+    } catch (error) {
+      dispatchAppNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_scan_exclusion_failed')
+      );
+    }
+  }
+
   // A successful login password copy bumps the counter of that cipher. The
   // copy has already happened by then, so a failed request only warns about
   // the missing count - it never takes the copied password back.
@@ -2214,6 +2259,7 @@ export default function App() {
     collectionsError:
       organizationsQuery.isError || collectionsQuery.isError ? t('txt_collection_load_failed') : '',
     onTrackPasswordCopy: (cipherId: string) => { void trackPasswordCopy(cipherId); },
+    onToggleScanExclusion: (cipherId: string, exclude: boolean) => { void toggleScanExclusion(cipherId, exclude); },
     organizationActions,
     currentUserId: String(profile?.id || ''),
     users: usersQuery.data || [],

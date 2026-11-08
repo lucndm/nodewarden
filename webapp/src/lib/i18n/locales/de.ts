@@ -1534,6 +1534,14 @@ const de: Record<string, string> = {
 };
 
 Object.assign(de, {
+  "txt_scan_excluded_badge": "Von der Prüfung ausgenommen",
+  "txt_scan_exclude": "Von der Prüfung ausnehmen",
+  "txt_scan_include_again": "Wieder prüfen",
+  "txt_scan_excluded": "Der Eintrag wird nicht mehr geprüft",
+  "txt_scan_included": "Der Eintrag wird wieder geprüft",
+  "txt_scan_exclusion_failed": "Die Änderung konnte nicht gespeichert werden",
+  "txt_scan_excluded_items": "Einträge, die von der Prüfung ausgenommen sind",
+  "txt_scan_excluded_items_help": "Diese Einträge werden nicht geprüft. Ihre Passwörter werden nicht an die Leckdatenbank gesendet.",
   "txt_password_security_expired": "Diese Prüfung ist älter als ein Tag. Führen Sie sie erneut aus, um aktuelle Ergebnisse zu erhalten.",
   "txt_password_health_breach_only": "Nur die Breach-Datenbank wurde für dieses Passwort geprüft. Schwäche und Wiederverwendung wurden nicht geprüft.",
   "nav_password_security": "Passwortsicherheit", "txt_password_security": "Passwort-Sicherheitsprüfung", "txt_password_security_privacy": "Passwörter werden lokal geprüft. Erst nach dem Start wird nur ein anonymer Hash-Präfix an die Leckdatenbank gesendet.", "txt_check_password_security": "Prüfung starten", "txt_checking_password_security": "Prüfung läuft", "txt_recheck_password_security": "Erneut prüfen", "txt_password_security_ready": "Ihr Tresor ist für eine Sicherheitsprüfung bereit.", "txt_password_security_no_login": "Es gibt keine Login-Passwörter zu prüfen.", "txt_password_security_manual": "Die Prüfung startet nur auf Ihre Anfrage. Ergebnisse bleiben nur auf dieser Seite.", "txt_password_security_no_login_help": "Fügen Sie einen Login-Eintrag mit Passwort hinzu und prüfen Sie ihn anschließend hier.", "txt_exposed_passwords": "Geleakt", "txt_reused_passwords": "Wiederverwendet", "txt_weak_passwords": "Schwach", "txt_passwords_checked": "Geprüft", "txt_password_security_unavailable": "{count} Passwortprüfungen konnten die Leckdatenbank nicht erreichen. Sie werden nicht als sicher markiert.", "txt_password_security_not_checked": "Nicht geprüft", "txt_password_exposed_count": "In {count} Lecks gefunden", "txt_password_reused_count": "{count}-mal verwendet", "txt_weak_password": "Schwaches Passwort", "txt_no_password_risks": "Keine Passwortrisiken gefunden", "txt_open_vault": "Tresor öffnen", "txt_check_password_breach": "Leck prüfen", "txt_password_not_found_in_breaches": "Nicht in der Leckdatenbank gefunden", "txt_password_security_check_failed": "Die Leckprüfung konnte nicht abgeschlossen werden.",

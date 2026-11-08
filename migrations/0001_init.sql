@@ -248,6 +248,19 @@ CREATE INDEX IF NOT EXISTS idx_sends_user_updated ON sends(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_sends_user_deletion ON sends(user_id, deletion_date);
 CREATE INDEX IF NOT EXISTS idx_sends_user_updated_id ON sends(user_id, updated_at, id);
 
+-- Which items the user does not want checked by the password scan. It is a
+-- setting of the account, not a property of the item, so it stays out of the
+-- encrypted payload: other clients and exports never see it.
+CREATE TABLE IF NOT EXISTS cipher_scan_exclusions (
+  user_id TEXT NOT NULL,
+  cipher_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, cipher_id, scope),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_cipher_scan_exclusions_user ON cipher_scan_exclusions(user_id, scope);
+
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   token TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

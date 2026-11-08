@@ -1534,6 +1534,14 @@ const it: Record<string, string> = {
 };
 
 Object.assign(it, {
+  "txt_scan_excluded_badge": "Escluso dal controllo",
+  "txt_scan_exclude": "Escludi dal controllo",
+  "txt_scan_include_again": "Includi nel controllo",
+  "txt_scan_excluded": "L'elemento non viene più controllato",
+  "txt_scan_included": "L'elemento viene controllato di nuovo",
+  "txt_scan_exclusion_failed": "Non è stato possibile salvare la modifica",
+  "txt_scan_excluded_items": "Elementi esclusi da questo controllo",
+  "txt_scan_excluded_items_help": "Questi elementi non vengono controllati. Le loro password non vengono inviate al database delle violazioni.",
   "txt_password_security_expired": "Questo controllo risale a più di un giorno. Eseguiolo di nuovo per ottenere risultati aggiornati.",
   "txt_password_health_breach_only": "Per questa password è stata controllata solo il database delle violazioni. Debolezza e riutilizzo non sono stati valutati.",
   "nav_password_security": "Sicurezza password", "txt_password_security": "Controllo sicurezza password", "txt_password_security_privacy": "Le password vengono controllate localmente. Solo un prefisso hash anonimo viene inviato al database delle violazioni dopo l'avvio.", "txt_check_password_security": "Avvia controllo", "txt_checking_password_security": "Controllo in corso", "txt_recheck_password_security": "Controlla di nuovo", "txt_password_security_ready": "Il tuo archivio è pronto per un controllo di sicurezza.", "txt_password_security_no_login": "Non ci sono password di accesso da controllare.", "txt_password_security_manual": "Il controllo parte solo quando lo scegli. I risultati restano solo in questa pagina.", "txt_password_security_no_login_help": "Aggiungi un accesso con password, quindi torna qui per controllarlo.", "txt_exposed_passwords": "Esposte", "txt_reused_passwords": "Riutilizzate", "txt_weak_passwords": "Deboli", "txt_passwords_checked": "Controllate", "txt_password_security_unavailable": "{count} controlli non hanno raggiunto il database delle violazioni. Non sono contrassegnati come sicuri.", "txt_password_security_not_checked": "Non controllata", "txt_password_exposed_count": "Trovata in {count} violazioni", "txt_password_reused_count": "Usata {count} volte", "txt_weak_password": "Password debole", "txt_no_password_risks": "Nessun rischio password trovato", "txt_open_vault": "Apri archivio", "txt_check_password_breach": "Controlla violazione", "txt_password_not_found_in_breaches": "Non trovata nel database delle violazioni", "txt_password_security_check_failed": "Impossibile completare il controllo delle violazioni.",

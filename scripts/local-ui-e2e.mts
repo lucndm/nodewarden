@@ -529,6 +529,38 @@ async function main() {
       !sharedDetail.includes('Not found in the breach database')
     );
 
+    // An item can be kept out of the password check: the password of that
+    // item is then not sent to the breach database at all.
+    await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll('button')];
+      const target = buttons.find((b) => (b.textContent || '').trim() === 'Keep out of the check');
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(`document.body.textContent.includes('Excluded from the check')`, 'the excluded badge', 15000);
+    checks.ok('the item can be kept out of the password check', true);
+    const exclusions = await api(worker.baseUrl, '/api/security/scan-exclusions', { token: seeded.token });
+    checks.ok(
+      'the server holds the exclusion',
+      (exclusions.body?.data || []).length === 1,
+      JSON.stringify(exclusions.body?.data || []).slice(0, 200)
+    );
+    await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll('button')];
+      const target = buttons.find((b) => (b.textContent || '').trim() === 'Include in the check');
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(
+      `!document.body.textContent.includes('Excluded from the check')`,
+      'the excluded badge to go away',
+      15000
+    );
+    const afterInclude = await api(worker.baseUrl, '/api/security/scan-exclusions', { token: seeded.token });
+    checks.ok('and the item can be put back in', (afterInclude.body?.data || []).length === 0);
+
     // Back to everything, so the history check can find the personal item.
     await evaluate(`(() => {
       const buttons = [...document.querySelectorAll('.sidebar .tree-btn')];

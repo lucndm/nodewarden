@@ -334,12 +334,30 @@ Lập **plan riêng cho từng lát**; không biến Pass Monitor thành tập h
 
 **Kiểm chứng:** `scripts/password-security.test.ts` (**7/7**): quét thật với **stub bảng rò rỉ** (tính SHA-1 thật) tìm ra exposed / reused / weak và mang revision của item; bảng rò rỉ **không trả lời** → `unknown` chứ không phải sạch; item đổi revision → kết quả cũ không còn hiệu lực; kết quả quá hạn → `unknown`; check một mật khoá → chỉ nói điều bảng rò rỉ biết, yếu/trùng lặp là **null**; item chưa ai quét → `unknown` (không bao giờ `clean`). Thêm 2 check UI trong Chromium: item hiện **"Not checked"** và **không** hiện "Not found in the breach database".
 
+### Đã làm — lát Excluded items
+
+**Vấn đề:** quét mật khoá gửi **tiền tố hash** của mật khoá ra `api.pwnedpasswords.com`. Người dùng có thể **không muốn** điều đó với một item — và trước đây **không có cách nào**: mọi login có mật khoá đều bị quét, không có lựa chọn nào.
+
+**Chốt (vì sao không đặt trong `cipher.fields`):** cờ loại trừ là **thiết lập của tài khoản**, không phải thuộc tính của item. Đặt trong payload mã hoá của item thì nó **lọt sang client Bitwarden khác** và **vào export/backup** — thứ mà người dùng không muốn. Nên nó nằm **cạnh item** trên server, đúng tiền lệ của `usage_count`/`last_used_at`: dữ liệu phụ **không** chạm payload, **không** chạm revision, **không** vào payload `/sync` mà client chính thức đọc.
+
+**Cách làm:**
+
+- Bảng `cipher_scan_exclusions(user_id, cipher_id, scope, created_at)`, khoá chính `(user_id, cipher_id, scope)` → **mỗi tài khoản một danh sách riêng**.
+- Endpoint (chỉ chủ tài khoản): `GET /api/security/scan-exclusions`, `PUT /api/security/scan-exclusions/:cipherId`, `DELETE /api/security/scan-exclusions/:cipherId`. Item phải **đọc được** (dùng chung `getCipherForUser`) nếu không → **404**; scope lạ → **400**.
+- **Phạm vi (scope)** được ghi rõ trong hàng: `password-health`. Một phép quét khác sẽ có scope khác, không dùng chung.
+- **Audit:** `security.scan.exclude` / `security.scan.include`, category `security` — có dấu vết ai loại trừ item nào, lúc nào.
+- **Không chạm vào item:** đổi loại trừ **không** đổi `updated_at`/revision của item → client khác không bị đẩy sync vô nghĩa. (Test kiểm: revision của item đứng yên.)
+- **Thực thi phía client:** item bị loại **không được quét**, **không được tính** vào `eligibleCount`, và kết quả cũ của nó **bị gỡ khỏi cache** → nó hiện "Excluded from the check", **không bao giờ** hiện "không có rủi ro".
+- **UI:** nút **Keep out of the check** / **Include in the check** ở card chi tiết item; trang Password Security liệt kê các item bị loại kèm nút đưa vào lại.
+
+**Kiểm chứng:** `scripts/scan-exclusions.test.ts` (**5/5**): chủ loại trừ → danh sách có; **tài khoản khác không thấy và không loại trừ được** (404); scope lạ → 400; bỏ loại trừ → danh sách rỗng; **loại trừ không đổi revision của item**; item bị loại **không có kết quả** và không bao giờ là "sạch". Thêm 4 check UI trong Chromium: loại trừ → badge "Excluded from the check" + **server giữ loại trừ** → bỏ loại trừ → badge biến mất + danh sách server rỗng.
+
 ### Plan từng lát (đã khảo sát code, 2026-11-08)
 
 | Lát | Hiện trạng đo được | Bước kế tiếp |
 |---|---|---|
 | **Password Health inline** | ✅ xong (trên) | — |
-| **Excluded items** | **Chưa có gì**: không có khái niệm loại trừ theo item, không có bảng, không có cờ. Cache quét **chỉ trong RAM** nên cờ loại trừ không thể đặt ở đó. | Chốt nơi lưu: (A) trường ẩn trong `cipher.fields` (mã hoá, sync sẵn, nhưng lọt sang client khác và vào export) hoặc (B) bảng riêng `cipher_scan_exclusions(user_id, cipher_id, scope)` + audit `security.scan.exclude` (theo tiền lệ `usage_count`/`last_used_at`: dữ liệu phụ **không** chạm payload/revision/sync). Item bị loại phải **bị gỡ khỏi kết quả**, không được hạ xuống "không có rủi ro". |
+| **Excluded items** | ✅ xong (trên) | — |
 | **Inactive 2FA** | **Chưa có gì**: không nơi nào kết luận website có hỗ trợ 2FA hay không; mọi TOTP/2FA hiện có là 2FA **đăng nhập tài khoản**. Dữ liệu trong vault chỉ chứng minh **người dùng có** TOTP/passkey cho site đó — thiếu TOTP **không** chứng minh site không hỗ trợ. | Chỉ làm được phần vault nói thật: trạng thái `twoFactorState` = `enabled` (có TOTP **hoặc** passkey) | `unknown`; **không** có nhãn "site không hỗ trợ" (chưa có nguồn đáng tin). "Inactive" cần **cột last-used mới** cho TOTP (migration) — chưa có. |
 | **Credential monitoring** | Có **hai đường khác nhau**, không được lẫn: (1) Password Health — **trình duyệt** băm SHA-1 và chỉ gửi **5 ký tự tiền tố** tới `api.pwnedpasswords.com`, kết quả **chỉ trong RAM trình duyệt**; (2) Email breach — **server** gửi **email tài khoản** của người dùng tới HIBP (cần `HIBP_API_KEY`) hoặc XposedOrNot (miễn phí), cache `email_breach_cache` 5 phút quét cron. | Chốt rõ: email tài khoản **không** phải Dark Web Monitoring cả vault. Muốn theo dõi **từng credential** thì phải chọn corpus, dữ liệu gửi đi, sự đồng ý, tần suất và định nghĩa kết quả — chưa làm gì cả. |
 | **Account protection** | Có thật và **có thực thi**: 2FA đăng nhập (TOTP/YubiKey/WebAuthn/recovery code, có chống replay), phiên thiết bị tin cậy, `securityStamp` xoay khi đổi mật khẩu, thu hồi thiết bị. **Riêng "xác minh thiết bị mới" thì không**: `PUT /api/accounts/verify-devices` **luôn từ chối 400** (không có kênh email), và cột `verify_devices` luôn bằng `0`. | Hoặc bỏ hẳn (không có kênh email thì không hứa được), hoặc làm thật: cần kênh email + cửa sổ chờ + cách khôi phục khi mất thiết bị. **Không** bật cờ rồi không ai kiểm tra. |

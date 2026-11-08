@@ -453,6 +453,68 @@ export async function incrementCipherUsage(
   };
 }
 
+/**
+ * The items the user does not want checked by a scan.
+ *
+ * The exclusion belongs to the account, not to the item: it says that this
+ * user does not want this password sent to a breach database. It therefore
+ * lives beside the item and never inside its encrypted payload, so other
+ * clients and exports do not see it.
+ */
+export interface ScanExclusion {
+  cipherId: string;
+  scope: string;
+  createdAt: string;
+}
+
+export async function listScanExclusions(
+  db: D1Database,
+  userId: string,
+  scope: string
+): Promise<ScanExclusion[]> {
+  const res = await db
+    .prepare(
+      'SELECT cipher_id AS cipher_id, scope AS scope, created_at AS created_at ' +
+      'FROM cipher_scan_exclusions WHERE user_id = ? AND scope = ? ORDER BY created_at ASC'
+    )
+    .bind(userId, scope)
+    .all<{ cipher_id: string; scope: string; created_at: string }>();
+  return (res.results || []).map((row) => ({
+    cipherId: row.cipher_id,
+    scope: row.scope,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function excludeCipherFromScan(
+  db: D1Database,
+  userId: string,
+  cipherId: string,
+  scope: string
+): Promise<ScanExclusion> {
+  const createdAt = new Date().toISOString();
+  await db
+    .prepare(
+      'INSERT INTO cipher_scan_exclusions (user_id, cipher_id, scope, created_at) VALUES (?, ?, ?, ?) ' +
+      'ON CONFLICT(user_id, cipher_id, scope) DO NOTHING'
+    )
+    .bind(userId, cipherId, scope, createdAt)
+    .run();
+  return { cipherId, scope, createdAt };
+}
+
+export async function includeCipherInScan(
+  db: D1Database,
+  userId: string,
+  cipherId: string,
+  scope: string
+): Promise<void> {
+  await db
+    .prepare('DELETE FROM cipher_scan_exclusions WHERE user_id = ? AND cipher_id = ? AND scope = ?')
+    .bind(userId, cipherId, scope)
+    .run();
+}
+
 export async function bulkSoftDeleteCiphers(
   db: D1Database,
   sqlChunkSize: SqlChunkSize,

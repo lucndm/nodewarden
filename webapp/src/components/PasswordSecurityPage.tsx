@@ -10,6 +10,12 @@ import {
   subscribePasswordSecurityState,
 } from '@/lib/password-security-cache';
 import { getEmailBreachStatus, type EmailBreachInfo, type EmailBreachStatusResponse } from '@/lib/api/auth';
+import {
+  getPasswordSecurityExclusions,
+  includeInPasswordScan,
+  loadPasswordSecurityExclusions,
+  subscribePasswordSecurityExclusions,
+} from '@/lib/password-security-exclusions';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { t } from '@/lib/i18n';
 import type { Cipher } from '@/lib/types';
@@ -43,6 +49,17 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
   const [emailBreach, setEmailBreach] = useState<EmailBreachStatusResponse | null>(null);
   const [emailBreachLoading, setEmailBreachLoading] = useState(false);
   const [emailBreachError, setEmailBreachError] = useState(false);
+  // The items this account keeps out of the check. They are neither checked
+  // nor counted, and they never count as safe.
+  const [excludedIds, setExcludedIds] = useState<string[]>(() => getPasswordSecurityExclusions());
+  useEffect(
+    () => subscribePasswordSecurityExclusions(() => setExcludedIds(getPasswordSecurityExclusions())),
+    []
+  );
+  useEffect(() => {
+    if (!props.authedFetch) return;
+    void loadPasswordSecurityExclusions(props.authedFetch).catch(() => undefined);
+  }, [props.authedFetch]);
   useEffect(() => {
     setSecurityState(getPasswordSecurityState(fingerprint));
     setFilter('all');
@@ -100,9 +117,37 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
   const reportComplete = !!report && report.unavailableCount === 0 && !expired;
 
   const eligibleCount = useMemo(
-    () => props.ciphers.filter((cipher) => Number(cipher.type) === 1 && !cipher.deletedDate && !(cipher as { deletedAt?: string | null }).deletedAt && !!cipher.login?.decPassword).length,
-    [props.ciphers],
+    () =>
+      props.ciphers.filter(
+        (cipher) =>
+          Number(cipher.type) === 1 &&
+          !cipher.deletedDate &&
+          !(cipher as { deletedAt?: string | null }).deletedAt &&
+          !!cipher.login?.decPassword &&
+          !excludedIds.includes(cipher.id)
+      ).length,
+    [props.ciphers, excludedIds],
   );
+
+  // The items that are kept out of the check, with the names the user knows.
+  const excludedItems = useMemo(
+    () =>
+      excludedIds
+        .map((id) => props.ciphers.find((cipher) => cipher.id === id))
+        .filter((cipher): cipher is Cipher => !!cipher)
+        .map((cipher) => ({ id: cipher.id, name: String(cipher.decName || cipher.name || '') })),
+    [excludedIds, props.ciphers]
+  );
+
+  const includeAgain = async (cipherId: string) => {
+    if (!props.authedFetch) return;
+    try {
+      await includeInPasswordScan(props.authedFetch, cipherId);
+    } catch {
+      // The list stays as it is when the server refuses, so the item is not
+      // shown as included when it is not.
+    }
+  };
 
   // The scan is manual, so the page must always say where it stands: not
   // started, running, failed, or finished. Silence would read as "all clear".
@@ -228,6 +273,38 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
             {emailBreachResult && Number.isFinite(emailBreachCheckedAt) && (
               <p className="password-security-checked-at">{t('txt_email_breach_checked_at', { value: formatCheckedAt(emailBreachCheckedAt) })}</p>
             )}
+          </div>
+        </section>
+      )}
+
+      {excludedItems.length > 0 && (
+        <section className="password-security-results card" aria-label={t('txt_scan_excluded_items')}>
+          <div className="password-security-item-header">
+            <strong>{t('txt_scan_excluded_items')}</strong>
+          </div>
+          <p className="password-security-email-breach-help">{t('txt_scan_excluded_items_help')}</p>
+          <div className="password-security-list">
+            {excludedItems.map((entry) => (
+              <article className="password-security-item" key={entry.id}>
+                <div className="password-security-item-main">
+                  <div className="password-security-item-header">
+                    <strong>{entry.name || t('txt_no_name')}</strong>
+                    <div className="password-security-badges">
+                      <span className="risk-badge muted">{t('txt_scan_excluded_badge')}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="password-security-item-actions">
+                  <button
+                    type="button"
+                    class="btn btn-secondary small"
+                    onClick={() => void includeAgain(entry.id)}
+                  >
+                    {t('txt_scan_include_again')}
+                  </button>
+                </div>
+              </article>
+            ))}
           </div>
         </section>
       )}
