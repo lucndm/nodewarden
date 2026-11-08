@@ -132,7 +132,7 @@ test('a trusted device can skip the second factor, until the password changes', 
 });
 
 test('changing the password ends the other sessions', async () => {
-  const { env, storage, userId } = await fixture({ twoFactor: false });
+  const { env, userId } = await fixture({ twoFactor: false });
   const login = await handlePublicRoute(
     new Request('https://vault.example.test/identity/connect/token', {
       method: 'POST',

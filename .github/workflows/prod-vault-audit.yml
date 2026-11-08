@@ -16,10 +16,15 @@ concurrency:
 jobs:
   audit:
     runs-on: ubuntu-latest
+    # The production secrets live in this environment, so they are only
+    # exposed to a job that runs here.
+    environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 22
 

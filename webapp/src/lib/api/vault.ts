@@ -633,11 +633,6 @@ export async function downloadCipherAttachmentDecrypted(
   return { fileName, bytes: plainBytes };
 }
 
-function asNullable(v: string): string | null {
-  const s = String(v || '').trim();
-  return s ? s : null;
-}
-
 function parseFieldType(v: number | string): 0 | 1 | 2 | 3 {
   if (typeof v === 'number') {
     if (v === 1 || v === 2 || v === 3) return v;

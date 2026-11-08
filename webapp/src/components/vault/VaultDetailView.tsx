@@ -1,7 +1,7 @@
 import { createPortal } from 'preact/compat';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AlertTriangle, Archive, BookOpen, CalendarPlus, Clipboard, Contact, CreditCard, Download, Eye, EyeOff, ExternalLink, Globe, History, IdCard, KeyRound, Landmark, List, Lock, MoreVertical, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Sparkles, StickyNote, Tag, Terminal, Trash2, User, X } from 'lucide-preact';
+import { Archive, BookOpen, CalendarPlus, Clipboard, Contact, CreditCard, Download, Eye, EyeOff, ExternalLink, Globe, History, IdCard, KeyRound, Landmark, List, Lock, MoreVertical, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, Sparkles, StickyNote, Tag, Terminal, Trash2, User, X } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import ItemHistoryDialog from '@/components/vault/ItemHistoryDialog';
 import { looksLikeCipherString } from '@/lib/app-support';

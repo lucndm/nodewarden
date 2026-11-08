@@ -286,6 +286,18 @@ function getStateCookie(response: Response): { raw: string; sealed: string } | n
   return { raw, sealed: decodeURIComponent(raw) };
 }
 
+/** Seals an SSO state payload the way the server does (HMAC-SHA256 over the body). */
+async function sealStatePayload(payload: Record<string, unknown>): Promise<string> {
+  const body = Buffer.from(JSON.stringify(payload), 'utf8')
+    .toString('base64')
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll('=', '');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
+  return `${body}.${Buffer.from(signature).toString('base64').replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')}`;
+}
+
 async function startMobileAuthorize(
   env: Env,
   pair: { verifier: string; challenge: string },
@@ -470,14 +482,65 @@ test('callback sink refuses off-origin redirect even for a sealed backslash URI'
     clientCodeChallenge: pair.challenge,
     clientCodeChallengeMethod: 'S256',
   };
-  const body = Buffer.from(JSON.stringify(statePayload), 'utf8')
-    .toString('base64')
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replaceAll('=', '');
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
-  const sealed = `${body}.${Buffer.from(signature).toString('base64').replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')}`;
+  const sealed = await sealStatePayload(statePayload);
+
+  ctx.idp.visitAuthorize(new URL(`https://idp.example.test/authorize?nonce=${nonce}`));
+  const callback = await handleSsoCallback(
+    new Request(`${VAULT_ORIGIN}/auth/sso/callback?code=${FakeIdp.idpCode}&state=${statePayload.state}`, {
+      headers: { Cookie: `nw_sso_state=${encodeURIComponent(sealed)}` },
+    }),
+    ctx.env
+  );
+  assert.equal(callback.status, 302);
+  const location = callback.headers.get('Location')!;
+  assert.ok(!/evil\.example\.test/.test(location), `must not redirect off-origin: ${location}`);
+  assert.ok(
+    location.startsWith('/?sso_error='),
+    `must fall back to the relative web error redirect: ${location}`
+  );
+});
+
+test('dot-segment redirect_uri variants are rejected (open-redirect regression)', async (t) => {
+  const ctx = await setup();
+  t.after(() => ctx.restoreFetch());
+  const pair = await createPkcePair();
+
+  // NW-SSO-REDIRECT-2: "/..//evil.example.test/cb" resolves on this origin,
+  // but its path normalizes to "//evil.example.test". The callback used to
+  // strip the placeholder origin from the resolved URL as a string, which
+  // left the protocol-relative "//evil.example.test/cb" as the Location and
+  // handed the freshly minted code to the attacker's host.
+  for (const redirectUri of ['/..//evil.example.test/cb', '/..//evil.example.test', '/a/..//evil.example.test']) {
+    const response = await startMobileAuthorize(ctx.env, pair, { redirectUri });
+    assert.equal(response.status, 400, `redirect_uri ${redirectUri} must be rejected`);
+  }
+
+  // A relative redirect that stays a plain path keeps working.
+  const relative = await startMobileAuthorize(ctx.env, pair, { redirectUri: '/sso-connector.html' });
+  assert.equal(relative.status, 302);
+});
+
+test('callback sink refuses a protocol-relative path even for a sealed dot-segment URI', async (t) => {
+  const ctx = await setup();
+  t.after(() => ctx.restoreFetch());
+  const pair = await createPkcePair();
+
+  // Defense-in-depth: a sealed state whose clientRedirectUri normalizes to a
+  // protocol-relative path must not produce an off-origin Location.
+  const nonce = 'sink-test-nonce-dot-segment';
+  const statePayload = {
+    state: 'sink-test-state-dot-segment',
+    verifier: pair.verifier,
+    nonce,
+    exp: Date.now() + 60_000,
+    purpose: 'client_sso' as const,
+    clientId: 'mobile',
+    clientState: 'client-state-123',
+    clientRedirectUri: '/..//evil.example.test/cb',
+    clientCodeChallenge: pair.challenge,
+    clientCodeChallengeMethod: 'S256',
+  };
+  const sealed = await sealStatePayload(statePayload);
 
   ctx.idp.visitAuthorize(new URL(`https://idp.example.test/authorize?nonce=${nonce}`));
   const callback = await handleSsoCallback(

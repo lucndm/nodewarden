@@ -8,6 +8,8 @@ Please **do not report security vulnerabilities through public GitHub issues, di
 
 Use GitHub Private Vulnerability Reporting instead:
 
+**https://github.com/lucndm/nodewarden/security/advisories/new**
+
 1. Open the NodeWarden repository on GitHub.
 2. Go to **Security and quality**.
 3. Click **Report a vulnerability**.

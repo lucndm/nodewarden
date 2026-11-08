@@ -239,7 +239,7 @@ test('the better of two group grants for one collection wins', () => {
 });
 
 test('an item in no collection the member reaches is invisible', () => {
-  const { db, grants } = fixture('cipher-1', 'collection-1', 'direct', {
+  const { db } = fixture('cipher-1', 'collection-1', 'direct', {
     readOnly: false,
     hidePasswords: false,
     manage: false,
