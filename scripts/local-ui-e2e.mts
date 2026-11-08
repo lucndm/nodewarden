@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { webcrypto } from 'node:crypto';
 
 import { startLocalWorker, findFreePort, createChecks } from './local-worker.mjs';
+import { startFakeSimpleLogin } from './fake-simple-login.ts';
 import { bytesToBase64, encryptBw, hkdfExpand, pbkdf2 } from '../webapp/src/lib/crypto.ts';
 
 const EMAIL = 'local-ui@example.test';
@@ -60,6 +61,10 @@ async function launchChromium(binary) {
     [
       '--headless=new',
       '--no-sandbox',
+      // The stand-in provider answers over https with a throwaway
+      // certificate, because the app only lets a page connect to https
+      // addresses. The check trusts that certificate and nothing else.
+      '--ignore-certificate-errors',
       '--disable-gpu',
       '--disable-dev-shm-usage',
       `--remote-debugging-port=${port}`,
@@ -867,6 +872,92 @@ async function main() {
       30000
     );
     checks.ok('the shared item is still readable after the rotation', true);
+
+    // The aliases the provider holds are visible here and can be turned off
+    // and deleted, so a leaked alias does not keep receiving mail.
+    const provider = await startFakeSimpleLogin({ https: true });
+    try {
+      await evaluate(`(() => {
+        const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/generator');
+        if (!link) return false;
+        link.click();
+        return true;
+      })()`);
+      await waitFor(
+        `!![...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Email alias')`,
+        'the generator',
+        20000
+      );
+      await evaluate(`(() => {
+        const tab = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Email alias');
+        tab.click();
+        return true;
+      })()`);
+      await waitFor(`!!document.querySelector('#generator-email-type')`, 'the email type', 15000);
+      await evaluate(`(() => {
+        const select = document.querySelector('#generator-email-type');
+        select.value = 'forwarded';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      })()`);
+      await waitFor(`!!document.querySelector('#generator-forwarded-server')`, 'the provider fields', 15000);
+      await evaluate(`(() => {
+        const fill = (id, value) => {
+          const field = document.querySelector(id);
+          field.value = value;
+          field.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        fill('#generator-forwarded-server', ${JSON.stringify(provider.url)});
+        fill('#generator-forwarded-api-key', ${JSON.stringify(provider.apiKey)});
+        return true;
+      })()`);
+      await waitFor(`document.body.textContent.includes('shop.cat@sl.test')`, 'the alias list', 20000);
+      checks.ok('the aliases of the provider are shown', true);
+      const aliasText = String(await evaluate('document.body.textContent'));
+      checks.ok('and the mailbox they forward to is named', aliasText.includes('me@example.test'));
+
+      const aliasRow = `(() => {
+        const row = [...document.querySelectorAll('.generator-alias-row')].find((el) => el.textContent.includes('shop.cat@sl.test'));
+        return row ? row.textContent : '';
+      })()`;
+      await evaluate(`(() => {
+        const row = [...document.querySelectorAll('.generator-alias-row')].find((el) => el.textContent.includes('shop.cat@sl.test'));
+        const button = [...row.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Disable');
+        button.click();
+        return true;
+      })()`);
+      await waitFor(
+        `(() => {
+          const row = [...document.querySelectorAll('.generator-alias-row')].find((el) => el.textContent.includes('shop.cat@sl.test'));
+          return !!row && row.textContent.includes('Disabled');
+        })()`,
+        'the alias to be turned off',
+        15000
+      );
+      checks.ok('an alias can be turned off here', provider.aliases[0].enabled === false);
+
+      await evaluate(`(() => {
+        const row = [...document.querySelectorAll('.generator-alias-row')].find((el) => el.textContent.includes('shop.cat@sl.test'));
+        const button = [...row.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Delete');
+        button.click();
+        return true;
+      })()`);
+      await waitFor(`!!document.querySelector('[role=dialog]')`, 'the delete confirmation', 15000);
+      await evaluate(`(() => {
+        const dialog = document.querySelector('[role=dialog]');
+        const button = [...dialog.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Delete');
+        button.click();
+        return true;
+      })()`);
+      await waitFor(
+        `!document.body.textContent.includes('shop.cat@sl.test')`,
+        'the alias to be gone',
+        15000
+      );
+      checks.ok('and an alias can be deleted here', provider.aliases.length === 1);
+    } finally {
+      await provider.close();
+    }
 
     return checks.finish() ? 0 : 1;
   } finally {

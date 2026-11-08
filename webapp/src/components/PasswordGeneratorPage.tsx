@@ -21,7 +21,8 @@ import {
   type SshKeyOptions,
   type UsernameOptions,
 } from '@/lib/password-generator';
-import { ForwarderError, generateForwardedEmail, type ForwarderErrorKind } from '@/lib/simplelogin-forwarder';
+import { ForwarderError, generateForwardedEmail } from '@/lib/simplelogin-forwarder';
+import { ForwardedAliasList, forwardedErrorKey } from '@/components/ForwardedAliasList';
 import { generateSshKey, type GeneratedSshKey } from '@/lib/ssh-key-generator';
 import { loadGeneratorSettings, saveGeneratorSettings, type ForwardedAliasAccountSettings } from '@/lib/api/generator-settings';
 import type { AuthedFetch } from '@/lib/api/shared';
@@ -172,7 +173,7 @@ export default function PasswordGeneratorPage(props: PasswordGeneratorPageProps 
       .catch((error: unknown) => {
         if (cancelled) return;
         setForwardedValue('');
-        const kind = error instanceof ForwarderError ? error.kind : 'server' satisfies ForwarderErrorKind;
+        const kind = error instanceof ForwarderError ? error.kind : 'server';
         setForwardedError(forwardedErrorKey(kind));
       })
       .finally(() => { if (!cancelled) setForwardedLoading(false); });
@@ -417,6 +418,7 @@ function EmailOptionFields(props: {
           ? <>
               <label className="generator-select-field" htmlFor="generator-forwarded-provider"><span>{t('txt_generator_provider')}</span><select id="generator-forwarded-provider" className="input" value={props.forwarded.provider} onChange={(event) => props.onForwardedChange('provider', event.currentTarget.value as ForwardedEmailOptions['provider'])}>{providers.map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>
               <ForwardedEmailFields options={props.forwarded.simplelogin} onChange={props.onForwardedAccountChange} />
+              <ForwardedAliasList account={props.forwarded.simplelogin} />
             </>
           : <label className="generator-text-field" htmlFor="generator-email"><span>{t('txt_generator_email')}</span><input id="generator-email" className="input" type="email" autocomplete="off" value={props.options.email} onInput={(event) => props.onChange('email', event.currentTarget.value)} /></label>}
       <p className="generator-options-note">{t(props.options.type === 'forwarded' ? 'txt_generator_forwarded_description' : 'txt_generator_email_description')}</p>
@@ -444,17 +446,6 @@ function publicKeyWithComment(publicKey: string, comment: string): string {
   const base = publicKey.trim().split(/\s+/).slice(0, 2).join(' ');
   const safeComment = comment.replace(/[\r\n]+/g, ' ').trim();
   return safeComment ? `${base} ${safeComment}` : base;
-}
-
-function forwardedErrorKey(kind: ForwarderErrorKind): string {
-  const keys: Record<ForwarderErrorKind, string> = {
-    config: 'txt_generator_forwarded_error_config',
-    network: 'txt_generator_forwarded_error_network',
-    auth: 'txt_generator_forwarded_error_auth',
-    quota: 'txt_generator_forwarded_error_quota',
-    server: 'txt_generator_forwarded_error_generic',
-  };
-  return keys[kind];
 }
 
 function normalizeAccount(value: ForwardedAliasAccountSettings): ForwardedAliasAccountSettings {

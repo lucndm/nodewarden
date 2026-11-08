@@ -38,6 +38,27 @@ export interface SlAlias {
   enabled: boolean;
 }
 
+/** One alias of the provider, as the provider reports it. */
+export interface SlAliasRecord {
+  id: number;
+  email: string;
+  name: string;
+  enabled: boolean;
+  /** Unix seconds, or 0 when the provider does not say. */
+  createdAt: number;
+  note: string;
+  /** Where the provider forwards this alias to. */
+  mailboxes: Array<{ id: number; email: string }>;
+  forwardCount: number;
+  blockCount: number;
+  replyCount: number;
+}
+
+/** The provider's base URL, without a trailing slash. */
+function providerUrl(serverUrl: string): string {
+  return serverUrl.trim().replace(/\/+$/, '');
+}
+
 interface RequestOptions {
   method: string;
   path: string;
@@ -82,7 +103,7 @@ export async function fetchAliasOptions(
   const query = hostname ? `?hostname=${encodeURIComponent(hostname)}` : '';
   const payload = await request<{ can_create?: boolean; prefix_suggestion?: string; suffixes?: Array<{ suffix?: string; signed_suffix?: string; is_custom?: boolean; is_premium?: boolean }> }>({
     method: 'GET',
-    path: `${options.serverUrl}/api/v5/alias/options${query}`,
+    path: `${providerUrl(options.serverUrl)}/api/v5/alias/options${query}`,
     apiKey: options.apiKey,
   });
   const suffixes = (payload.suffixes ?? [])
@@ -109,7 +130,7 @@ export async function createCustomAlias(
 ): Promise<SlAlias> {
   const payload = await request<SlAlias>({
     method: 'POST',
-    path: `${options.serverUrl}/api/v3/alias/custom/new${hostname ? `?hostname=${encodeURIComponent(hostname)}` : ''}`,
+    path: `${providerUrl(options.serverUrl)}/api/v3/alias/custom/new${hostname ? `?hostname=${encodeURIComponent(hostname)}` : ''}`,
     apiKey: options.apiKey,
     body: {
       alias_prefix: prefix,
@@ -128,11 +149,85 @@ export async function createRandomAlias(
 ): Promise<SlAlias> {
   const payload = await request<SlAlias>({
     method: 'POST',
-    path: `${options.serverUrl}/api/alias/random/new?mode=${mode}${hostname ? `&hostname=${encodeURIComponent(hostname)}` : ''}`,
+    path: `${providerUrl(options.serverUrl)}/api/alias/random/new?mode=${mode}${hostname ? `&hostname=${encodeURIComponent(hostname)}` : ''}`,
     apiKey: options.apiKey,
     body: options.note ? { note: options.note } : undefined,
   });
   return payload;
+}
+
+interface RawAlias {
+  id?: number;
+  email?: string;
+  name?: string | null;
+  enabled?: boolean;
+  creation_timestamp?: number;
+  note?: string | null;
+  mailboxes?: Array<{ id?: number; email?: string }> | null;
+  nb_forward?: number;
+  nb_block?: number;
+  nb_reply?: number;
+}
+
+function normalizeAlias(raw: RawAlias): SlAliasRecord {
+  return {
+    id: Number(raw.id ?? 0),
+    email: String(raw.email ?? ''),
+    name: String(raw.name ?? ''),
+    enabled: raw.enabled === true,
+    createdAt: Number(raw.creation_timestamp ?? 0) || 0,
+    note: String(raw.note ?? ''),
+    mailboxes: (raw.mailboxes ?? [])
+      .filter((box) => typeof box?.email === 'string')
+      .map((box) => ({ id: Number(box.id ?? 0), email: String(box.email) })),
+    forwardCount: Number(raw.nb_forward ?? 0) || 0,
+    blockCount: Number(raw.nb_block ?? 0) || 0,
+    replyCount: Number(raw.nb_reply ?? 0) || 0,
+  };
+}
+
+/**
+ * The aliases of the provider, one page at a time. The provider returns at
+ * most 20 aliases per page.
+ */
+export async function listAliases(
+  options: Pick<ForwarderAccountConfig, 'serverUrl' | 'apiKey'>,
+  page = 0,
+): Promise<SlAliasRecord[]> {
+  const payload = await request<{ aliases?: RawAlias[] }>({
+    method: 'GET',
+    path: `${providerUrl(options.serverUrl)}/api/v2/aliases?page_id=${Math.max(0, Math.trunc(page))}`,
+    apiKey: options.apiKey,
+  });
+  return (payload.aliases ?? []).map(normalizeAlias);
+}
+
+/**
+ * Turns the alias on or off. The provider toggles and answers with the state
+ * it ended up in, so the state shown is the provider's, not an assumption.
+ */
+export async function setAliasEnabled(
+  options: Pick<ForwarderAccountConfig, 'serverUrl' | 'apiKey'>,
+  aliasId: number,
+): Promise<boolean> {
+  const payload = await request<{ enabled?: boolean }>({
+    method: 'POST',
+    path: `${providerUrl(options.serverUrl)}/api/aliases/${aliasId}/toggle`,
+    apiKey: options.apiKey,
+  });
+  return payload.enabled === true;
+}
+
+/** Removes the alias at the provider. This cannot be undone. */
+export async function deleteAlias(
+  options: Pick<ForwarderAccountConfig, 'serverUrl' | 'apiKey'>,
+  aliasId: number,
+): Promise<void> {
+  await request<{ deleted?: boolean }>({
+    method: 'DELETE',
+    path: `${providerUrl(options.serverUrl)}/api/aliases/${aliasId}`,
+    apiKey: options.apiKey,
+  });
 }
 
 /**

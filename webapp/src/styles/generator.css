@@ -39,3 +39,13 @@
 .generator-history-item:first-child { border-top: 0; }
 .generator-history-value { flex: 1 1 auto; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .generator-history-meta { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+
+.generator-alias-section { margin: 18px 0 0; padding: 13px 14px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--primary) 4%, var(--panel)); }
+.generator-alias-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; font-size: 13.5px; }
+.generator-alias-error { margin: 0 0 10px; color: var(--danger); font-size: 12.5px; }
+.generator-alias-list { display: grid; gap: 8px; }
+.generator-alias-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); }
+.generator-alias-main { display: grid; gap: 3px; min-width: 0; }
+.generator-alias-address { overflow-wrap: anywhere; color: var(--text); font-size: 13px; font-weight: 700; }
+.generator-alias-meta { color: var(--muted); font-size: 11.5px; }
+.generator-alias-actions { display: flex; gap: 7px; }
