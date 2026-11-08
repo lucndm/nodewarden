@@ -211,6 +211,70 @@ async function seedVault(baseUrl) {
     throw new Error(`registration failed: ${registered.status} ${JSON.stringify(registered.body)}`);
   }
 
+  // A second account, so the organization has a member the owner can invite
+  // and remove. It has its own RSA key, which is what the organization key is
+  // wrapped with. A second account needs an invite code, and the first user
+  // is the one who can make one.
+  const memberEmail = 'org-member@example.test';
+  const memberMasterKey = await pbkdf2(PASSWORD, memberEmail, KDF_ITERATIONS, 32);
+  const memberMasterHash = await pbkdf2(memberMasterKey, PASSWORD, 1, 32);
+  const memberEncKey = await hkdfExpand(memberMasterKey, 'enc', 32);
+  const memberMacKey = await hkdfExpand(memberMasterKey, 'mac', 32);
+  const memberVaultKey = webcrypto.getRandomValues(new Uint8Array(64));
+  const memberKeyPair = await subtle.generateKey(
+    { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-1' },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  const adminToken = (
+    await api(baseUrl, '/identity/connect/token', {
+      method: 'POST',
+      form: {
+        grant_type: 'password',
+        username: EMAIL,
+        password: bytesToBase64(masterHash),
+        scope: 'api offline_access',
+        deviceIdentifier: 'local-ui-seed',
+        deviceName: 'local ui seed',
+        deviceType: '14',
+      },
+    })
+  ).body?.access_token;
+  if (!adminToken) throw new Error('the API did not issue an admin token');
+  const invite = await api(baseUrl, '/api/admin/invites', {
+    method: 'POST',
+    token: adminToken,
+    body: { masterPasswordHash: bytesToBase64(masterHash), expiresInHours: 24 },
+  });
+  if (invite.status !== 201) {
+    throw new Error(`invite create failed: ${invite.status} ${JSON.stringify(invite.body)}`);
+  }
+
+  const memberRegistered = await api(baseUrl, '/api/accounts/register', {
+    method: 'POST',
+    headers: { Origin: baseUrl },
+    body: {
+      email: memberEmail,
+      inviteCode: invite.body?.code,
+      name: 'Org Member',
+      masterPasswordHash: bytesToBase64(memberMasterHash),
+      key: await encryptBw(memberVaultKey, memberEncKey, memberMacKey),
+      kdf: 0,
+      kdfIterations: KDF_ITERATIONS,
+      keys: {
+        publicKey: bytesToBase64(new Uint8Array(await subtle.exportKey('spki', memberKeyPair.publicKey))),
+        encryptedPrivateKey: await encryptBw(
+          new Uint8Array(await subtle.exportKey('pkcs8', memberKeyPair.privateKey)),
+          memberVaultKey.slice(0, 32),
+          memberVaultKey.slice(32, 64)
+        ),
+      },
+    },
+  });
+  if (memberRegistered.status !== 200) {
+    throw new Error(`member registration failed: ${memberRegistered.status} ${JSON.stringify(memberRegistered.body)}`);
+  }
+
   const token = (
     await api(baseUrl, '/identity/connect/token', {
       method: 'POST',
@@ -312,6 +376,7 @@ async function seedVault(baseUrl) {
   return {
     itemId: created.body.id,
     token,
+    memberEmail,
     organizationId: organization.body.id,
     organizationName: 'UI Team',
     collectionName: 'UI Shared',
@@ -390,22 +455,28 @@ async function main() {
       button.click();
       return true;
     })()`;
+    // A dialog can sit on top of another one, so every dialog is searched and
+    // the button is clicked where it is found.
     const clickInDialog = (text, prefix = false) => `(() => {
-      const dialog = document.querySelector('[role=dialog]');
-      if (!dialog) return false;
-      const button = [...dialog.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(text)}));
-      if (!button) return false;
-      button.click();
-      return true;
+      for (const dialog of [...document.querySelectorAll('[role=dialog]')]) {
+        const button = [...dialog.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(text)}));
+        if (!button) continue;
+        button.click();
+        return true;
+      }
+      return false;
     })()`;
     const dialogText = `(() => {
       const dialog = document.querySelector('[role=dialog]');
       return dialog ? dialog.textContent : '';
     })()`;
     const dialogHasButton = (text) => `(() => {
-      const dialog = document.querySelector('[role=dialog]');
-      if (!dialog) return false;
-      return [...dialog.querySelectorAll('button')].some((b) => b.textContent.trim().startsWith(${JSON.stringify(text)}));
+      for (const dialog of [...document.querySelectorAll('[role=dialog]')]) {
+        if ([...dialog.querySelectorAll('button')].some((b) => b.textContent.trim().startsWith(${JSON.stringify(text)}))) {
+          return true;
+        }
+      }
+      return false;
     })()`;
 
     await evaluate(fill('Email', EMAIL));
@@ -598,14 +669,85 @@ async function main() {
       return true;
     })()`);
     await waitFor(`document.querySelector('[role=dialog]') === null`, 'the history dialog to close');
-    const rotateButton = `!![...document.querySelectorAll('.sidebar .tree-btn')].find(b => b.textContent.trim() === 'Rotate key')`;
-    await waitFor(rotateButton, 'the rotate key button');
-    checks.ok('the owner is offered the key rotation', true);
+    const manageButton = `!![...document.querySelectorAll('.sidebar .tree-btn')].find(b => b.textContent.trim() === 'Manage organization')`;
+    await waitFor(manageButton, 'the manage organization button');
+    checks.ok('the owner is offered the organization management', true);
 
     await evaluate(`(() => {
-      const target = [...document.querySelectorAll('.sidebar .tree-btn')].find(b => b.textContent.trim() === 'Rotate key');
+      const target = [...document.querySelectorAll('.sidebar .tree-btn')].find(b => b.textContent.trim() === 'Manage organization');
       if (!target) return false;
       target.click();
+      return true;
+    })()`);
+    await waitFor(`document.querySelector('.org-dialog') !== null`, 'the organization dialog');
+    // The members are read from the server once the dialog is open.
+    await waitFor(
+      `document.querySelector('.org-dialog').textContent.includes('local-ui@example.test')`,
+      'the member list',
+      15000
+    );
+    const orgDialog = await evaluate(`document.querySelector('.org-dialog').textContent`);
+    checks.ok('the dialog names the organization', orgDialog.includes(seeded.organizationName));
+    checks.ok('the dialog lists the member', orgDialog.includes('local-ui@example.test'));
+
+    // Inviting a member gives them the organization key, wrapped with their
+    // own RSA key, so they can open the shared items.
+    await evaluate(`(() => {
+      const input = document.querySelector('.org-invite input');
+      if (!input) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, ${JSON.stringify(seeded.memberEmail)});
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.org-invite button')].find((b) => b.textContent.trim() === 'Invite');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(
+      `document.querySelector('.org-dialog').textContent.includes(${JSON.stringify(seeded.memberEmail)})`,
+      'the invited member',
+      20000
+    );
+    checks.ok('a member can be invited and given the organization key', true);
+
+    const membersAfterInvite = await api(worker.baseUrl, `/api/organizations/${seeded.organizationId}/users`, {
+      token: seeded.token,
+    });
+    const invitedRow = (membersAfterInvite.body?.data || []).find(
+      (member) => member.email === seeded.memberEmail
+    );
+    checks.ok('the invited member is confirmed', !!invitedRow && invitedRow.status === 2);
+
+    // Removing a member takes their access away at once. The key they already
+    // opened stays with them, so the organization says the key has to be
+    // replaced.
+    await evaluate(`(() => {
+      const button = document.querySelector('.org-member-remove');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(dialogHasButton('Remove member'), 'the removal confirmation');
+    await evaluate(clickInDialog('Remove member'));
+    await waitFor(
+      `!document.querySelector('.org-dialog').textContent.includes(${JSON.stringify(seeded.memberEmail)})`,
+      'the removed member to disappear',
+      20000
+    );
+    checks.ok('a member can be removed', true);
+    checks.ok(
+      'the organization says the key has to be replaced',
+      (await evaluate(`document.querySelector('.org-dialog').textContent`)).includes('rotate the organization key')
+    );
+
+    // The rotation lives in the same dialog.
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.org-dialog button')].find((b) => b.textContent.trim() === 'Rotate key');
+      if (!button) return false;
+      button.click();
       return true;
     })()`);
     await waitFor(`document.querySelector('[role=dialog]') !== null`, 'the rotation confirmation');

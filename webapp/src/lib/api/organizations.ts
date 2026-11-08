@@ -121,6 +121,140 @@ export async function getOrganizationRotationData(
   };
 }
 
+/** A member of an organization, with the rights they hold on each collection. */
+export interface OrganizationMember {
+  id: string;
+  userId: string;
+  email: string | null;
+  /** 0 owner, 1 admin, 2 user. */
+  type: number;
+  /** 0 invited, 2 confirmed. */
+  status: number;
+  collections: Array<{ id: string; readOnly: boolean; hidePasswords: boolean; manage: boolean }>;
+}
+
+export async function getOrganizationMembers(
+  authedFetch: AuthedFetch,
+  organizationId: string
+): Promise<OrganizationMember[]> {
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(organizationId)}/users`);
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_organization_load_failed')));
+  const body = await parseJson<{ data?: unknown }>(resp);
+  const rows = Array.isArray(body?.data) ? (body.data as Record<string, unknown>[]) : [];
+  return rows.map((entry) => ({
+    id: String(entry.id || ''),
+    userId: String(entry.userId || ''),
+    email: typeof entry.email === 'string' ? entry.email : null,
+    type: Number(entry.type) || 0,
+    status: Number(entry.status) || 0,
+    collections: (Array.isArray(entry.collections) ? (entry.collections as Record<string, unknown>[]) : []).map(
+      (assignment) => ({
+        id: String(assignment.id || ''),
+        readOnly: assignment.readOnly === true,
+        hidePasswords: assignment.hidePasswords === true,
+        manage: assignment.manage === true,
+      })
+    ),
+  }));
+}
+
+/**
+ * Invites a member by email.
+ *
+ * The invite alone is not enough: the organization key has to be wrapped for
+ * the member's RSA key, and a member without a public key cannot be given
+ * one yet. The caller does that wrapping and confirms the membership.
+ */
+export async function inviteOrganizationMember(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  email: string,
+  type = 2
+): Promise<string[]> {
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(organizationId)}/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emails: [email], type }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_invite_member_failed')));
+  const body = await parseJson<{ data?: unknown }>(resp);
+  const rows = Array.isArray(body?.data) ? (body.data as Record<string, unknown>[]) : [];
+  return rows.map((entry) => String(entry.id || '')).filter(Boolean);
+}
+
+/** The public keys of these members, so the organization key can be wrapped for them. */
+export async function getMemberPublicKeys(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  userIds: string[]
+): Promise<Map<string, string | null>> {
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(organizationId)}/users/public-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userIds }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_organization_load_failed')));
+  const body = await parseJson<{ data?: unknown }>(resp);
+  const rows = Array.isArray(body?.data) ? (body.data as Record<string, unknown>[]) : [];
+  const keys = new Map<string, string | null>();
+  for (const entry of rows) {
+    keys.set(String(entry.userId || entry.id || ''), typeof entry.publicKey === 'string' ? entry.publicKey : null);
+  }
+  return keys;
+}
+
+/** Hands the member their organization key, wrapped for their own RSA key. */
+export async function confirmOrganizationMember(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  membershipId: string,
+  wrappedKey: string
+): Promise<void> {
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(organizationId)}/users/${encodeURIComponent(membershipId)}/confirm`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: wrappedKey }),
+    }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_invite_member_failed')));
+}
+
+/** Sets the member's role and the rights they hold on each collection. */
+export async function updateOrganizationMember(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  membershipId: string,
+  patch: {
+    type?: number;
+    collections?: Array<{ id: string; readOnly: boolean; hidePasswords: boolean; manage: boolean }>;
+  }
+): Promise<void> {
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(organizationId)}/users/${encodeURIComponent(membershipId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_update_member_failed')));
+}
+
+/** Removes the member. The key they hold has to be replaced afterwards. */
+export async function removeOrganizationMember(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  membershipId: string
+): Promise<void> {
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(organizationId)}/users/${encodeURIComponent(membershipId)}`,
+    { method: 'DELETE' }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_remove_member_failed')));
+}
+
 export async function getCollections(authedFetch: AuthedFetch): Promise<VaultCollection[]> {
   const resp = await authedFetch('/api/collections');
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_collection_load_failed')));

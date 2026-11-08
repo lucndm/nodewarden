@@ -194,7 +194,17 @@ Hai hàm phía client: `openOrganizationKey` (mở khóa organization hiện t�
 - Item chia sẻ không mang tag (tag là folder cá nhân), nên chọn collection sẽ xoá tag.
 - Kiểm chứng trong Chromium thật (`npm run test:local-ui`, thêm 3 check): tạo được item trong collection; **item mới đọc được sau khi tạo** (chứng minh payload nằm dưới đúng khóa); sửa xong item **vẫn còn `organizationId`** — đọc thẳng từ API để không phải tin phần hiển thị.
 
-**Còn làm (P1-B):** chưa có UI quản trị organization (**mời, cấp quyền, thu hồi** — xoay khóa đã có) và chưa có endpoint quản lý group.
+**Quản trị organization (đã có):**
+
+- Nút **Manage organization** dưới organization trong sidebar (owner và admin) mở hộp **Organization**: ai đang ở trong đó, vai trò, và quyền của họ trên từng collection.
+- **Mời**: admin nhập email → server tạo membership → client lấy **public key RSA** của người mời, **bọc khóa organization** bằng key đó rồi **confirm**. Người chưa có public key thì mới ở trạng thái *invited*, chưa mở được item — và hộp thoại nói rõ điều đó.
+- **Quyền trên collection** là 5 mức: không có / xem / xem trừ mật khẩu / sửa / quản lý — bám đúng ba cờ `read_only`, `hide_passwords`, `manage` mà client chính thức dùng.
+- **Thu hồi**: xoá member → mất quyền ngay, nhưng **hộp thoại nói thẳng** rằng họ vẫn giữ khóa organization đã mở → organization bật cờ `key_rotation_required` → nút xoay khóa ngay trong hộp thoại đó.
+- **Vai trò**: chỉ **owner** đổi được vai trò (server từ chối admin đổi vai trò, trả 403) — admin không thể trao quyền admin cho người khác, kể cả chính mình.
+- Endpoint mới: `GET /api/organizations/:orgId/users` (chỉ owner/admin) trả member + email + vai trò + quyền từng collection.
+- Kiểm chứng trong Chromium thật (`npm run test:local-ui`, thêm 6 check): hộp thoại tên organization và liệt kê member; **mời được và member được confirm** (đọc `status` từ API); **xoá được member**; organization báo phải xoay khóa; xoay khóa xong item vẫn đọc được.
+
+**Còn làm (P1-B):** chưa có endpoint quản lý group, và mời member bằng email còn thiếu bước **member tự chấp nhận** (hiện admin confirm ngay khi người mời đã có public key; nếu chưa có thì phải admin bấm lại sau).
 
 **Tham chiếu thực tế từ `dani-garcia/vaultwarden` (đọc source `17b159b`):** đây là server Bitwarden-compatible tự host, đã làm phần lớn P3/P4/P5 mà NodeWarden còn mở, nên nó cho biết hình hình thực tế trước khi chốt. Những gì **không** có trong vaultwarden, tức là phần NodeWarden đang đi trước: không có bảng `tags` (chỉ `folders`), không có cột usage/`last_used_at` cho cipher, không có bảng version của item (chỉ `password_history`), **không** có kiểm tra tên Folder plaintext — `folders.name` lưu thẳng chuỗi client gửi lên (`src/db/models/folder.rs:52-61`), nên NodeWarden phải tự kiểm tra ciphertext-vs-plaintext như đã làm. Những gì vaultwarden có: Organizations + Collections + Groups + Member Roles (Owner/Admin/Manager/User/Custom), Event Logs, Policies, Directory Connector, Emergency Access, SSO OIDC; SCIM thì **không** (`"useScim": false` vì không thuộc AGPLv3). Bài học dùng được cho P1-B/P3/P5: `/sync` chỉ trả cipher **visible** cho user — `Cipher::find_by_user_visible` (`src/db/models/cipher.rs:926`) và `get_access_restrictions` trả `None` khi user không có quyền, nên lọc quyền nằm ở tầng query chứ không ở UI; và **gán trực tiếp thắng gán qua group** cho cùng collection (upstream cũng vậy: `WHERE NOT EXISTS (SELECT 1 FROM CollectionUser ...)` trong SQL của server chính thức). Lưu ý: vaultwarden cộng dồn quyền bằng AND cho `read_only`/`hide_passwords` và OR cho `manage`, khác quy tắc rank của server chính thức; NodeWarden theo server chính thức, chi tiết ở mục P1.
 

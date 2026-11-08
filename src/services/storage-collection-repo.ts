@@ -531,6 +531,27 @@ export async function getOrganizationCiphersForRotation(
   });
 }
 
+/**
+ * The email addresses of these members, keyed by user id.
+ *
+ * A member list is worthless without the addresses: the member is identified
+ * by who they are, not by an id.
+ */
+export async function getMemberEmails(
+  db: D1Database,
+  userIds: string[]
+): Promise<Map<string, string>> {
+  const emails = new Map<string, string>();
+  if (!userIds.length) return emails;
+  const placeholders = userIds.map(() => '?').join(',');
+  const res = await db
+    .prepare(`SELECT id, email FROM users WHERE id IN (${placeholders})`)
+    .bind(...userIds)
+    .all<{ id: string; email: string }>();
+  for (const row of res.results || []) emails.set(row.id, row.email);
+  return emails;
+}
+
 /** The organization key wrapped for one member, or null before confirmation. */
 export async function getWrappedOrganizationKey(
   db: D1Database,

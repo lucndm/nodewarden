@@ -3,6 +3,9 @@ import { createPortal } from 'preact/compat';
 import LoadingState from '@/components/LoadingState';
 import VaultDialogs from '@/components/vault/VaultDialogs';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import OrganizationDialog from '@/components/vault/OrganizationDialog';
+import type { OrganizationActions } from '@/hooks/useOrganizationActions';
+import type { OrganizationMember } from '@/lib/api/organizations';
 import VaultDetailView from '@/components/vault/VaultDetailView';
 import VaultEditor from '@/components/vault/VaultEditor';
 import VaultListPanel from '@/components/vault/VaultListPanel';
@@ -56,8 +59,10 @@ interface VaultPageProps {
   collectionsError: string;
   onTrackPasswordCopy: (cipherId: string) => void;
   onRefresh: () => Promise<void>;
-  /** The owner replaces the key every member of the organization holds. */
-  onRotateOrganizationKey: (organizationId: string) => Promise<void>;
+  /** The actions an owner or an admin takes on an organization. */
+  organizationActions: OrganizationActions;
+  /** The member who is looking at the vault. */
+  currentUserId: string;
   onCreate: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
   onUpdate: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
   onDelete: (cipher: Cipher) => Promise<void>;
@@ -97,6 +102,10 @@ export default function VaultPage(props: VaultPageProps) {
   // confirmation that comes before it.
   const [rotateOrganizationId, setRotateOrganizationId] = useState('');
   const [rotateOrganizationOpen, setRotateOrganizationOpen] = useState(false);
+  // The organization being managed, and the members it has right now.
+  const [manageOrganizationId, setManageOrganizationId] = useState('');
+  const [organizationMembers, setOrganizationMembers] = useState<OrganizationMember[]>([]);
+  const [organizationMembersLoading, setOrganizationMembersLoading] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchComposing, setSearchComposing] = useState(false);
@@ -418,9 +427,9 @@ export default function VaultPage(props: VaultPageProps) {
         id: organization.id,
         name: organization.name,
         keyRotationRequired: organization.keyRotationRequired,
-        // Only the owner may rotate the key, and the server refuses it for
-        // anyone else, so the button is only there for the owner.
-        canRotateKey: organization.type === 0,
+        // Only an owner or an admin may manage the organization, and the
+        // server refuses it for anyone else.
+        canManage: organization.type === 0 || organization.type === 1,
         count: props.ciphers.filter((cipher) => {
           if (!isCipherVisibleInNormalVault(cipher)) return false;
           return (cipher as { organizationId?: string | null }).organizationId === organization.id;
@@ -1351,11 +1360,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
     <VaultSidebar
       tags={tagSummary}
       organizations={sidebarOrganizations}
-      onRotateOrganizationKey={(organizationId) => {
-        setRotateOrganizationId(organizationId);
-        setRotateOrganizationOpen(true);
-      }}
-      rotatingOrganizationId={rotateOrganizationId && rotateOrganizationOpen ? rotateOrganizationId : ''}
+      onManageOrganization={(organizationId) => setManageOrganizationId(organizationId)}
       sidebarFilter={sidebarFilter}
       busy={busy}
       isMobileLayout={isMobileLayout}
@@ -1550,6 +1555,54 @@ const folderName = useCallback((id: string | null | undefined): string => {
         </section>
       </div>
 
+      <OrganizationDialog
+        open={!!manageOrganizationId}
+        organization={props.organizations.find((entry) => entry.id === manageOrganizationId) ?? null}
+        collections={props.collections}
+        members={organizationMembers}
+        loading={organizationMembersLoading}
+        busy={props.organizationActions.busyOrganizationId === manageOrganizationId}
+        currentUserId={props.currentUserId}
+        onClose={() => setManageOrganizationId('')}
+        onLoad={() => {
+          if (!manageOrganizationId) return;
+          setOrganizationMembersLoading(true);
+          void props.organizationActions
+            .loadMembers(manageOrganizationId)
+            .then((members: OrganizationMember[]) => setOrganizationMembers(members))
+            .finally(() => setOrganizationMembersLoading(false));
+        }}
+        onInvite={async (email) => {
+          if (!manageOrganizationId) return false;
+          const invited = await props.organizationActions.inviteMember(manageOrganizationId, email);
+          if (invited) {
+            setOrganizationMembers(await props.organizationActions.loadMembers(manageOrganizationId));
+          }
+          return invited;
+        }}
+        onUpdateMember={async (membershipId, patch) => {
+          if (!manageOrganizationId) return false;
+          const updated = await props.organizationActions.updateMember(manageOrganizationId, membershipId, patch);
+          if (updated) {
+            setOrganizationMembers(await props.organizationActions.loadMembers(manageOrganizationId));
+          }
+          return updated;
+        }}
+        onRemoveMember={async (membershipId) => {
+          if (!manageOrganizationId) return false;
+          const removed = await props.organizationActions.removeMember(manageOrganizationId, membershipId);
+          if (removed) {
+            setOrganizationMembers(await props.organizationActions.loadMembers(manageOrganizationId));
+          }
+          return removed;
+        }}
+        onRotate={() => {
+          if (!manageOrganizationId) return;
+          setManageOrganizationId('');
+          setRotateOrganizationId(manageOrganizationId);
+          setRotateOrganizationOpen(true);
+        }}
+      />
       <ConfirmDialog
         open={rotateOrganizationOpen}
         title={t('txt_rotate_organization_key')}
@@ -1561,7 +1614,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
           const organizationId = rotateOrganizationId;
           setRotateOrganizationOpen(false);
           setRotateOrganizationId('');
-          if (organizationId) void props.onRotateOrganizationKey(organizationId);
+          if (organizationId) void props.organizationActions.rotateOrganizationKey(organizationId);
         }}
         onCancel={() => {
           setRotateOrganizationOpen(false);
