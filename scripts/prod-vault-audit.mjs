@@ -19,6 +19,28 @@ import { createHash } from 'node:crypto';
 
 const TOKEN = process.env.CLOUDFLARE_API_TOKEN || '';
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || '';
+// The tables the worker bootstraps, kept here so the audit can say what a
+// running database is missing instead of failing on the first query.
+const EXPECTED_TABLES = [
+  'users',
+  'config',
+  'folders',
+  'ciphers',
+  'cipher_versions',
+  'attachments',
+  'organizations',
+  'organization_users',
+  'organization_policies',
+  'collections',
+  'collection_users',
+  'collection_ciphers',
+  'groups',
+  'group_users',
+  'sends',
+  'audit_logs',
+  'webauthn_credentials',
+];
+
 const DB_NAME = process.env.CLOUDFLARE_D1_NAME || 'nodewarden-db';
 // The API host is fixed in production; the override exists so the script can
 // be pointed at a stand-in server while it is being checked.
@@ -127,6 +149,18 @@ async function main() {
     database.uuid,
     "SELECT key, value FROM config WHERE key LIKE 'tags.legacy-repair.v1:%'"
   );
+  // The schema the running database actually has, read the way a migration
+  // plan needs it: which version it claims, which tables the code expects,
+  // and which of them are absent.
+  const configValues = await queryAll(database.uuid, 'SELECT key, value FROM config');
+  const schemaVersionRow = configValues.find((row) => row.key === 'schema.version');
+  const schemaVersion = schemaVersionRow ? String(schemaVersionRow.value || '') : null;
+  const tableRows = await queryAll(database.uuid, "SELECT name FROM sqlite_master WHERE type = 'table'");
+  const tables = new Set(tableRows.map((row) => String(row.name || '')));
+  const missingTables = EXPECTED_TABLES.filter((name) => !tables.has(name));
+  const organizationPolicies = tables.has('organization_policies')
+    ? await queryAll(database.uuid, 'SELECT id, org_id, type, enabled FROM organization_policies')
+    : [];
 
   const plainTextFolders = folders.filter((folder) => {
     const name = String(folder.name || '');
@@ -160,6 +194,9 @@ async function main() {
     database: DB_NAME,
     vaultDigest: vaultDigest({ folders, ciphers, users, revisions }),
     accounts: users.length,
+    schemaVersion,
+    missingTables,
+    organizationPolicies: organizationPolicies.length,
     organizations: organizations.length,
     organizationMembers: organizationUsers.length,
     collections: collections.length,
@@ -188,6 +225,9 @@ async function main() {
   if (summary.itemsWithUnparsablePayload > 0) problems.push('unparsable cipher payloads');
   if (summary.itemsWithTagOver64Characters > 0) problems.push('tags over 64 characters');
   if (repairMarker !== 'done') problems.push('the legacy tag repair has not run');
+// The tables are created by the worker on its first request after a deploy,
+// so a missing table right after a deploy is expected until that request.
+if (missingTables.length > 0) problems.push(`missing tables: ${missingTables.join(', ')}`);
 
   if (problems.length) {
     console.error(`NOT CLEAN: ${problems.join(', ')}`);
