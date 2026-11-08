@@ -421,9 +421,14 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 
 1. **Mã hoá archive backup bằng passphrase** (quyết định đã chốt) — làm **trước**, để bản backup dùng cho migration không nằm plaintext trên WebDAV/S3. Archive cũ (không mã hoá) vẫn phải import được.
 2. **UI tạo organization trong Web Vault** — hiện chỉ có `POST /api/organizations`, chưa có nút. Client sinh cặp RSA cho org + khoá đối xứng 64 byte, bọc khoá cho owner (`wrapKeyForMember`), gửi `{ name: 'homelab', key, keys, collectionName: 'General' }`.
+**Số liệu quyết định độ rủi ro (audit production):** 3 attachment trên **1 item**, **0** `cipher_versions` (chưa item nào có Item History), **0** Send. Tức là phần phải re-seal thêm rất nhỏ, nhưng **có thật**.
+
+**Lỗi phát hiện khi rà kế hoạch — phải sửa trước khi migrate:** đường xoay khoá organization hiện chỉ re-encrypt `key/name/notes/data` của item. **Khoá của attachment** (cột `key` trong `attachments`) và **payload của `cipher_versions`** cũng được niêm bằng khoá item → sau một lần xoay khoá, **attachment và Item History của item đó không đọc được nữa**. Đây là bug có sẵn (không do lát policy), và migration cũng đi đúng đường đó nên phải sửa cả hai: re-wrap khoá attachment (blob không cần đổi), re-encrypt payload version. Không sửa thì "migrate toàn bộ" sẽ làm mất 3 attachment đang có.
+
 3. **Công cụ migrate hàng loạt (client-side, idempotent):**
    - mỗi **folder → một collection** cùng tên; tên giải mã bằng khoá user rồi **mã hoá lại bằng khoá org**;
    - mỗi **item → organization + collection** của folder đó; payload giải mã bằng khoá user rồi **mã hoá lại bằng khoá org** (`reencryptPayload` đã có sẵn từ đường xoay khoá); 54 item không folder → collection `General`;
+   - **khoá attachment và payload version phải re-seal cùng lượt** (xem lỗi ở trên), và `folder_id` cá nhân phải được xoá khi item sang org;
    - **idempotent**: item đã ở org thì bỏ qua; item lỗi thì **dừng và báo**, không để payload nửa khoá cũ nửa khoá mới (cùng nguyên tắc với xoay khoá).
 4. **Mặc định cho item mới:** Web Vault tạo item mới thẳng vào collection của `homelab`. **Giới hạn phải nói rõ:** client chính thức (CLI/desktop/mobile/extension) **không có khái niệm default organization** — chúng tạo item cá nhân trừ khi người dùng chọn org, và server không ép được điều đó.
 5. **Kiểm chứng:** 876 item còn đủ; 822 nằm trong collection, 54 ở `General`; tên folder giải mã được bằng khoá org; `/api/sync` trả đúng; **CLI chính thức đọc được item của org**; số item cá nhân còn lại bằng 0.
