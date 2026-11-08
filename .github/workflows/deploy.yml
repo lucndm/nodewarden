@@ -54,11 +54,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      # A deploy can carry a change that breaks the vault layout, so the vault
-      # is read back after it. The audit only prints counts and the repair
-      # marker, never vault content, and it writes nothing.
-      - name: Audit the production vault
-        run: node scripts/prod-vault-audit.mjs
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # The vault is not read back here on purpose. This repository is public,
+      # so a CI log is a public log: anything the runner prints about the
+      # running vault is published. The audit runs from a machine that holds
+      # the credentials, and its output stays there.

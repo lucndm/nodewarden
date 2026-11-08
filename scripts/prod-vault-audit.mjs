@@ -11,6 +11,10 @@
 // Nothing here writes, and nothing prints vault content: only counts and the
 // repair marker are printed.
 //
+// Run it from a machine that holds the credentials, never from a CI runner.
+// This repository is public, so a CI log is a public log: whatever the runner
+// prints about the running vault is published with it.
+//
 // Environment:
 //   CLOUDFLARE_API_TOKEN   Cloudflare API token with D1 read
 //   CLOUDFLARE_ACCOUNT_ID  Cloudflare account id
