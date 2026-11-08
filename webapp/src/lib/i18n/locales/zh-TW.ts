@@ -140,6 +140,8 @@ const zhTW: Record<string, string> = {
   "txt_backup_export": "匯出備份",
   "txt_backup_import": "還原",
   "txt_backup_include_attachments": "包含附件",
+  "txt_backup_archive_passphrase": "封存密碼",
+  "txt_backup_archive_passphrase_help": "加密此伺服器寫出的每個備份封存。它與設定一起儲存，且不再顯示；沒有它，任何持有封存檔案的人都能讀取。清空該欄位即可停止加密。",
     "txt_backup_export_contains_credentials": "封存包含帳號的密碼雜湊和雙因素驗證密鑰。請像保管密碼一樣保管它。",
 "txt_backup_export_description": "下載一個完整的實例備份 ZIP，手動保管即可。",
   "txt_backup_import_description": "上傳之前匯出的備份 ZIP，並還原到目前實例。",

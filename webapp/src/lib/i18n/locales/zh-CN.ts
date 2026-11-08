@@ -90,6 +90,8 @@ const zhCN: Record<string, string> = {
   "txt_backup_export": "导出备份",
   "txt_backup_import": "还原",
   "txt_backup_include_attachments": "包含附件",
+  "txt_backup_archive_passphrase": "归档密码",
+  "txt_backup_archive_passphrase_help": "加密此服务器写出的每个备份归档。它与设置一起保存，且不再显示；没有它，任何持有归档文件的人都能读取。清空该字段即可停止加密。",
     "txt_backup_export_contains_credentials": "归档包含账户的密码哈希和双因素验证密钥。请像保管密码一样保管它。",
 "txt_backup_export_description": "下载一个完整的实例备份 ZIP，手动保管即可。",
   "txt_backup_import_description": "上传之前导出的备份 ZIP，并还原到当前实例。",

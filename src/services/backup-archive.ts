@@ -4,6 +4,7 @@ import { APP_VERSION } from '../../shared/app-version';
 import { BACKUP_SETTINGS_CONFIG_KEY } from './backup-config';
 import { YUBICO_BOOTSTRAP_CLAIM_CONFIG_KEY } from './yubico-config';
 import { exportPortableBackupSettingsEnvelope } from './backup-settings-crypto';
+import { encryptBackupArchive } from './backup-archive-crypto';
 import {
   getAttachmentObjectKey,
   getBlobStorageKind,
@@ -103,6 +104,11 @@ export interface BuildBackupArchiveOptions {
   includeAttachments?: boolean;
   progress?: BackupArchiveBuildProgressReporter;
   timeZone?: string;
+  /**
+   * The passphrase the archive is sealed with. Without one the archive is
+   * written as it is, and whoever holds the file can read it.
+   */
+  passphrase?: string;
 }
 
 export interface BackupArchiveBuildProgressEvent {
@@ -646,7 +652,11 @@ export async function buildBackupArchive(
       : 'txt_backup_archive_progress_package_detail',
     includeAttachments,
   });
-  const bytes = zipSync(createZipEntries(files));
+  const zipBytes = zipSync(createZipEntries(files));
+  // The archive is sealed before it is named, so the name's checksum describes
+  // the file that actually leaves the server.
+  const passphrase = (options.passphrase || '').trim();
+  const bytes = passphrase ? await encryptBackupArchive(zipBytes, passphrase) : zipBytes;
   const fileHashPrefix = (await sha256Hex(bytes)).slice(0, BACKUP_FILE_HASH_PREFIX_LENGTH);
   const backupTimeZone = options.timeZone || 'UTC';
   const fileName = buildBackupFileNameInTimeZone(date, fileHashPrefix, backupTimeZone);

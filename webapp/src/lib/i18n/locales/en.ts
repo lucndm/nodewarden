@@ -140,6 +140,8 @@ const en: Record<string, string> = {
   "txt_backup_export": "Export Backup",
   "txt_backup_import": "Restore",
   "txt_backup_include_attachments": "Include attachments",
+  "txt_backup_archive_passphrase": "Archive passphrase",
+  "txt_backup_archive_passphrase_help": "Seals every archive this server writes. It is saved with the settings and never shown again; without it whoever holds the archive file can read it. Clear the field to stop sealing.",
     "txt_backup_export_contains_credentials": "The archive holds the accounts' password hashes and two-step secrets. Keep it like a password.",
 "txt_backup_export_description": "Download a full instance backup ZIP for manual safekeeping.",
   "txt_backup_import_description": "Upload a previously exported backup ZIP and restore it into this instance.",

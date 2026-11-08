@@ -87,6 +87,8 @@ const fr: Record<string, string> = {
   "txt_backup_export": "Exporter la sauvegarde",
   "txt_backup_import": "Restaurer",
   "txt_backup_include_attachments": "Inclure les pièces jointes",
+  "txt_backup_archive_passphrase": "Phrase secrète de l'archive",
+  "txt_backup_archive_passphrase_help": "Scelle chaque archive écrite par ce serveur. Elle est enregistrée avec les paramètres et n'est plus jamais affichée ; sans elle, quiconque détient le fichier peut la lire. Videz le champ pour cesser de sceller.",
     "txt_backup_export_contains_credentials": "L'archive contient les hachages de mot de passe et les secrets de double vérification des comptes. Traitez-la comme un mot de passe.",
 "txt_backup_export_description": "Téléchargez un fichier ZIP complet de sauvegarde de l'instance pour une conservation manuelle.",
   "txt_backup_import_description": "Importez un ZIP de sauvegarde précédemment exporté et restaurez-le dans cette instance.",

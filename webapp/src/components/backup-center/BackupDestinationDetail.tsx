@@ -35,6 +35,9 @@ interface BackupDestinationDetailProps {
   restoringRemotePath: string;
   deletingRemotePath: string;
   onSaveSettings: () => void;
+  /** The passphrase every archive this server writes is sealed with. */
+  archivePassphrase: string;
+  onArchivePassphraseChange: (value: string) => void;
   onToggleSchedule: () => void;
   onRunRemoteBackup: () => void;
   onPromptDeleteDestination: () => void;
@@ -258,6 +261,21 @@ export function BackupDestinationDetail(props: BackupDestinationDetailProps) {
         <div className="backup-browser-empty">{t('txt_backup_select_destination')}</div>
       ) : (
         <>
+          {/* The passphrase is not a destination setting: it seals every
+              archive this server writes, so it sits above them and says so. */}
+          <label className="field">
+            <span>{t('txt_backup_archive_passphrase')}</span>
+            <input
+              className="input"
+              type="password"
+              autoComplete="new-password"
+              value={props.archivePassphrase}
+              disabled={props.loadingSettings || props.disableWhileBusy}
+              onInput={(event) => props.onArchivePassphraseChange((event.currentTarget as HTMLInputElement).value)}
+            />
+            <small className="field-help">{t('txt_backup_archive_passphrase_help')}</small>
+          </label>
+
           <div className="backup-name-row">
             <label className="field backup-name-field">
               <span>{t('txt_backup_destination_name')}</span>

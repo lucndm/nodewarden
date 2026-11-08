@@ -87,6 +87,8 @@ const es: Record<string, string> = {
   "txt_backup_export": "Exportar copia de seguridad",
   "txt_backup_import": "Restaurar",
   "txt_backup_include_attachments": "Incluir archivos adjuntos",
+  "txt_backup_archive_passphrase": "Frase de contraseña del archivo",
+  "txt_backup_archive_passphrase_help": "Cifra cada archivo que escribe este servidor. Se guarda con los ajustes y nunca se vuelve a mostrar; sin ella, quien tenga el archivo puede leerlo. Vacía el campo para dejar de cifrar.",
     "txt_backup_export_contains_credentials": "El archivo contiene los hashes de contraseña y los secretos de doble verificación de las cuentas. Trátalo como una contraseña.",
 "txt_backup_export_description": "Descargar un ZIP de copia de seguridad de la instancia completa para su custodia manual.",
   "txt_backup_import_description": "Subir un ZIP de copia de seguridad previamente exportado y restaurarlo en esta instancia.",

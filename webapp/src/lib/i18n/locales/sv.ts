@@ -87,6 +87,8 @@ const sv: Record<string, string> = {
   "txt_backup_export": "Exportera säkerhetskopia",
   "txt_backup_import": "Återställ",
   "txt_backup_include_attachments": "Inkludera bilagor",
+  "txt_backup_archive_passphrase": "Arkivlösenord",
+  "txt_backup_archive_passphrase_help": "Förseglar varje arkiv som den här servern skriver. Det sparas med inställningarna och visas aldrig igen; utan det kan vem som helst som har filen läsa arkivet. Töm fältet för att sluta försegla.",
     "txt_backup_export_contains_credentials": "Arkivet innehåller kontonas lösenordshashar och tvåstegshemligheter. Hantera det som ett lösenord.",
 "txt_backup_export_description": "Ladda ner en fullständig säkerhetskopia (ZIP) för manuellt förvar.",
   "txt_backup_import_description": "Ladda upp en tidigare exporterad säkerhetskopia (ZIP) och återställ den i denna instans.",
