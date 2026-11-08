@@ -7,6 +7,7 @@ interface VaultSyncResponse {
   ciphers?: Cipher[];
   folders?: Folder[];
   sends?: Send[];
+  profile?: { organizations?: Array<{ id?: string; key?: string | null }> };
 }
 
 const pendingVaultCoreRequests = new Map<string, Promise<VaultCoreSnapshot>>();
@@ -17,6 +18,12 @@ function normalizeSnapshot(body: VaultSyncResponse | null | undefined): VaultCor
     ciphers: Array.isArray(body?.ciphers) ? body!.ciphers! : [],
     folders: Array.isArray(body?.folders) ? body!.folders! : [],
     sends: Array.isArray(body?.sends) ? body!.sends! : [],
+    organizations: Array.isArray(body?.profile?.organizations)
+      ? body!.profile!.organizations!.map((organization) => ({
+          id: String(organization?.id || ''),
+          key: typeof organization?.key === 'string' ? organization.key : null,
+        }))
+      : [],
   };
 }
 
@@ -25,6 +32,7 @@ function normalizeCachedSnapshot(snapshot: Partial<VaultCoreSnapshot> | null | u
     ciphers: Array.isArray(snapshot?.ciphers) ? snapshot.ciphers : [],
     folders: Array.isArray(snapshot?.folders) ? snapshot.folders : [],
     sends: Array.isArray(snapshot?.sends) ? snapshot.sends : [],
+    organizations: Array.isArray(snapshot?.organizations) ? snapshot.organizations : [],
   };
 }
 

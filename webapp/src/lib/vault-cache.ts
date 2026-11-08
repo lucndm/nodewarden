@@ -4,6 +4,14 @@ export interface VaultCoreSnapshot {
   ciphers: Cipher[];
   folders: Folder[];
   sends: Send[];
+  /**
+   * The organizations the member belongs to, with the key wrapped for them.
+   *
+   * They come with the sync, so a shared item can be opened the moment it
+   * arrives. A separately loaded list can be older than the item, and then
+   * the item's name stays empty.
+   */
+  organizations?: Array<{ id: string; key: string | null }>;
 }
 
 interface VaultCoreCacheRecord {
@@ -38,6 +46,8 @@ function sanitizeSnapshotForCache(snapshot: VaultCoreSnapshot): VaultCoreSnapsho
     ciphers: stripDecryptedCacheFields(Array.isArray(snapshot.ciphers) ? snapshot.ciphers : []),
     folders: stripDecryptedCacheFields(Array.isArray(snapshot.folders) ? snapshot.folders : []),
     sends: stripDecryptedCacheFields(Array.isArray(snapshot.sends) ? snapshot.sends : []),
+    // The organization key is wrapped for the member, so it is safe to keep.
+    organizations: Array.isArray(snapshot.organizations) ? snapshot.organizations : [],
   };
 }
 
