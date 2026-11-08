@@ -87,6 +87,39 @@ async function queryAll(databaseId, sql) {
   return rows;
 }
 
+/**
+ * The fields of an item that are still plain text.
+ *
+ * The server refuses to write an item whose name, notes or login fields are
+ * not encrypted strings, so an item with plain text there is an item that
+ * cannot be moved yet.
+ */
+export function plainTextFields(cipher) {
+  const found = [];
+  const check = (label, value) => {
+    if (value == null || value === '') return;
+    if (typeof value !== 'string' || !CIPHER_STRING.test(value.trim())) found.push(label);
+  };
+  check('name', cipher.name);
+  check('notes', cipher.notes);
+  let parsed;
+  try {
+    parsed = JSON.parse(cipher.data || '{}');
+  } catch {
+    return found;
+  }
+  const login = parsed?.login;
+  if (login && typeof login === 'object') {
+    check('login.username', login.username);
+    check('login.password', login.password);
+    check('login.totp', login.totp);
+    for (const uri of Array.isArray(login.uris) ? login.uris : []) {
+      check('login.uri', uri?.uri);
+    }
+  }
+  return found;
+}
+
 function readTags(data) {
   let parsed;
   try {
@@ -139,7 +172,10 @@ async function main() {
   }
 
   const folders = await queryAll(database.uuid, 'SELECT id, user_id, name, tag_name FROM folders');
-  const ciphers = await queryAll(database.uuid, 'SELECT id, user_id, folder_id, data FROM ciphers');
+  const ciphers = await queryAll(
+    database.uuid,
+    'SELECT id, user_id, folder_id, organization_id, name, notes, data FROM ciphers'
+  );
   const users = await queryAll(database.uuid, 'SELECT id, email, role, status FROM users');
   const revisions = await queryAll(database.uuid, 'SELECT user_id, revision_date FROM user_revisions');
   const organizations = await queryAll(database.uuid, 'SELECT id, name FROM organizations');
@@ -181,6 +217,9 @@ async function main() {
     namePerUser.set(key, (namePerUser.get(key) || 0) + 1);
   }
   const duplicateFolderNames = [...namePerUser.values()].filter((count) => count > 1).length;
+  // A folder with no name cannot become a collection: there would be nothing
+  // to call it. Its items have to go somewhere else.
+  const foldersWithoutName = folders.filter((folder) => !String(folder.name || '').trim()).length;
   const foldersWithoutTagName = folders.filter((folder) => folder.tag_name === null || folder.tag_name === '').length;
 
   const folderIds = new Set(folders.map((folder) => folder.id));
@@ -195,6 +234,16 @@ async function main() {
   const overlongTags = ciphers.filter((cipher) =>
     (readTags(cipher.data) || []).some((tag) => tag.length > 64)
   ).length;
+
+  // An item whose own fields are still plain text cannot be written by the
+  // server, so a move into an organization would refuse it. The count says
+  // how many items that would be before the move, not after.
+  const itemsWithPlainTextFields = ciphers.filter((cipher) => plainTextFields(cipher).length > 0);
+  // Which items stayed personal, and the folder each of them is in. Only ids:
+  // the audit never prints vault content.
+  const personalItemRows = ciphers
+    .filter((cipher) => !cipher.organization_id)
+    .map((cipher) => ({ id: cipher.id, folderId: cipher.folder_id || null }));
 
   const marker = markers.find((row) => row.key.startsWith('tags.legacy-repair.v1:'));
   const repairMarker = marker ? String(marker.value || '') : 'missing';
@@ -212,9 +261,13 @@ async function main() {
     folders: folders.length,
     foldersWithPlainTextName: plainTextFolders.length,
     foldersWithoutTagName,
+    foldersWithoutName,
     duplicateFolderNames,
     items: ciphers.length,
     itemsInAFolder: ciphers.filter((cipher) => !!cipher.folder_id).length,
+    itemsInAnOrganization: ciphers.filter((cipher) => !!cipher.organization_id).length,
+    personalItems: ciphers.filter((cipher) => !cipher.organization_id).length,
+    personalItemRows,
     attachments: attachments.length,
     itemsWithAttachments: attachmentCipherIds.size,
     cipherVersions: versions.length,
@@ -222,6 +275,7 @@ async function main() {
     sends: sends.length,
     itemsWithoutFolder,
     itemsWithTags,
+    itemsWithPlainTextFields: itemsWithPlainTextFields.length,
     itemsWithCiphertextShapedTag: junkTags,
     itemsWithTagOver64Characters: overlongTags,
     itemsWithUnparsablePayload: unparsablePayloads,
@@ -248,6 +302,14 @@ if (missingTables.length > 0) problems.push(`missing tables: ${missingTables.joi
     process.exit(1);
   }
   console.log('CLEAN: no plain-text folder name, no ciphertext-shaped tag, repair applied.');
+  if (itemsWithPlainTextFields.length) {
+    // Not a damaged vault: a legacy one. The server refuses to write an item
+    // whose fields are still plain text, so these items cannot be moved into
+    // an organization until they are re-encrypted.
+    console.log(
+      `${itemsWithPlainTextFields.length} item(s) still carry plain-text fields and would be refused by a move into an organization.`
+    );
+  }
 }
 
 if (process.argv[1] && process.argv[1].endsWith('prod-vault-audit.mjs')) {

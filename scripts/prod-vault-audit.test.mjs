@@ -22,8 +22,22 @@ function cleanVault() {
   return {
     folders: [{ id: folderId, user_id: userId, name: encryptedName('folder'), tag_name: null }],
     ciphers: [
-      { id: 'cipher-1', user_id: userId, folder_id: folderId, data: JSON.stringify({ login: {} }) },
-      { id: 'cipher-2', user_id: userId, folder_id: null, data: JSON.stringify({ login: {} }) },
+      {
+        id: 'cipher-1',
+        user_id: userId,
+        folder_id: folderId,
+        name: encryptedName('item'),
+        notes: null,
+        data: JSON.stringify({ login: { username: encryptedName('user') } }),
+      },
+      {
+        id: 'cipher-2',
+        user_id: userId,
+        folder_id: null,
+        name: encryptedName('item'),
+        notes: null,
+        data: JSON.stringify({ login: {} }),
+      },
     ],
     users: [{ id: userId, email: 'owner@example.test', role: 'admin', status: 'active' }],
     revisions: [{ user_id: userId, revision_date: '2026-11-07T08:37:20.457Z' }],
@@ -48,6 +62,13 @@ function cleanVault() {
       'webauthn_credentials',
     ],
   };
+}
+
+/** The same vault with an item whose login is still plain text. */
+function plainTextItemVault() {
+  const vault = cleanVault();
+  vault.ciphers[1].data = JSON.stringify({ login: { username: 'plain-user' } });
+  return vault;
 }
 
 /** The same vault with the residue the old folder-to-tag backfill left behind. */
@@ -161,6 +182,23 @@ function parseSummary(stdout) {
   assert.match(result.stderr, /ciphertext-shaped tags/);
   assert.match(result.stderr, /legacy tag repair has not run/);
   console.log('ok   a vault with ciphertext-shaped tags is reported');
+}
+
+{
+  // An item whose login is still plain text cannot be written by the server,
+  // so a move into an organization would refuse it. The count says how many
+  // items that would be before the move.
+  const server = await startStandIn(plainTextItemVault());
+  const result = await runAudit(server.address().port);
+  server.close();
+  server.closeAllConnections?.();
+  const summary = parseSummary(result.stdout);
+  assert.equal(result.code, 0, 'a plain-text field is not a damaged vault');
+  assert.equal(summary.itemsWithPlainTextFields, 1);
+  assert.equal(summary.personalItems, 2, 'the items that belong to no organization are counted');
+  assert.equal(summary.itemsInAnOrganization, 0);
+  assert.match(result.stdout, /1 item\(s\) still carry plain-text fields/);
+  console.log('ok   an item with plain-text fields is counted');
 }
 
 {
