@@ -884,6 +884,8 @@ const en: Record<string, string> = {
   "txt_organization_key_rotated": "The organization key was replaced",
   "txt_organization_key_rotate_failed": "The organization key could not be replaced",
   "txt_organization_key_missing": "The organization key is not available for this account",
+  "txt_share_with": "Share with",
+  "txt_my_vault": "My vault",
   "txt_untagged": "Untagged",
   "txt_delete_all_tags": "Delete all tags",
   "txt_tags": "Tags",

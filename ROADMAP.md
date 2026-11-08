@@ -186,7 +186,15 @@ Hai hàm phía client: `openOrganizationKey` (mở khóa organization hiện t�
 - Sau xoay, client đọc lại organization, collection và vault, nên item vẫn đọc được ngay.
 - Kiểm chứng trong Chromium thật (`npm run test:local-ui`, thêm 4 check): owner thấy nút; hộp xác nhận hỏi trước; xoay xong có thông báo; **item chia sẻ vẫn đọc được sau khi xoay** — đó mới là bằng chứng rằng việc mã hóa lại đúng.
 
-**Còn làm (P1-B):** editor **chưa tạo được item chia sẻ** (cần mã hóa payload bằng khóa organization khi tạo), chưa có UI quản trị organization (**mời, cấp quyền, thu hồi** — xoay khóa đã có) và chưa có endpoint quản lý group.
+**Editor tạo item chia sẻ (đã có):**
+
+- Trong form tạo/sửa item có ô **Share with**: danh sách `Tổ chức / Collection`, cộng lựa chọn **My vault**. Collection mà member chỉ đọc được thì hiện nhưng không chọn được; item đang nằm trong collection đó vẫn hiện đúng chỗ của nó.
+- Item được chia sẻ thì **mã hóa bằng khóa organization**, không phải khóa user: client mở khóa organization (bọc RSA cho riêng member này), sinh một **item key mới**, bọc item key đó bằng khóa organization, và mã hóa toàn bộ payload bằng item key. Server không bao giờ thấy khóa.
+- Sửa một item đã chia sẻ: item key cũ được mở bằng khóa organization và **dùng lại**, nên item vẫn đọc được bởi các member khác — không bị đổi thành item cá nhân trong lúc sửa.
+- Item chia sẻ không mang tag (tag là folder cá nhân), nên chọn collection sẽ xoá tag.
+- Kiểm chứng trong Chromium thật (`npm run test:local-ui`, thêm 3 check): tạo được item trong collection; **item mới đọc được sau khi tạo** (chứng minh payload nằm dưới đúng khóa); sửa xong item **vẫn còn `organizationId`** — đọc thẳng từ API để không phải tin phần hiển thị.
+
+**Còn làm (P1-B):** chưa có UI quản trị organization (**mời, cấp quyền, thu hồi** — xoay khóa đã có) và chưa có endpoint quản lý group.
 
 **Tham chiếu thực tế từ `dani-garcia/vaultwarden` (đọc source `17b159b`):** đây là server Bitwarden-compatible tự host, đã làm phần lớn P3/P4/P5 mà NodeWarden còn mở, nên nó cho biết hình hình thực tế trước khi chốt. Những gì **không** có trong vaultwarden, tức là phần NodeWarden đang đi trước: không có bảng `tags` (chỉ `folders`), không có cột usage/`last_used_at` cho cipher, không có bảng version của item (chỉ `password_history`), **không** có kiểm tra tên Folder plaintext — `folders.name` lưu thẳng chuỗi client gửi lên (`src/db/models/folder.rs:52-61`), nên NodeWarden phải tự kiểm tra ciphertext-vs-plaintext như đã làm. Những gì vaultwarden có: Organizations + Collections + Groups + Member Roles (Owner/Admin/Manager/User/Custom), Event Logs, Policies, Directory Connector, Emergency Access, SSO OIDC; SCIM thì **không** (`"useScim": false` vì không thuộc AGPLv3). Bài học dùng được cho P1-B/P3/P5: `/sync` chỉ trả cipher **visible** cho user — `Cipher::find_by_user_visible` (`src/db/models/cipher.rs:926`) và `get_access_restrictions` trả `None` khi user không có quyền, nên lọc quyền nằm ở tầng query chứ không ở UI; và **gán trực tiếp thắng gán qua group** cho cùng collection (upstream cũng vậy: `WHERE NOT EXISTS (SELECT 1 FROM CollectionUser ...)` trong SQL của server chính thức). Lưu ý: vaultwarden cộng dồn quyền bằng AND cho `read_only`/`hide_passwords` và OR cho `manage`, khác quy tắc rank của server chính thức; NodeWarden theo server chính thức, chi tiết ở mục P1.
 

@@ -831,6 +831,8 @@ const es: Record<string, string> = {
   "txt_organization_key_rotated": "Se reemplazó la clave de la organización",
   "txt_organization_key_rotate_failed": "No se pudo reemplazar la clave de la organización",
   "txt_organization_key_missing": "La clave de la organización no está disponible para esta cuenta",
+  "txt_share_with": "Compartir con",
+  "txt_my_vault": "Mi bóveda",
   "txt_untagged": "Sin etiquetas",
   "txt_delete_all_tags": "Eliminar todas las etiquetas",
   "txt_tags": "Etiquetas",

@@ -1055,11 +1055,16 @@ async function normalizeFido2Credentials(
 async function getCipherKeys(
   cipher: Cipher | null,
   userEnc: Uint8Array,
-  userMac: Uint8Array
+  userMac: Uint8Array,
+  shared?: { enc: Uint8Array; mac: Uint8Array } | null
 ): Promise<{ enc: Uint8Array; mac: Uint8Array; key: string | null }> {
   if (cipher?.key) {
+    // A shared item's key is wrapped with the organization key; a personal
+    // one with the member's own key. Opening it with the wrong one fails, so
+    // the right one has to be chosen here.
+    const owner = shared ?? { enc: userEnc, mac: userMac };
     try {
-      const raw = await decryptBw(cipher.key, userEnc, userMac);
+      const raw = await decryptBw(cipher.key, owner.enc, owner.mac);
       if (raw.length >= 64) return { enc: raw.slice(0, 32), mac: raw.slice(32, 64), key: cipher.key };
     } catch {
       // use user key
@@ -1417,12 +1422,29 @@ export async function repairCipherKeyMismatches(
 async function buildCipherPayload(
   session: SessionState,
   draft: VaultDraft,
-  cipher: Cipher | null
+  cipher: Cipher | null,
+  shared?: { enc: Uint8Array; mac: Uint8Array } | null
 ): Promise<Record<string, unknown>> {
   if (!session.symEncKey || !session.symMacKey) throw new Error('Vault key unavailable');
   const userEnc = base64ToBytes(session.symEncKey);
   const userMac = base64ToBytes(session.symMacKey);
-  const keys = await getCipherKeys(cipher, userEnc, userMac);
+  const organizationId = String(draft.organizationId || '').trim();
+  const collectionIds = Array.isArray(draft.collectionIds)
+    ? draft.collectionIds.map((id) => String(id || '').trim()).filter(Boolean)
+    : [];
+  // A shared item is encrypted with the organization key, so the payload has
+  // to be under a key every member can open.
+  if (organizationId && !shared) throw new Error('The organization key is not available');
+  let keys = await getCipherKeys(cipher, userEnc, userMac, shared);
+  if (organizationId && shared && !cipher?.key) {
+    // A new shared item gets its own key, wrapped with the organization key.
+    const itemKey = crypto.getRandomValues(new Uint8Array(64));
+    keys = {
+      enc: itemKey.slice(0, 32),
+      mac: itemKey.slice(32, 64),
+      key: await encryptBw(itemKey, shared.enc, shared.mac),
+    };
+  }
   const type = Number(draft.type || cipher?.type || 1);
   const now = new Date().toISOString();
 
@@ -1450,6 +1472,13 @@ async function buildCipherPayload(
     payload.key = keys.key;
     // Use the version captured when editing began, even if sync refreshed cipher.
     payload.lastKnownRevisionDate = draft.revisionDate ?? cipher.revisionDate;
+  }
+
+  if (organizationId) {
+    // The item belongs to the organization and sits in its collections.
+    payload.organizationId = organizationId;
+    payload.collectionIds = collectionIds;
+    if (keys.key) payload.key = keys.key;
   }
 
   if (type === 1) {
@@ -1591,9 +1620,10 @@ export async function buildCipherImportPayload(session: SessionState, draft: Vau
 export async function createCipher(
   authedFetch: AuthedFetch,
   session: SessionState,
-  draft: VaultDraft
+  draft: VaultDraft,
+  shared?: { enc: Uint8Array; mac: Uint8Array } | null
 ): Promise<Cipher> {
-  const payload = await buildCipherPayload(session, draft, null);
+  const payload = await buildCipherPayload(session, draft, null, shared);
 
   const resp = await authedFetch('/api/ciphers', {
     method: 'POST',
@@ -1612,12 +1642,12 @@ export async function updateCipher(
   cipher: Cipher,
   draft: VaultDraft,
   extraPayload?: Record<string, unknown>,
-  options?: { webRepair?: boolean }
+  options?: { webRepair?: boolean; shared?: { enc: Uint8Array; mac: Uint8Array } | null }
 ): Promise<Cipher> {
   if (draft.id && draft.id !== cipher.id) {
     throw createApiError(t('txt_item_changed_elsewhere'), 400);
   }
-  const payload = await buildCipherPayload(session, draft, cipher);
+  const payload = await buildCipherPayload(session, draft, cipher, options?.shared);
   if (extraPayload) {
     Object.assign(payload, extraPayload);
   }

@@ -1459,6 +1459,8 @@ const folderName = useCallback((id: string | null | undefined): string => {
             <div key={`editor-${draft.id || selectedCipher?.id || 'new'}-${draft.type}`} className="detail-switch-stage">
               <VaultEditor
                 draft={draft}
+                organizations={props.organizations}
+                collections={props.collections}
                 isCreating={isCreating}
                 busy={busy}
                 selectedCipher={selectedCipher}

@@ -831,6 +831,8 @@ const de: Record<string, string> = {
   "txt_organization_key_rotated": "Der Organisationsschlüssel wurde ersetzt",
   "txt_organization_key_rotate_failed": "Der Organisationsschlüssel konnte nicht ersetzt werden",
   "txt_organization_key_missing": "Der Organisationsschlüssel ist für dieses Konto nicht verfügbar",
+  "txt_share_with": "Teilen mit",
+  "txt_my_vault": "Mein Tresor",
   "txt_untagged": "Ohne Schlagwort",
   "txt_delete_all_tags": "Alle Schlagwörter löschen",
   "txt_tags": "Schlagwörter",

@@ -1931,6 +1931,7 @@ export default function App() {
     encryptedCiphers,
     encryptedFolders,
     decryptedFolders,
+    organizations: organizationsQuery.data ?? [],
     refetchCiphers: async () => {
       const result = await refetchVaultCoreData() as { data?: VaultCoreSnapshot };
       return { data: result.data?.ciphers };

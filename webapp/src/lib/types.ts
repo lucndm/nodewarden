@@ -331,6 +331,14 @@ export interface VaultDraft {
   revisionDate?: string;
   type: number;
   favorite: boolean;
+  /**
+   * The organization the item is shared with, or null when it stays personal.
+   * A shared item is encrypted with the organization key, not with the
+   * member's own key.
+   */
+  organizationId?: string | null;
+  /** The collections the shared item sits in. */
+  collectionIds?: string[];
   name: string;
   notes: string;
   reprompt: boolean;

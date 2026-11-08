@@ -831,6 +831,8 @@ const sv: Record<string, string> = {
   "txt_organization_key_rotated": "Organisationsnyckeln har bytts ut",
   "txt_organization_key_rotate_failed": "Organisationsnyckeln kunde inte bytas ut",
   "txt_organization_key_missing": "Organisationsnyckeln är inte tillgänglig för detta konto",
+  "txt_share_with": "Dela med",
+  "txt_my_vault": "Mitt valv",
   "txt_untagged": "Otaggade",
   "txt_delete_all_tags": "Ta bort alla taggar",
   "txt_tags": "Taggar",
