@@ -192,8 +192,12 @@ test('the organization key reaches each member wrapped for them', async () => {
     MEMBER
   );
   assert.ok(beforeConfirm);
-  const pending = (await beforeConfirm.json()) as { data: unknown[] };
-  assert.equal(pending.data.length, 0, 'an invited member has no organization key yet');
+  // The invitation is visible, so the member can accept it, but there is no
+  // key to open anything with yet.
+  const pending = (await beforeConfirm.json()) as { data: Array<{ id: string; key: string | null; status: number }> };
+  assert.equal(pending.data.length, 1, 'the invited member sees the invitation');
+  assert.equal(pending.data[0].key, null, 'an invited member has no organization key yet');
+  assert.equal(pending.data[0].status, 0, 'the invitation is not answered yet');
 
   // Confirm with the key wrapped for the member.
   const memberWrapped = await wrapFor(memberKeys.publicKey, organizationKey);

@@ -430,6 +430,9 @@ export default function VaultPage(props: VaultPageProps) {
         // Only an owner or an admin may manage the organization, and the
         // server refuses it for anyone else.
         canManage: organization.type === 0 || organization.type === 1,
+        // An invitation that has not been answered yet: the member has no
+        // key, so the items cannot be opened.
+        pending: organization.status !== 2,
         count: props.ciphers.filter((cipher) => {
           if (!isCipherVisibleInNormalVault(cipher)) return false;
           return (cipher as { organizationId?: string | null }).organizationId === organization.id;
@@ -1361,6 +1364,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
       tags={tagSummary}
       organizations={sidebarOrganizations}
       onManageOrganization={(organizationId) => setManageOrganizationId(organizationId)}
+      onAcceptOrganization={(organizationId) => void props.organizationActions.acceptInvitation(organizationId)}
       sidebarFilter={sidebarFilter}
       busy={busy}
       isMobileLayout={isMobileLayout}
@@ -1587,6 +1591,14 @@ const folderName = useCallback((id: string | null | undefined): string => {
             setOrganizationMembers(await props.organizationActions.loadMembers(manageOrganizationId));
           }
           return updated;
+        }}
+        onGiveKey={async (membershipId) => {
+          if (!manageOrganizationId) return false;
+          const given = await props.organizationActions.giveOrganizationKey(manageOrganizationId, membershipId);
+          if (given) {
+            setOrganizationMembers(await props.organizationActions.loadMembers(manageOrganizationId));
+          }
+          return given;
         }}
         onRemoveMember={async (membershipId) => {
           if (!manageOrganizationId) return false;

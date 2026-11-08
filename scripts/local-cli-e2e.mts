@@ -546,15 +546,48 @@ async function run(baseUrl, checks, cli, cliEnv, workerLog = () => '') {
       )
     )
   )}`;
+  // The invitation goes out without a key: the member has to answer it
+  // first, and the owner hands the key over afterwards.
   const invited = await api(baseUrl, `/api/organizations/${organizationId}/users`, {
     method: 'POST',
     token,
-    body: { emails: [memberEmail], keys: { [memberEmail]: wrappedForMember } },
+    body: { emails: [memberEmail] },
   });
   if (!checks.equal('the second member is invited', invited.status, 200, JSON.stringify(invited.body))) return;
   const memberList = await api(baseUrl, `/api/organizations/${organizationId}/users`, { token });
   const memberRow = (memberList.body?.data || []).find((entry) => entry?.email === memberEmail);
-  checks.equal('the second member is confirmed', memberRow?.status, 2);
+  checks.equal('the invitation is unanswered', memberRow?.status, 0);
+
+  // The member answers it.
+  const memberToken = await api(baseUrl, '/identity/connect/token', {
+    method: 'POST',
+    form: {
+      grant_type: 'password',
+      username: memberEmail,
+      password: bytesToBase64(memberAccount.masterHash),
+      scope: 'api offline_access',
+      deviceIdentifier: 'local-cli-member',
+      deviceName: 'local cli member',
+      deviceType: '14',
+    },
+  }).then((response) => response.body?.access_token || null);
+  if (!checks.ok('the second member gets a token', !!memberToken)) return;
+  const accepted = await api(baseUrl, `/api/organizations/${organizationId}/accept`, {
+    method: 'POST',
+    token: memberToken,
+  });
+  checks.equal('the second member accepts the invitation', accepted.status, 200, JSON.stringify(accepted.body));
+
+  // The owner hands over the organization key, wrapped for the member.
+  const confirmed = await api(
+    baseUrl,
+    `/api/organizations/${organizationId}/users/${memberRow?.id}/confirm`,
+    { method: 'POST', token, body: { key: wrappedForMember } }
+  );
+  checks.equal('the owner hands the organization key over', confirmed.status, 200, JSON.stringify(confirmed.body));
+  const memberListAfter = await api(baseUrl, `/api/organizations/${organizationId}/users`, { token });
+  const memberRowAfter = (memberListAfter.body?.data || []).find((entry) => entry?.email === memberEmail);
+  checks.equal('the second member is confirmed', memberRowAfter?.status, 2);
 
   // A member reaches an item through the collections they hold rights on, so
   // the owner gives the second member the collection.

@@ -18,7 +18,9 @@ import type { Env } from '../types';
 const OWNER_TYPE = 0;
 const USER_TYPE = 2;
 const STATUS_INVITED = 0;
+const STATUS_ACCEPTED = 1;
 const STATUS_CONFIRMED = 2;
+const STATUS_REVOKED = -1;
 
 // A rotation is a bounded write. These caps keep one call from pushing an
 // arbitrarily large body into the database; the client batches instead.
@@ -277,6 +279,36 @@ export async function handleGetMemberPublicKeys(
   );
 }
 
+// POST /api/organizations/:orgId/accept
+//
+// The invited member accepts the invitation. Accepting does not hand over the
+// organization key: that is wrapped with the member's own RSA key, so the
+// owner still has to do it. What accepting says is that the member wants in.
+export async function handleAcceptOrganization(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const membership = await storage.getOrganizationUserForUser(orgId, userId);
+  if (!membership) return errorResponse('Organization not found', 404);
+  if (membership.status === STATUS_CONFIRMED) {
+    return errorResponse('This membership is already confirmed', 400);
+  }
+  if (membership.status === STATUS_REVOKED) {
+    return errorResponse('This invitation was withdrawn', 400);
+  }
+
+  const accepted = await storage.acceptOrganizationUser({
+    membershipId: membership.id,
+    orgId,
+    now: new Date().toISOString(),
+  });
+  if (!accepted) return errorResponse('This invitation was withdrawn', 400);
+  return jsonResponse({ id: membership.id, status: STATUS_ACCEPTED, object: 'organizationUser' }, 200);
+}
+
 /**
  * GET /api/organizations/:orgId/users
  *
@@ -348,6 +380,8 @@ export async function handleGetOrganizationRotationData(
   if (!organization) return errorResponse('Organization not found', 404);
 
   // Only members who stay keep their access, and only they need the new key.
+  // Only the confirmed members keep their access, so only they get the new
+  // key. An invited member has none yet.
   const memberships = (await storage.getOrganizationUsers(orgId)).filter(
     (membership) => membership.status === STATUS_CONFIRMED
   );
@@ -398,16 +432,19 @@ export async function handleGetOrganizations(request: Request, env: Env, userId:
   ]);
   // The organization key travels wrapped for the member asking: an invited
   // member has no wrapped key yet and gets none.
-  const membershipByOrg = new Map(
-    memberships.filter((membership) => membership.status === STATUS_CONFIRMED).map((membership) => [membership.orgId, membership])
-  );
+  // An invited member is not a member yet, but they have to see the
+  // invitation, and they see no key until the owner hands it over.
+  const membershipByOrg = new Map(memberships.map((membership) => [membership.orgId, membership]));
   return listResponse(
-    organizations.map((organization) => ({
+    organizations.map((organization) => {
+      const membership = membershipByOrg.get(organization.id);
+      const confirmed = membership?.status === STATUS_CONFIRMED;
+      return {
       id: organization.id,
       name: organization.name,
-      key: membershipByOrg.get(organization.id)?.key ?? null,
-      status: STATUS_CONFIRMED,
-      type: membershipByOrg.get(organization.id)?.type ?? USER_TYPE,
+      key: confirmed ? membership?.key ?? null : null,
+      status: membership?.status ?? STATUS_INVITED,
+      type: membership?.type ?? USER_TYPE,
       // A member left while holding the key: the owner has to rotate before
       // their removal actually keeps anything away from them.
       keyRotationRequired: organization.keyRotationRequired,
@@ -422,7 +459,8 @@ export async function handleGetOrganizations(request: Request, env: Env, userId:
       useApi: true,
       usersGetPremium: true,
       object: 'profileOrganization',
-    }))
+      };
+    })
   );
 }
 

@@ -119,6 +119,7 @@ import {
   handleUpdateOrganizationUser,
   handleGetCollections,
   handleGetMemberPublicKeys,
+  handleAcceptOrganization,
   handleGetOrganizationCollections,
   handleGetOrganizationRotationData,
   handleGetOrganizationUsers,
@@ -480,6 +481,13 @@ export async function handleAuthenticatedRoute(
     const rotationDataMatch = path.match(/^\/api\/organizations\/([^/]+)\/rotation-data$/i);
     if (rotationDataMatch) {
       if (method === 'GET') return handleGetOrganizationRotationData(request, env, userId, rotationDataMatch[1]);
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // POST /api/organizations/:orgId/accept — the invited member accepts.
+    const acceptMatch = path.match(/^\/api\/organizations\/([^/]+)\/accept$/i);
+    if (acceptMatch) {
+      if (method === 'POST') return handleAcceptOrganization(request, env, userId, acceptMatch[1]);
       return handleUnsupportedOrganizationAction();
     }
 

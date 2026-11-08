@@ -12,6 +12,7 @@ import { t } from '@/lib/i18n';
 import { base64ToBytes } from '@/lib/crypto';
 import { applyOrganizationKeyRotation, openOrganizationKey, wrapKeyForMember } from '@/lib/organization-key-rotation';
 import {
+  acceptOrganizationInvitation,
   confirmOrganizationMember,
   getMemberPublicKeys,
   getOrganizationMembers,
@@ -126,6 +127,71 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     }
   };
 
+  /**
+   * The invited member accepts the invitation.
+   */
+  const acceptInvitation = async (organizationId: string): Promise<boolean> => {
+    setBusyOrganizationId(organizationId);
+    try {
+      await acceptOrganizationInvitation(input.authedFetch, organizationId);
+      await input.onChanged();
+      input.onNotify('success', t('txt_invitation_accepted'));
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_accept_invitation_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
+
+  /**
+   * Hands the organization key to a member who is not confirmed yet.
+   *
+   * The key is wrapped with the member's own RSA key, so a member without a
+   * public key cannot be given one.
+   */
+  const giveOrganizationKey = async (organizationId: string, membershipId: string): Promise<boolean> => {
+    setBusyOrganizationId(organizationId);
+    try {
+      const members = await getOrganizationMembers(input.authedFetch, organizationId);
+      const member = members.find((entry) => entry.id === membershipId);
+      if (!member) {
+        input.onNotify('error', t('txt_member_not_found'));
+        return false;
+      }
+      const keys = await getMemberPublicKeys(input.authedFetch, organizationId, [member.userId]);
+      const publicKey = keys.get(member.userId);
+      const organizationKey = await openOrganizationKeyFor(organizationId);
+      if (!publicKey || !organizationKey) {
+        // The member has no key of their own yet, so the organization key
+        // cannot be wrapped for them.
+        input.onNotify('error', t('txt_member_has_no_key'));
+        return false;
+      }
+      await confirmOrganizationMember(
+        input.authedFetch,
+        organizationId,
+        membershipId,
+        await wrapKeyForMember(organizationKey, publicKey)
+      );
+      await input.onChanged();
+      input.onNotify('success', t('txt_member_given_key'));
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_update_member_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
+
   const updateMember = async (
     organizationId: string,
     membershipId: string,
@@ -233,6 +299,8 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
   return {
     rotateOrganizationKey,
     rotatingOrganizationId,
+    acceptInvitation,
+    giveOrganizationKey,
     loadMembers,
     inviteMember,
     updateMember,

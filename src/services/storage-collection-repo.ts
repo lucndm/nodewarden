@@ -195,7 +195,9 @@ export async function getOrganizationsForUser(db: D1Database, userId: string): P
       'O.key_rotation_required AS key_rotation_required, O.key_rotated_at AS key_rotated_at, ' +
       'O.created_at AS created_at, O.updated_at AS updated_at ' +
       'FROM organizations O ' +
-      'INNER JOIN organization_users OU ON OU.org_id = O.id AND OU.user_id = ? AND OU.status = 2 ' +
+      // A revoked member is gone; an invited one is not a member yet, but
+      // they have to see the invitation.
+      'INNER JOIN organization_users OU ON OU.org_id = O.id AND OU.user_id = ? AND OU.status != -1 ' +
       'ORDER BY O.name ASC'
     )
     .bind(userId)
@@ -432,6 +434,27 @@ export async function confirmOrganizationUser(
       'UPDATE organization_users SET key = ?, status = 2, updated_at = ? WHERE id = ? AND org_id = ?'
     )
     .bind(input.wrappedOrganizationKey, input.now, input.membershipId, input.orgId)
+    .run();
+  return (result.meta.changes ?? 0) === 1;
+}
+
+/**
+ * The member accepts the invitation: the membership goes from invited to
+ * accepted, and the owner can then hand over the organization key.
+ *
+ * Only the invited member accepts, and only once: a membership that is
+ * already confirmed or revoked does not change.
+ */
+export async function acceptOrganizationUser(
+  db: D1Database,
+  input: { membershipId: string; orgId: string; now: string }
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      'UPDATE organization_users SET status = 1, updated_at = ? ' +
+        'WHERE id = ? AND org_id = ? AND status = 0'
+    )
+    .bind(input.now, input.membershipId, input.orgId)
     .run();
   return (result.meta.changes ?? 0) === 1;
 }
