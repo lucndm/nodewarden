@@ -84,6 +84,7 @@ import {
   saveCipher as saveStoredCipher,
   updateCipherIfUnchanged as updateStoredCipherIfUnchanged,
   deleteCipher as deleteStoredCipher,
+  type CipherResealedBlobs,
   type CipherVersionInput,
   type ScanExclusion,
 } from './storage-cipher-repo';
@@ -635,9 +636,17 @@ export class StorageService {
   async updateCipherIfUnchanged(
     cipher: Cipher,
     expectedUpdatedAt: string,
-    version?: CipherVersionInput | null
+    version?: CipherVersionInput | null,
+    resealed?: CipherResealedBlobs | null
   ): Promise<boolean> {
-    return updateStoredCipherIfUnchanged(this.db, this.safeBind.bind(this), cipher, expectedUpdatedAt, version);
+    return updateStoredCipherIfUnchanged(
+      this.db,
+      this.safeBind.bind(this),
+      cipher,
+      expectedUpdatedAt,
+      version,
+      resealed
+    );
   }
 
   async listCipherVersions(cipherId: string, userId: string): Promise<CipherVersion[]> {

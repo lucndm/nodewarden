@@ -11,6 +11,11 @@ import { useState } from 'preact/hooks';
 import { t } from '@/lib/i18n';
 import { base64ToBytes } from '@/lib/crypto';
 import {
+  migratePersonalVaultIntoOrganization,
+  type MigrationProgress,
+  type MigrationResult,
+} from '@/lib/organization-migration';
+import {
   applyOrganizationKeyRotation,
   createOrganizationKeyMaterial,
   openOrganizationKey,
@@ -34,16 +39,74 @@ import {
   updateOrganizationMember,
   type OrganizationGroup,
   type OrganizationMember,
+  type VaultCollection,
   type VaultOrganization,
 } from '@/lib/api/organizations';
 import type { AuthedFetch } from '@/lib/api/shared';
 import type { Profile, SessionState } from '@/lib/types';
+
+/**
+ * The fields of an item that make up its payload.
+ *
+ * The server keeps the name, the notes and the key in columns of their own
+ * and everything else in the payload, so these are the fields that travel
+ * with the item when it moves.
+ */
+const CIPHER_COLUMN_FIELDS = new Set([
+  'id',
+  'userId',
+  'type',
+  'folderId',
+  'name',
+  'notes',
+  'favorite',
+  'reprompt',
+  'key',
+  'attachments',
+  'createdAt',
+  'creationDate',
+  'updatedAt',
+  'revisionDate',
+  'archivedAt',
+  'archivedDate',
+  'deletedAt',
+  'deletedDate',
+  'organizationId',
+  'collectionIds',
+  'object',
+]);
+
+/** An item as the server stores it: the fields the payload is made of. */
+export interface CipherLike {
+  id: string;
+  key?: string | null;
+  name?: string | null;
+  notes?: string | null;
+  folderId?: string | null;
+  attachments?: Array<{ id?: string; key?: string | null }> | null;
+  organizationId?: string | null;
+  deletedDate?: string | null;
+}
+
+function cipherPayloadFields(cipher: object): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(cipher)) {
+    if (CIPHER_COLUMN_FIELDS.has(key)) continue;
+    fields[key] = value;
+  }
+  return fields;
+}
 
 interface UseOrganizationActionsInput {
   authedFetch: AuthedFetch;
   session: SessionState | null;
   profile: Profile | null;
   organizations: VaultOrganization[];
+  collections: VaultCollection[];
+  /** The folders of the personal vault, as the server stores them. */
+  folders: Array<{ id: string; name?: string | null }>;
+  /** The items of the personal vault, as the server stores them. */
+  ciphers: Array<CipherLike>;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
   /** Called after a rotation, so the vault and the organizations are read again. */
   onRotated: () => void | Promise<void>;
@@ -57,6 +120,8 @@ export type OrganizationActions = ReturnType<typeof useOrganizationActions>;
 export default function useOrganizationActions(input: UseOrganizationActionsInput) {
   const [rotatingOrganizationId, setRotatingOrganizationId] = useState('');
   const [busyOrganizationId, setBusyOrganizationId] = useState('');
+  /** What the migration is doing, so the owner can see it is not stuck. */
+  const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
 
   /** The organization key, unwrapped: it is wrapped for this member alone. */
   const openOrganizationKeyFor = async (organizationId: string): Promise<Uint8Array | null> => {
@@ -369,6 +434,80 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     }
   };
 
+  /**
+   * Moves the personal vault into an organization.
+   *
+   * The folders become collections and the items are re-encrypted under the
+   * organization key on the way. The server cannot read the vault, so the
+   * whole move happens here.
+   */
+  const migratePersonalVault = async (organizationId: string): Promise<MigrationResult | null> => {
+    const organization = input.organizations.find((entry) => entry.id === organizationId);
+    if (!organization?.key) {
+      input.onNotify('error', t('txt_organization_key_missing'));
+      return null;
+    }
+    if (!input.session?.symEncKey || !input.session?.symMacKey || !input.profile?.privateKey) {
+      input.onNotify('error', t('txt_organization_key_missing'));
+      return null;
+    }
+    setBusyOrganizationId(organizationId);
+    try {
+      const result = await migratePersonalVaultIntoOrganization({
+        authedFetch: input.authedFetch,
+        userEncKey: input.session.symEncKey,
+        userMacKey: input.session.symMacKey,
+        encryptedPrivateKey: input.profile.privateKey,
+        organization: { id: organizationId, wrappedKey: organization.key },
+        folders: input.folders.map((folder) => ({ id: folder.id, name: folder.name ?? null })),
+        items: input.ciphers
+          .filter((cipher) => !cipher.organizationId && !cipher.deletedDate)
+          .map((cipher) => ({
+            id: String(cipher.id || ''),
+            key: typeof cipher.key === 'string' ? cipher.key : null,
+            name: typeof cipher.name === 'string' ? cipher.name : null,
+            notes: typeof cipher.notes === 'string' ? cipher.notes : null,
+            folderId: typeof cipher.folderId === 'string' ? cipher.folderId : null,
+            fields: cipherPayloadFields(cipher),
+            attachments: (Array.isArray(cipher.attachments) ? cipher.attachments : [])
+              .map((attachment) => ({
+                id: String(attachment?.id || ''),
+                key: typeof attachment?.key === 'string' ? attachment.key : null,
+              }))
+              .filter((attachment) => !!attachment.id),
+            versions: [],
+          })),
+        existingCollections: input.collections.map((collection) => ({
+          id: collection.id,
+          name: collection.name ?? null,
+        })),
+        onProgress: (progress) => {
+          setMigrationProgress(progress);
+        },
+      });
+      await input.onChanged();
+      input.onNotify(
+        result.failed.length ? 'warning' : 'success',
+        result.failed.length
+          ? t('txt_organization_migration_partial', {
+              moved: String(result.items),
+              failed: String(result.failed.length),
+            })
+          : t('txt_organization_migration_done', { moved: String(result.items) })
+      );
+      return result;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_organization_migration_failed')
+      );
+      return null;
+    } finally {
+      setBusyOrganizationId('');
+      setMigrationProgress(null);
+    }
+  };
+
   const rotateOrganizationKey = async (organizationId: string) => {
     const organization = input.organizations.find((entry) => entry.id === organizationId);
     if (!organization) return false;
@@ -441,6 +580,8 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
 
   return {
     createOrganization,
+    migratePersonalVault,
+    migrationProgress,
     rotateOrganizationKey,
     rotatingOrganizationId,
     acceptInvitation,

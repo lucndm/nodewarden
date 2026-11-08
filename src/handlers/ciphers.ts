@@ -1502,7 +1502,32 @@ export async function handleShareCipher(request: Request, env: Env, userId: stri
   const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
   if (compatibilityError) return errorResponse(compatibilityError, 400);
 
-  if (!(await storage.updateCipherIfUnchanged(cipher, existingCipher.updatedAt, null))) {
+  // The attachments and the history are sealed with the item key. Sharing an
+  // item gives it a new key, so they are re-sealed with it in the same write.
+  const resealedAttachments = Array.isArray(body.attachments)
+    ? body.attachments
+        .map((entry: any) => ({
+          id: String(entry?.id || '').trim(),
+          key: String(entry?.key || '').trim().slice(0, 4096) || null,
+        }))
+        .filter((entry: { id: string }) => !!entry.id)
+    : [];
+  const resealedVersions = Array.isArray(body.versions)
+    ? body.versions
+        .map((entry: any) => ({
+          id: String(entry?.id || '').trim(),
+          key: String(entry?.key || '').trim().slice(0, 4096) || null,
+          name: typeof entry?.name === 'string' ? entry.name : null,
+          notes: typeof entry?.notes === 'string' ? entry.notes : null,
+          data: typeof entry?.data === 'string' ? entry.data : JSON.stringify(entry?.data ?? {}),
+        }))
+        .filter((entry: { id: string }) => !!entry.id)
+    : [];
+
+  if (!(await storage.updateCipherIfUnchanged(cipher, existingCipher.updatedAt, null, {
+    attachments: resealedAttachments,
+    versions: resealedVersions,
+  }))) {
     return errorResponse('The client copy of this cipher is out of date. Resync the client and try again.', 400);
   }
   await storage.setCipherCollections(cipher.id, requested);

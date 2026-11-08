@@ -139,6 +139,8 @@ export default function VaultPage(props: VaultPageProps) {
   const [moveFolderId, setMoveFolderId] = useState('__none__');
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createOrganizationOpen, setCreateOrganizationOpen] = useState(false);
+  const [migrateOrganizationOpen, setMigrateOrganizationOpen] = useState(false);
+  const [migrateOrganizationId, setMigrateOrganizationId] = useState('');
   const [newOrganizationName, setNewOrganizationName] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [pendingRenameFolder, setPendingRenameFolder] = useState<Folder | null>(null);
@@ -1676,6 +1678,13 @@ const folderName = useCallback((id: string | null | undefined): string => {
           setRotateOrganizationId(manageOrganizationId);
           setRotateOrganizationOpen(true);
         }}
+        onMigrate={() => {
+          if (!manageOrganizationId) return;
+          setManageOrganizationId('');
+          setMigrateOrganizationId(manageOrganizationId);
+          setMigrateOrganizationOpen(true);
+        }}
+        migrationProgress={props.organizationActions.migrationProgress}
       />
       <ConfirmDialog
         open={rotateOrganizationOpen}
@@ -1693,6 +1702,24 @@ const folderName = useCallback((id: string | null | undefined): string => {
         onCancel={() => {
           setRotateOrganizationOpen(false);
           setRotateOrganizationId('');
+        }}
+      />
+      <ConfirmDialog
+        open={migrateOrganizationOpen}
+        title={t('txt_migrate_vault_into_organization')}
+        message={t('txt_migrate_vault_into_organization_confirm')}
+        variant="warning"
+        confirmText={t('txt_migrate_vault_into_organization')}
+        cancelText={t('txt_cancel')}
+        onConfirm={() => {
+          const organizationId = migrateOrganizationId;
+          setMigrateOrganizationOpen(false);
+          setMigrateOrganizationId('');
+          if (organizationId) void props.organizationActions.migratePersonalVault(organizationId);
+        }}
+        onCancel={() => {
+          setMigrateOrganizationOpen(false);
+          setMigrateOrganizationId('');
         }}
       />
       <VaultDialogs

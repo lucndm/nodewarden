@@ -164,7 +164,8 @@ export async function updateCipherIfUnchanged(
   safeBind: SafeBind,
   cipher: Cipher,
   expectedUpdatedAt: string,
-  version?: CipherVersionInput | null
+  version?: CipherVersionInput | null,
+  resealed?: CipherResealedBlobs | null
 ): Promise<boolean> {
   const folderId = normalizeOptionalId(cipher.folderId);
   const data = buildCipherData(cipher, folderId);
@@ -180,6 +181,25 @@ export async function updateCipherIfUnchanged(
   );
   const statements: D1PreparedStatement[] = [updateStatement];
   if (version) statements.push(buildCipherVersionInsertStatement(db, safeBind, version, data));
+  // The attachments and the history are sealed with the item key, so a write
+  // that changes that key has to re-seal them in the same batch. A write that
+  // leaves them behind would make them readable only under the old key.
+  for (const attachment of resealed?.attachments ?? []) {
+    statements.push(
+      db.prepare('UPDATE attachments SET key = ? WHERE id = ? AND cipher_id = ?')
+        .bind(attachment.key, attachment.id, cipher.id)
+    );
+  }
+  for (const entry of resealed?.versions ?? []) {
+    statements.push(
+      db
+        .prepare(
+          'UPDATE cipher_versions SET key = COALESCE(?, key), name = COALESCE(?, name), ' +
+            'notes = COALESCE(?, notes), data = ? WHERE id = ? AND cipher_id = ?'
+        )
+        .bind(entry.key ?? null, entry.name ?? null, entry.notes ?? null, entry.data, entry.id, cipher.id)
+    );
+  }
   const results = await db.batch(statements);
   const result = results[0];
   return result.meta.changes === 1;
@@ -228,6 +248,21 @@ export interface CipherVersionInput {
   data: string;
   /** Cipher revision this write produces; the snapshot lands only when the cipher reaches it. */
   appliedUpdatedAt: string;
+}
+
+/**
+ * The blobs that are sealed with the item key and have to be re-sealed when
+ * that key changes: the attachments' keys and the item's history.
+ */
+export interface CipherResealedBlobs {
+  attachments: Array<{ id: string; key: string | null }>;
+  versions: Array<{
+    id: string;
+    key: string | null;
+    name: string | null;
+    notes: string | null;
+    data: string;
+  }>;
 }
 
 interface CipherVersionRow {

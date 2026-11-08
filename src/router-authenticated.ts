@@ -412,7 +412,7 @@ export async function handleAuthenticatedRoute(
     if (subPath === '/collections_v2' && (method === 'PUT' || method === 'POST')) {
       return handleSetCipherCollections(request, env, userId, cipherId);
     }
-    if (subPath === '/share' && method === 'POST') return handleGetCipher(request, env, userId, cipherId);
+    if (subPath === '/share' && method === 'POST') return handleShareCipher(request, env, userId, cipherId);
     if (subPath === '/details' && method === 'GET') return handleGetCipher(request, env, userId, cipherId);
     if (subPath === '/attachment/v2' && method === 'POST') return handleCreateAttachment(request, env, userId, cipherId);
     if (subPath === '/attachment' && method === 'POST') return handleCreateAttachment(request, env, userId, cipherId);

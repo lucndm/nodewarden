@@ -71,6 +71,10 @@ interface OrganizationDialogProps {
   onSaveGroup: (group: { name: string; members: string[]; collections: Array<{ id: string }> }) => Promise<boolean>;
   onDeleteGroup: (groupId: string) => Promise<boolean>;
   onRotate: () => void;
+  /** The owner moves the personal vault into this organization. */
+  onMigrate: () => void;
+  /** What the migration is doing, so the owner can see it is not stuck. */
+  migrationProgress?: { step: string; done: number; total: number } | null;
   /** The decisions this organization makes for its members. */
   onLoadPolicies: () => Promise<Array<{ type: number; enabled: boolean; data: Record<string, unknown> }> | null>;
   onSavePolicy: (type: number, enabled: boolean, data: Record<string, unknown>) => Promise<boolean>;
@@ -369,6 +373,23 @@ export default function OrganizationDialog(props: OrganizationDialogProps) {
                 <span>{t('txt_org_policy_disable_send')}</span>
               </label>
               <p className="org-policy-help">{t('txt_org_policy_disable_send_help')}</p>
+            </div>
+          )}
+
+          {isOwner && (
+            <div className="org-migrate">
+              <button type="button" className="btn btn-secondary" disabled={props.busy} onClick={props.onMigrate}>
+                {t('txt_migrate_vault_into_organization')}
+              </button>
+              <p className="org-policy-help">{t('txt_migrate_vault_into_organization_help')}</p>
+              {props.migrationProgress ? (
+                <p className="org-policy-help">
+                  {t('txt_organization_migration_progress', {
+                    done: String(props.migrationProgress.done),
+                    total: String(props.migrationProgress.total),
+                  })}
+                </p>
+              ) : null}
             </div>
           )}
 

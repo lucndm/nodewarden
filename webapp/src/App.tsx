@@ -2083,6 +2083,9 @@ export default function App() {
     session,
     profile,
     organizations: organizationsQuery.data ?? [],
+    collections: collectionsQuery.data ?? [],
+    folders: encryptedFolders ?? [],
+    ciphers: encryptedCiphers ?? [],
     onNotify: pushToast,
     onRotated: async () => {
       // The members now hold a new key, so the vault and the organization list
