@@ -419,7 +419,7 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 
 **Các bước, theo thứ tự triển khai:**
 
-1. **Mã hoá archive backup bằng passphrase** (quyết định đã chốt) — làm **trước**, để bản backup dùng cho migration không nằm plaintext trên WebDAV/S3. Archive cũ (không mã hoá) vẫn phải import được.
+1. ~~**Mã hoá archive backup bằng passphrase**~~ — **xong** (2026-11-08). Passphrase là một thiết lập backup, lưu trong cùng envelope mã hoá với credential của destination, không hiển thị lại. Archive có passphrase được bọc PBKDF2 + AES-GCM (`NWBA1` + salt + iv + ciphertext); archive không có passphrase vẫn là zip thường nên các archive cũ vẫn restore được. Kiểm chứng: export từ Web Vault ra file `NWBA1`, mở được bằng passphrase, passphrase sai thì bị từ chối.
 2. **UI tạo organization trong Web Vault** — hiện chỉ có `POST /api/organizations`, chưa có nút. Client sinh cặp RSA cho org + khoá đối xứng 64 byte, bọc khoá cho owner (`wrapKeyForMember`), gửi `{ name: 'homelab', key, keys, collectionName: 'General' }`.
 **Số liệu quyết định độ rủi ro (audit production):** 3 attachment trên **1 item**, **0** `cipher_versions` (chưa item nào có Item History), **0** Send. Tức là phần phải re-seal thêm rất nhỏ, nhưng **có thật**.
 
