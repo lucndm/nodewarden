@@ -55,6 +55,9 @@ export function BackupOperationsSidebar(props: BackupOperationsSidebarProps) {
           <Download size={14} className="btn-icon" />
           {props.exporting ? t('txt_backup_exporting') : t('txt_backup_export')}
         </button>
+        {/* The archive carries the accounts' credentials, so it says so before
+            the file is made. */}
+        <p className="backup-inline-note">{t('txt_backup_export_contains_credentials')}</p>
         <BackupIncludeAttachmentsField
           checked={props.exportIncludeAttachments}
           disabled={props.disableWhileBusy}
