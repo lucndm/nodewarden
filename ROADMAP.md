@@ -409,6 +409,26 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 
 - **Lỗi backup tìm được khi làm lát này (đã sửa):** `normalizeParsedBackupDb` chỉ đọc 9 bảng đầu — **organizations, organization_users, collections, groups, collection_users/groups/ciphers bị bỏ khi restore**, trong khi export vẫn ghi chúng vào `db.json`. Tức là **khôi phục một instance làm mất toàn bộ cấu trúc chia sẻ** mà không báo gì. Nay allowlist đọc đủ các bảng và validation đếm đủ; test mới chứng minh policy (và cấu trúc org) sống qua export → restore.
 
+## P5 — migrate production sang một organization mặc định ("homelab")
+
+**Quyết định (2026-11-08):** instance vận hành sẽ có **một organization tên `homelab`** và mọi item nằm trong đó — không còn vault cá nhân làm nơi chứa chính.
+
+**Sự thật đọc trực tiếp từ production** (`npm run audit:prod-vault`, read-only): **1 account**; **300 folder** (0 tên plaintext, 300 chưa có `tag_name`); **876 item** (822 nằm trong folder, 54 không; **0 item có tag**); **0 organization, 0 member, 0 collection**. Schema hiện tại sẽ được audit in kèm `schemaVersion`, `missingTables` và số policy.
+
+**Điều không thể làm ở server — và vì sao migration phải chạy ở client:** item hiện được mã hoá bằng **khoá của user**; item thuộc organization phải mã hoá bằng **khoá organization** để member khác đọc được. Server không có plaintext, nên **không có câu SQL nào đổi được** việc này: phải giải mã rồi mã hoá lại bằng client. Vì vậy đây là **migration client-side**, không phải migration schema.
+
+**Các bước, theo thứ tự triển khai:**
+
+1. **Mã hoá archive backup bằng passphrase** (quyết định đã chốt) — làm **trước**, để bản backup dùng cho migration không nằm plaintext trên WebDAV/S3. Archive cũ (không mã hoá) vẫn phải import được.
+2. **UI tạo organization trong Web Vault** — hiện chỉ có `POST /api/organizations`, chưa có nút. Client sinh cặp RSA cho org + khoá đối xứng 64 byte, bọc khoá cho owner (`wrapKeyForMember`), gửi `{ name: 'homelab', key, keys, collectionName: 'General' }`.
+3. **Công cụ migrate hàng loạt (client-side, idempotent):**
+   - mỗi **folder → một collection** cùng tên; tên giải mã bằng khoá user rồi **mã hoá lại bằng khoá org**;
+   - mỗi **item → organization + collection** của folder đó; payload giải mã bằng khoá user rồi **mã hoá lại bằng khoá org** (`reencryptPayload` đã có sẵn từ đường xoay khoá); 54 item không folder → collection `General`;
+   - **idempotent**: item đã ở org thì bỏ qua; item lỗi thì **dừng và báo**, không để payload nửa khoá cũ nửa khoá mới (cùng nguyên tắc với xoay khoá).
+4. **Mặc định cho item mới:** Web Vault tạo item mới thẳng vào collection của `homelab`. **Giới hạn phải nói rõ:** client chính thức (CLI/desktop/mobile/extension) **không có khái niệm default organization** — chúng tạo item cá nhân trừ khi người dùng chọn org, và server không ép được điều đó.
+5. **Kiểm chứng:** 876 item còn đủ; 822 nằm trong collection, 54 ở `General`; tên folder giải mã được bằng khoá org; `/api/sync` trả đúng; **CLI chính thức đọc được item của org**; số item cá nhân còn lại bằng 0.
+6. **Rollback:** backup admin trước khi chạy (đã mã hoá ở bước 1); bảng `organizations`/`collections`/`collection_ciphers` là additive nên rollback code không mất item; migration chạy lại được từ đầu vì idempotent.
+
 ## P6 — polish độc lập và các mục cố ý không làm
 
 - F-23: Today/Yesterday theo locale/múi giờ, chỉ với sort nhóm ngày; test chuyển ngày/nửa đêm và ngày không hợp lệ (`VaultListPanel.tsx:130-137`).
