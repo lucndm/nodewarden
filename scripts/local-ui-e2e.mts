@@ -309,7 +309,13 @@ async function seedVault(baseUrl) {
     throw new Error(`shared item create failed: ${shared.status} ${JSON.stringify(shared.body)}`);
   }
 
-  return { itemId: created.body.id, token, organizationName: 'UI Team', collectionName: 'UI Shared' };
+  return {
+    itemId: created.body.id,
+    token,
+    organizationId: organization.body.id,
+    organizationName: 'UI Team',
+    collectionName: 'UI Shared',
+  };
 }
 
 async function main() {
@@ -505,6 +511,83 @@ async function main() {
     const afterRestore = await evaluate(dialogText);
     checks.ok('the replaced state is kept as a version', afterRestore.includes('Modified'));
 
+    // A new item can be shared into a collection. It is encrypted with the
+    // organization key, so it has to be readable afterwards - which is the
+    // proof that the payload went under the right key.
+    await evaluate(clickText('Create item'));
+    // The trigger opens a menu of item types.
+    await waitFor(`!!document.querySelector('.create-menu')`, 'the create menu');
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.create-menu-item')].find((b) => b.textContent.trim() === 'Login');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(`!![...document.querySelectorAll('label')].find(l => l.textContent.includes('Name'))`, 'the new item form');
+    await evaluate(fill('Name', 'UI Shared New'));
+    const shareSelect = `(() => {
+      const labels = [...document.querySelectorAll('label')];
+      const holder = labels.find((l) => l.textContent.includes('Share with'));
+      const select = holder ? holder.querySelector('select') : null;
+      if (!select) return false;
+      const option = [...select.options].find((o) => o.textContent.includes(${JSON.stringify(seeded.organizationName)}));
+      if (!option) return false;
+      select.value = option.value;
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`;
+    await evaluate(shareSelect);
+    await evaluate(fill('Username', 'shared-new-user'));
+    await evaluate(clickText('Save'));
+    await waitFor(
+      `document.body.textContent.includes('UI Shared New')`,
+      'the new shared item',
+      20000
+    );
+    checks.ok('a new item can be shared into a collection', true);
+
+    await evaluate(`(() => {
+      const rows = [...document.querySelectorAll('button, [role="button"]')];
+      const target = rows.find((el) => el.textContent.includes('UI Shared New'));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(
+      `document.body.textContent.includes('shared-new-user')`,
+      'the new shared item to be readable',
+      20000
+    );
+    checks.ok('the new shared item is readable under the organization key', true);
+
+    // Editing a shared item keeps it shared: the item key is unwrapped with
+    // the organization key and reused, so the payload stays under the key the
+    // other members can open.
+    await evaluate(`(() => {
+      const rows = [...document.querySelectorAll('button, [role="button"]')];
+      const target = rows.find((el) => el.textContent.includes('UI Shared New'));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(`!![...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Edit')`, 'the edit button');
+    await evaluate(clickText('Edit'));
+    await waitFor(`!![...document.querySelectorAll('label')].find(l => l.textContent.includes('Username'))`, 'the edit form');
+    await evaluate(fill('Username', 'shared-new-user-v2'));
+    await evaluate(clickText('Save'));
+    await waitFor(
+      `document.body.textContent.includes('shared-new-user-v2')`,
+      'the edited shared item',
+      20000
+    );
+    const sharedAfterEdit = await api(worker.baseUrl, '/api/ciphers', { token: seeded.token });
+    const editedEntry = (sharedAfterEdit.body?.data || []).find((entry) => entry.name === 'UI Shared New')
+      || (sharedAfterEdit.body?.data || []).find((entry) => entry.id && entry.organizationId);
+    checks.ok(
+      'the edited item is still shared with the organization',
+      !!editedEntry && editedEntry.organizationId === seeded.organizationId
+    );
+
     // The owner can replace the key every member holds. The item has to stay
     // readable afterwards: the rotation gives it a new key and re-encrypts it,
     // and the vault reads it again with the new organization key.
@@ -536,9 +619,13 @@ async function main() {
     );
     checks.ok('the rotation reports that it ran', true);
 
-    // The shared item is still there and still readable: the rotation replaced
-    // its key and re-encrypted its payload.
-    await waitFor(`document.body.textContent.includes('UI Shared Login')`, 'the shared item after the rotation', 30000);
+    // Both shared items are still there and still readable: the rotation
+    // replaced their keys and re-encrypted their payloads.
+    await waitFor(
+      `document.body.textContent.includes('UI Shared Login') && document.body.textContent.includes('UI Shared New')`,
+      'the shared items after the rotation',
+      30000
+    );
     await evaluate(`(() => {
       const rows = [...document.querySelectorAll('button, [role="button"]')];
       const target = rows.find((el) => el.textContent.includes('UI Shared Login'));

@@ -58,6 +58,8 @@ import {
 import { decryptItemHistoryEntry, decryptItemHistoryVersion, type ItemHistoryEntry, type ItemHistoryVersion } from '@/lib/item-history';
 import { deriveLoginHash, getPreloginKdfConfig, verifyMasterPassword } from '@/lib/api/auth';
 import type { AuthedFetch } from '@/lib/api/shared';
+import type { VaultOrganization } from '@/lib/api/organizations';
+import { openOrganizationKey } from '@/lib/organization-key-rotation';
 import { downloadBytesAsFile } from '@/lib/download';
 import type { Cipher, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, VaultDraft } from '@/lib/types';
 
@@ -72,6 +74,8 @@ interface UseVaultSendActionsOptions {
   encryptedCiphers: Cipher[] | undefined;
   encryptedFolders: VaultFolder[] | undefined;
   decryptedFolders: VaultFolder[];
+  /** The organizations the member belongs to, with the key wrapped for them. */
+  organizations: VaultOrganization[];
   refetchCiphers: () => Promise<{ data?: Cipher[] | undefined } | unknown>;
   refetchFolders: () => Promise<{ data?: VaultFolder[] | undefined } | unknown>;
   refetchSends: () => Promise<unknown>;
@@ -299,6 +303,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
     encryptedCiphers,
     encryptedFolders,
     decryptedFolders,
+    organizations,
     refetchCiphers,
     refetchFolders,
     refetchSends,
@@ -327,6 +332,44 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
       if (session?.accessToken) return;
       throw new Error(t('txt_offline_vault_readonly'));
     };
+    /**
+     * Opens the organization key, which is wrapped for this member with their
+     * RSA key. A shared item is encrypted with it, so it has to be opened
+     * before the payload is written.
+     */
+    async function openOrganizationKeyFor(
+      organizationId: string
+    ): Promise<{ enc: Uint8Array; mac: Uint8Array } | null> {
+      if (!session?.symEncKey || !session?.symMacKey || !profile?.privateKey) return null;
+      const organization = organizations.find((entry) => entry.id === organizationId);
+      if (!organization?.key) return null;
+      try {
+        const raw = await openOrganizationKey({
+          encryptedPrivateKey: profile.privateKey,
+          userEncKey: base64ToBytes(session.symEncKey),
+          userMacKey: base64ToBytes(session.symMacKey),
+          wrappedOrganizationKey: organization.key,
+        });
+        return { enc: raw.slice(0, 32), mac: raw.slice(32, 64) };
+      } catch {
+        return null;
+      }
+    }
+
+    /**
+     * The organization key an item is shared under, or null when the item
+     * stays personal.
+     */
+    async function sharedKeyForDraft(
+      draft: VaultDraft
+    ): Promise<{ enc: Uint8Array; mac: Uint8Array } | null> {
+      const organizationId = String(draft.organizationId || '').trim();
+      if (!organizationId) return null;
+      const key = await openOrganizationKeyFor(organizationId);
+      if (!key) throw new Error(t('txt_organization_key_missing'));
+      return key;
+    }
+
     async function ensureEncryptedTagFolders(tags: string[]): Promise<void> {
       if (!session) throw new Error(t('txt_vault_key_unavailable'));
       const byName = new Map(decryptedFolders.map((folder) => [folder.decName, folder]));
@@ -564,7 +607,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         patchDecryptedCiphers((prev) => [optimistic, ...prev.filter((cipher) => cipher.id !== optimistic.id)]);
         try {
           await ensureEncryptedTagFolders(draft.tags);
-          const created = await createCipher(authedFetch, session, draft);
+          const created = await createCipher(authedFetch, session, draft, await sharedKeyForDraft(draft));
           for (const file of attachments) {
             setUploadingAttachmentName(file.name);
             setAttachmentUploadPercent(0);
@@ -617,7 +660,9 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         patchCipherBatch([cipher.id], () => optimistic, { patchEncrypted: false });
         try {
           await ensureEncryptedTagFolders(draft.tags);
-          const updated = await updateCipher(authedFetch, session, cipher, draft);
+          const updated = await updateCipher(authedFetch, session, cipher, draft, undefined, {
+            shared: await sharedKeyForDraft(draft),
+          });
           for (const attachmentId of removeAttachmentIds) {
             const id = String(attachmentId || '').trim();
             if (!id) continue;

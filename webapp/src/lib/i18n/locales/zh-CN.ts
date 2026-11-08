@@ -834,6 +834,8 @@ const zhCN: Record<string, string> = {
   "txt_organization_key_rotated": "组织密钥已更换",
   "txt_organization_key_rotate_failed": "无法更换组织密钥",
   "txt_organization_key_missing": "此账户没有组织密钥",
+  "txt_share_with": "共享给",
+  "txt_my_vault": "我的密码库",
   "txt_untagged": "未加标签",
   "txt_delete_all_tags": "删除所有标签",
   "txt_tags": "标签",

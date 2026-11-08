@@ -831,6 +831,8 @@ const ru: Record<string, string> = {
   "txt_organization_key_rotated": "Ключ организации заменён",
   "txt_organization_key_rotate_failed": "Не удалось заменить ключ организации",
   "txt_organization_key_missing": "Ключ организации недоступен для этой учётной записи",
+  "txt_share_with": "Поделиться с",
+  "txt_my_vault": "Моё хранилище",
   "txt_untagged": "Без меток",
   "txt_delete_all_tags": "Удалить все метки",
   "txt_tags": "Метки",

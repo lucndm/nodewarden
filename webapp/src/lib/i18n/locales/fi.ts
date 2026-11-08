@@ -831,6 +831,8 @@ const fi: Record<string, string> = {
   "txt_organization_key_rotated": "Organisaation avain vaihdettiin",
   "txt_organization_key_rotate_failed": "Organisaation avainta ei voitu vaihtaa",
   "txt_organization_key_missing": "Organisaation avain ei ole käytettävissä tälle tilille",
+  "txt_share_with": "Jaa kanssa",
+  "txt_my_vault": "Oma holvini",
   "txt_untagged": "Ilman tunnisteita",
   "txt_delete_all_tags": "Poista kaikki tunnisteet",
   "txt_tags": "Tunnisteet",

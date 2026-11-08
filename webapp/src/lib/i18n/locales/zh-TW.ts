@@ -885,6 +885,8 @@ const zhTW: Record<string, string> = {
   "txt_organization_key_rotated": "組織金鑰已更換",
   "txt_organization_key_rotate_failed": "無法更換組織金鑰",
   "txt_organization_key_missing": "此帳戶沒有組織金鑰",
+  "txt_share_with": "分享給",
+  "txt_my_vault": "我的密碼庫",
   "txt_untagged": "未加標籤",
   "txt_delete_all_tags": "刪除所有標籤",
   "txt_tags": "標籤",

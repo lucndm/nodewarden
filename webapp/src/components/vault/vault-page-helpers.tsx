@@ -587,6 +587,12 @@ export function draftFromCipher(cipher: Cipher): VaultDraft {
   draft.notes = cipher.decNotes || '';
   draft.reprompt = Number(cipher.reprompt || 0) === 1;
   draft.tags = Array.isArray(cipher.tags) ? cipher.tags.map((tag) => String(tag || '').trim()).filter(Boolean) : [];
+  // A shared item keeps its organization and collections, so editing it does
+  // not quietly turn it into a personal one.
+  draft.organizationId = (cipher as { organizationId?: string | null }).organizationId ?? null;
+  draft.collectionIds = Array.isArray((cipher as { collectionIds?: string[] }).collectionIds)
+    ? [...((cipher as { collectionIds?: string[] }).collectionIds as string[])]
+    : [];
 
   if (cipher.login) {
     draft.loginUsername = cipher.login.decUsername || '';

@@ -2,7 +2,7 @@ import type { RefObject } from 'preact';
 import { createPortal } from 'preact/compat';
 import { ArrowDown, ArrowUp, CheckCheck, Dices, Download, Paperclip, Plus, QrCode, RefreshCw, Star, StarOff, Tag, Trash2, Upload, X } from 'lucide-preact';
 import jsQR from 'jsqr';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import ConfirmDialog, { useDialogLifecycle } from '@/components/ConfirmDialog';
 import { normalizeTotpInput } from '@/lib/crypto';
 import { defaultGeneratorSettings, generatePassphrase, generatePassword, normalizeGeneratorSettings, type GeneratorSettings } from '@/lib/password-generator';
@@ -25,6 +25,9 @@ import {
 
 interface VaultEditorProps {
   draft: VaultDraft;
+  /** The organizations and collections the item may be shared into. */
+  organizations: import('@/lib/api/organizations').VaultOrganization[];
+  collections: import('@/lib/api/organizations').VaultCollection[];
   isCreating: boolean;
   busy: boolean;
   selectedCipher: Cipher | null;
@@ -163,6 +166,31 @@ export default function VaultEditor(props: VaultEditorProps) {
   const cardBrandOptions = normalizedDraftCardBrand && !CARD_BRAND_OPTIONS.includes(normalizedDraftCardBrand as any)
     ? [...CARD_BRAND_OPTIONS, normalizedDraftCardBrand]
     : CARD_BRAND_OPTIONS;
+  // Where the item may be shared. A collection the member may only read is
+  // still listed, so an item that already sits in one shows where it is, but
+  // it cannot be picked for a new item.
+  const shareTargets = useMemo(() => {
+    const targets: Array<{
+      organizationId: string;
+      organizationName: string;
+      collectionId: string;
+      collectionName: string;
+      writable: boolean;
+    }> = [];
+    for (const collection of props.collections) {
+      const organization = props.organizations.find((entry) => entry.id === collection.organizationId);
+      if (!organization) continue;
+      targets.push({
+        organizationId: organization.id,
+        organizationName: organization.name,
+        collectionId: collection.id,
+        collectionName: collection.name,
+        writable: !collection.readOnly && !collection.hidePasswords,
+      });
+    }
+    return targets;
+  }, [props.collections, props.organizations]);
+  const shareValue = props.draft.collectionIds?.[0] || '';
   // Where the item will be filed. The first tag mirrors the folder position,
   // so the tags are the honest destination - it is not a separate vault.
   const visibleTags = props.draft.tags.filter((tag) => !looksLikeCipherString(tag));
@@ -438,6 +466,36 @@ export default function VaultEditor(props: VaultEditorProps) {
           <Tag size={13} aria-hidden="true" />
           <span title={destinationLabel}>{destinationLabel}</span>
         </div>
+        {shareTargets.length > 0 && (
+          <label className="field">
+            <span>{t('txt_share_with')}</span>
+            <select
+              className="input"
+              value={shareValue}
+              onInput={(e) => {
+                const value = (e.currentTarget as HTMLSelectElement).value;
+                const target = shareTargets.find((entry) => entry.collectionId === value);
+                if (!target) {
+                  props.onUpdateDraft({ organizationId: null, collectionIds: [] });
+                  return;
+                }
+                // A shared item has no personal folder, so the tags go with it.
+                props.onUpdateDraft({
+                  organizationId: target.organizationId,
+                  collectionIds: [target.collectionId],
+                  tags: [],
+                });
+              }}
+            >
+              <option value="">{t('txt_my_vault')}</option>
+              {shareTargets.map((target) => (
+                <option key={target.collectionId} value={target.collectionId} disabled={!target.writable}>
+                  {target.organizationName} / {target.collectionName}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {props.draft.type === 1 && (

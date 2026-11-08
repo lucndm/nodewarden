@@ -831,6 +831,8 @@ const fr: Record<string, string> = {
   "txt_organization_key_rotated": "La clé de l’organisation a été remplacée",
   "txt_organization_key_rotate_failed": "La clé de l’organisation n’a pas pu être remplacée",
   "txt_organization_key_missing": "La clé de l’organisation n’est pas disponible pour ce compte",
+  "txt_share_with": "Partager avec",
+  "txt_my_vault": "Mon coffre",
   "txt_untagged": "Sans étiquette",
   "txt_delete_all_tags": "Supprimer toutes les étiquettes",
   "txt_tags": "Étiquettes",

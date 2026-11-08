@@ -831,6 +831,8 @@ const it: Record<string, string> = {
   "txt_organization_key_rotated": "La chiave dell’organizzazione è stata sostituita",
   "txt_organization_key_rotate_failed": "Non è stato possibile sostituire la chiave dell’organizzazione",
   "txt_organization_key_missing": "La chiave dell’organizzazione non è disponibile per questo account",
+  "txt_share_with": "Condividi con",
+  "txt_my_vault": "La mia vault",
   "txt_untagged": "Senza etichette",
   "txt_delete_all_tags": "Elimina tutte le etichette",
   "txt_tags": "Etichette",
