@@ -28,6 +28,25 @@ function cleanVault() {
     users: [{ id: userId, email: 'owner@example.test', role: 'admin', status: 'active' }],
     revisions: [{ user_id: userId, revision_date: '2026-11-07T08:37:20.457Z' }],
     markers: [{ key: `tags.legacy-repair.v1:${userId}`, value: 'done' }],
+    tables: [
+      'users',
+      'config',
+      'folders',
+      'ciphers',
+      'cipher_versions',
+      'attachments',
+      'organizations',
+      'organization_users',
+      'organization_policies',
+      'collections',
+      'collection_users',
+      'collection_ciphers',
+      'groups',
+      'group_users',
+      'sends',
+      'audit_logs',
+      'webauthn_credentials',
+    ],
   };
 }
 
@@ -58,7 +77,9 @@ async function startStandIn(vault) {
       });
       request.on('end', () => {
         const sql = JSON.parse(body || '{}').sql || '';
-        const rows = sql.includes('FROM folders')
+        const rows = sql.includes('sqlite_master')
+          ? (vault.tables || []).map((name) => ({ name }))
+          : sql.includes('FROM folders')
           ? vault.folders
           : sql.includes('FROM ciphers')
             ? vault.ciphers
