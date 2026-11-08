@@ -309,6 +309,223 @@ export async function handleAcceptOrganization(
   return jsonResponse({ id: membership.id, status: STATUS_ACCEPTED, object: 'organizationUser' }, 200);
 }
 
+// GET /api/organizations/:orgId/groups
+//
+// The groups of one organization, with the members and the collections each
+// one carries. A group hands a set of collections to a set of members in one
+// go.
+export async function handleGetOrganizationGroups(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+  const groups = await storage.getOrganizationGroups(orgId);
+  return jsonResponse(
+    {
+      object: 'list',
+      data: groups.map((group) => ({
+        id: group.id,
+        organizationId: group.orgId,
+        name: group.name,
+        members: group.members,
+        collections: group.collections.map((entry) => ({
+          id: entry.collectionId,
+          readOnly: entry.readOnly,
+          hidePasswords: entry.hidePasswords,
+          manage: entry.manage,
+        })),
+        object: 'groupDetails',
+      })),
+      continuationToken: null,
+    },
+    200
+  );
+}
+
+// POST /api/organizations/:orgId/groups
+//
+// Creates a group. The members and the collections it carries have to belong
+// to the organization, or the group would reach outside it.
+export async function handleCreateOrganizationGroup(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
+  const name = text(body?.name, 100).trim();
+  if (!name) return errorResponse('The group needs a name', 400);
+
+  const members: string[] = Array.isArray(body?.members)
+    ? [...new Set((body.members as unknown[]).filter((value): value is string => typeof value === 'string'))]
+    : [];
+  const organizationMembers = await storage.getOrganizationUsers(orgId);
+  const memberIds = new Set(organizationMembers.map((membership) => membership.id));
+  for (const memberId of members) {
+    if (!memberIds.has(memberId)) return errorResponse('Organization member not found', 404);
+  }
+
+  const collections = readGroupCollections(body?.collections);
+  const organizationCollections = await storage.getOrganizationCollectionIds(
+    orgId,
+    collections.map((entry) => entry.collectionId)
+  );
+  if (organizationCollections.size !== collections.length) {
+    return errorResponse('Collection not found', 404);
+  }
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await storage.createOrganizationGroup({
+    id,
+    orgId,
+    name,
+    members,
+    collections: collections.map((entry) => ({ ...entry, collectionId: entry.collectionId })),
+    now,
+  });
+  return jsonResponse(
+    {
+      id,
+      organizationId: orgId,
+      name,
+      members,
+      collections: collections.map((entry) => ({
+        id: entry.collectionId,
+        readOnly: entry.readOnly,
+        hidePasswords: entry.hidePasswords,
+        manage: entry.manage,
+      })),
+      object: 'groupDetails',
+    },
+    201
+  );
+}
+
+// PUT /api/organizations/:orgId/groups/:groupId
+//
+// The members and the collections of a group are replaced by what the client
+// sends: what is not listed any more is not there.
+export async function handleUpdateOrganizationGroup(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string,
+  groupId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+  const groups = await storage.getOrganizationGroups(orgId);
+  const group = groups.find((entry) => entry.id === groupId);
+  if (!group) return errorResponse('Group not found', 404);
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
+
+  let members = group.members;
+  if (body?.members !== undefined) {
+    members = Array.isArray(body.members)
+      ? [...new Set((body.members as unknown[]).filter((value): value is string => typeof value === 'string'))]
+      : [];
+    const organizationMembers = await storage.getOrganizationUsers(orgId);
+    const memberIds = new Set(organizationMembers.map((membership) => membership.id));
+    for (const memberId of members) {
+      if (!memberIds.has(memberId)) return errorResponse('Organization member not found', 404);
+    }
+  }
+
+  let collections = group.collections;
+  if (body?.collections !== undefined) {
+    collections = readGroupCollections(body.collections);
+    const organizationCollections = await storage.getOrganizationCollectionIds(
+      orgId,
+      collections.map((entry) => entry.collectionId)
+    );
+    if (organizationCollections.size !== collections.length) {
+      return errorResponse('Collection not found', 404);
+    }
+  }
+
+  const now = new Date().toISOString();
+  await storage.replaceOrganizationGroup({ groupId, members, collections, now });
+  return jsonResponse(
+    {
+      id: groupId,
+      organizationId: orgId,
+      name: group.name,
+      members,
+      collections: collections.map((entry) => ({
+        id: entry.collectionId,
+        readOnly: entry.readOnly,
+        hidePasswords: entry.hidePasswords,
+        manage: entry.manage,
+      })),
+      object: 'groupDetails',
+    },
+    200
+  );
+}
+
+// DELETE /api/organizations/:orgId/groups/:groupId
+export async function handleDeleteOrganizationGroup(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string,
+  groupId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+  const groups = await storage.getOrganizationGroups(orgId);
+  if (!groups.some((entry) => entry.id === groupId)) {
+    return errorResponse('Group not found', 404);
+  }
+  await storage.deleteOrganizationGroup(groupId);
+  return new Response(null, { status: 204 });
+}
+
+/** The collections of a group, with the rights they carry. */
+function readGroupCollections(raw: unknown): Array<{
+  collectionId: string;
+  readOnly: boolean;
+  hidePasswords: boolean;
+  manage: boolean;
+}> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => entry as { id?: unknown; collectionId?: unknown; readOnly?: unknown; hidePasswords?: unknown; manage?: unknown })
+    .map((entry) => ({
+      collectionId: String(entry.id ?? entry.collectionId ?? '').trim(),
+      readOnly: entry.readOnly === true,
+      hidePasswords: entry.hidePasswords === true,
+      manage: entry.manage === true,
+    }))
+    .filter((entry) => !!entry.collectionId);
+}
+
 /**
  * GET /api/organizations/:orgId/users
  *

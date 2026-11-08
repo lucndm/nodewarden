@@ -1050,3 +1050,73 @@ test('the organization list shows an invitation as unanswered', async () => {
   assert.equal(row?.status, 2);
   assert.equal(row?.key, '4.wrapped');
 });
+
+test('a group hands its collections to its members', async () => {
+  const { env, storage } = await fixture();
+  // A member who reaches nothing yet: a group is what gives them access.
+  await createUser(storage, 'user-grouped', 'grouped@example.test');
+  await env.DB.prepare(
+    'INSERT INTO organization_users (id, user_id, org_id, type, status, key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind('ou-grouped', 'user-grouped', ORG, 2, 2, 'wrapped', NOW, NOW)
+    .run();
+
+  // A plain member has no say in the groups of the organization.
+  const refused = await call(env, `https://vault.example.test/api/organizations/${ORG}/groups`, 'GET', READER);
+  assert.equal(refused.status, 404);
+
+  const created = await call(env, `https://vault.example.test/api/organizations/${ORG}/groups`, 'POST', OWNER, {
+    name: 'Support',
+    members: ['ou-grouped'],
+    collections: [{ id: COL_SHARED, readOnly: false, hidePasswords: false, manage: false }],
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const group = (await created.json()) as { id: string; members: string[]; collections: Array<{ id: string }> };
+  assert.equal(group.name, 'Support');
+  assert.deepEqual(group.members, ['ou-grouped']);
+  assert.equal(group.collections[0].id, COL_SHARED);
+
+  // The group is in the list.
+  const listed = await call(env, `https://vault.example.test/api/organizations/${ORG}/groups`, 'GET', OWNER);
+  const groups = (await listed.json()) as { data: Array<{ id: string; name: string }> };
+  assert.ok(groups.data.some((entry) => entry.id === group.id), 'the group is listed');
+
+  // The member reaches the shared item through the group.
+  const shared = await createShared(env);
+  const visible = await call(env, `https://vault.example.test/api/ciphers/${shared.id}`, 'GET', 'user-grouped');
+  assert.equal(visible.status, 200, 'the group gives the member the item');
+
+  // A member of the organization who is not in the group does not.
+  await createUser(storage, 'user-nogroup', 'nogroup@example.test');
+  await env.DB.prepare(
+    'INSERT INTO organization_users (id, user_id, org_id, type, status, key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind('ou-nogroup', 'user-nogroup', ORG, 2, 2, 'wrapped', NOW, NOW)
+    .run();
+  const outside = await call(env, `https://vault.example.test/api/ciphers/${shared.id}`, 'GET', 'user-nogroup');
+  assert.equal(outside.status, 404, 'a member outside the group reaches nothing');
+
+  // Taking the member out of the group takes the access away.
+  const updated = await call(env, `https://vault.example.test/api/organizations/${ORG}/groups/${group.id}`, 'PUT', OWNER, {
+    members: [],
+    collections: [{ id: COL_SHARED, readOnly: false, hidePasswords: false, manage: false }],
+  });
+  assert.equal(updated.status, 200, await updated.clone().text());
+  const gone = await call(env, `https://vault.example.test/api/ciphers/${shared.id}`, 'GET', 'user-grouped');
+  assert.equal(gone.status, 404, 'the member loses the item with the group');
+
+  // A member that is not in the organization cannot be put into a group.
+  const outsideMember = await call(env, `https://vault.example.test/api/organizations/${ORG}/groups`, 'POST', OWNER, {
+    name: 'Outside',
+    members: ['ou-nobody'],
+    collections: [],
+  });
+  assert.equal(outsideMember.status, 404);
+
+  // Deleting the group takes it away.
+  const deleted = await call(env, `https://vault.example.test/api/organizations/${ORG}/groups/${group.id}`, 'DELETE', OWNER);
+  assert.equal(deleted.status, 204);
+  const afterDelete = await call(env, `https://vault.example.test/api/organizations/${ORG}/groups`, 'GET', OWNER);
+  const remaining = (await afterDelete.json()) as { data: Array<{ id: string }> };
+  assert.ok(!remaining.data.some((entry) => entry.id === group.id), 'the group is gone');
+});

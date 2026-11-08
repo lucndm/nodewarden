@@ -14,12 +14,16 @@ import { applyOrganizationKeyRotation, openOrganizationKey, wrapKeyForMember } f
 import {
   acceptOrganizationInvitation,
   confirmOrganizationMember,
+  createOrganizationGroup,
+  deleteOrganizationGroup,
+  getOrganizationGroups,
   getMemberPublicKeys,
   getOrganizationMembers,
   getOrganizationRotationData,
   inviteOrganizationMember,
   removeOrganizationMember,
   updateOrganizationMember,
+  type OrganizationGroup,
   type OrganizationMember,
   type VaultOrganization,
 } from '@/lib/api/organizations';
@@ -192,6 +196,57 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     }
   };
 
+  const loadGroups = async (organizationId: string): Promise<OrganizationGroup[]> => {
+    try {
+      return await getOrganizationGroups(input.authedFetch, organizationId);
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_organization_load_failed')
+      );
+      return [];
+    }
+  };
+
+  const saveGroup = async (
+    organizationId: string,
+    group: { name: string; members: string[]; collections: Array<{ id: string }> }
+  ): Promise<boolean> => {
+    setBusyOrganizationId(organizationId);
+    try {
+      await createOrganizationGroup(input.authedFetch, organizationId, group);
+      await input.onChanged();
+      input.onNotify('success', t('txt_group_saved'));
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_group_save_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
+
+  const removeGroup = async (organizationId: string, groupId: string): Promise<boolean> => {
+    setBusyOrganizationId(organizationId);
+    try {
+      await deleteOrganizationGroup(input.authedFetch, organizationId, groupId);
+      await input.onChanged();
+      input.onNotify('success', t('txt_group_removed'));
+      return true;
+    } catch (error) {
+      input.onNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_group_save_failed')
+      );
+      return false;
+    } finally {
+      setBusyOrganizationId('');
+    }
+  };
+
   const updateMember = async (
     organizationId: string,
     membershipId: string,
@@ -302,6 +357,9 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     acceptInvitation,
     giveOrganizationKey,
     loadMembers,
+    loadGroups,
+    saveGroup,
+    removeGroup,
     inviteMember,
     updateMember,
     removeMember,
