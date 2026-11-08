@@ -181,6 +181,7 @@ export interface AppMainRoutesProps {
   onLoadAuditLogSettings: () => Promise<AuditLogSettings>;
   onSaveAuditLogSettings: (settings: AuditLogSettings) => Promise<AuditLogSettings>;
   onClearAuditLogs: () => Promise<number>;
+  onExportAuditLogs: (filters: AuditLogFilters) => Promise<{ csv: string; rows: number; truncated: boolean }>;
   onExportBackup: (masterPassword: string, includeAttachments?: boolean) => Promise<void>;
   onImportBackup: (masterPassword: string, file: File, replaceExisting?: boolean) => Promise<AdminBackupImportResponse>;
   onImportBackupAllowingChecksumMismatch: (masterPassword: string, file: File, replaceExisting?: boolean) => Promise<AdminBackupImportResponse>;
@@ -532,6 +533,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
                 onLoadSettings={props.onLoadAuditLogSettings}
                 onSaveSettings={props.onSaveAuditLogSettings}
                 onClearLogs={props.onClearAuditLogs}
+                onExportLogs={props.onExportAuditLogs}
                 onNotify={props.onNotify}
                 mobileLayout={props.mobileLayout}
                 onMobileBack={() => props.onNavigate(props.settingsHomeRoute)}

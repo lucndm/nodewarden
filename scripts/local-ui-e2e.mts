@@ -873,6 +873,31 @@ async function main() {
     );
     checks.ok('the shared item is still readable after the rotation', true);
 
+    // The audit log can be taken out of the app as a file, for whoever has
+    // to read it outside.
+    await evaluate(`(() => {
+      const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/logs');
+      if (!link) return false;
+      link.click();
+      return true;
+    })()`);
+    await waitFor(
+      `!![...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Export CSV')`,
+      'the log center',
+      20000
+    );
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Export CSV');
+      button.click();
+      return true;
+    })()`);
+    await waitFor(
+      `document.body.textContent.includes('Exported')`,
+      'the export to finish',
+      20000
+    );
+    checks.ok('the audit log can be exported', true);
+
     // The aliases the provider holds are visible here and can be turned off
     // and deleted, so a leaked alias does not keep receiving mail.
     const provider = await startFakeSimpleLogin({ https: true });

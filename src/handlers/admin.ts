@@ -3,7 +3,7 @@ import { AuthService } from '../services/auth';
 import { StorageService } from '../services/storage';
 import { jsonResponse, errorResponse } from '../utils/response';
 import { deleteBlobObject, getAttachmentObjectKey, getSendFileObjectKey } from '../services/blob-store';
-import { auditRequestMetadata, getAuditLogSettings, normalizeAuditLogSettings, saveAuditLogSettings, writeAuditEvent } from '../services/audit-events';
+import { auditRequestMetadata, getAuditLogSettings, normalizeAuditLogSettings, sanitizeMetadata, saveAuditLogSettings, writeAuditEvent } from '../services/audit-events';
 
 function isAdmin(user: User): boolean {
   return user.role === 'admin' && user.status === 'active';
@@ -118,6 +118,26 @@ export async function handleAdminListUsers(
   });
 }
 
+/** The filters the log list and the export share. */
+function readAuditLogFilters(url: URL): {
+  limit: number;
+  offset: number;
+  category: string | null;
+  level: string | null;
+  q: string | null;
+  from: string | null;
+  to: string | null;
+} {
+  const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') || 50)));
+  const offset = Math.max(0, Number(url.searchParams.get('offset') || 0));
+  const category = String(url.searchParams.get('category') || '').trim() || null;
+  const level = String(url.searchParams.get('level') || '').trim() || null;
+  const q = String(url.searchParams.get('q') || '').trim().toLowerCase() || null;
+  const from = String(url.searchParams.get('from') || '').trim() || null;
+  const to = String(url.searchParams.get('to') || '').trim() || null;
+  return { limit, offset, category, level, q, from, to };
+}
+
 // GET /api/admin/logs
 export async function handleAdminListAuditLogs(
   request: Request,
@@ -129,13 +149,7 @@ export async function handleAdminListAuditLogs(
   }
 
   const url = new URL(request.url);
-  const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') || 50)));
-  const offset = Math.max(0, Number(url.searchParams.get('offset') || 0));
-  const category = String(url.searchParams.get('category') || '').trim() || null;
-  const level = String(url.searchParams.get('level') || '').trim() || null;
-  const q = String(url.searchParams.get('q') || '').trim().toLowerCase() || null;
-  const from = String(url.searchParams.get('from') || '').trim() || null;
-  const to = String(url.searchParams.get('to') || '').trim() || null;
+  const { limit, offset, category, level, q, from, to } = readAuditLogFilters(url);
 
   const storage = new StorageService(env.DB);
   const result = await storage.listAuditLogs({ limit, offset, category, level, q, from, to });
@@ -160,6 +174,95 @@ export async function handleAdminListAuditLogs(
     hasMore: result.hasMore,
     object: 'list',
     continuationToken: result.hasMore ? String(offset + result.logs.length) : null,
+  });
+}
+
+/**
+ * A CSV of the audit log, for whoever has to read it outside the app.
+ *
+ * Only the columns an auditor needs are written, and the metadata is cleaned
+ * again on the way out: an event that was written before the rule existed
+ * cannot carry a secret into the file. The export is capped, and it says so
+ * when there was more to export than it carries.
+ */
+const AUDIT_EXPORT_MAX_ROWS = 10000;
+const AUDIT_EXPORT_COLUMNS = [
+  'id',
+  'created_at',
+  'actor_email',
+  'action',
+  'category',
+  'level',
+  'target_type',
+  'target_id',
+  'target_user_email',
+  'metadata',
+] as const;
+
+function csvCell(value: unknown): string {
+  const text = value === null || value === undefined ? '' : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+export async function handleAdminExportAuditLogs(
+  request: Request,
+  env: Env,
+  actorUser: User
+): Promise<Response> {
+  if (!isAdmin(actorUser)) {
+    return errorResponse('Forbidden', 403);
+  }
+
+  const url = new URL(request.url);
+  const { category, level, q, from, to } = readAuditLogFilters(url);
+  const storage = new StorageService(env.DB);
+  const { logs, truncated } = await storage.listAuditLogsForExport(
+    actorUser.id,
+    { category, level, q, from, to },
+    AUDIT_EXPORT_MAX_ROWS
+  );
+
+  const lines = [AUDIT_EXPORT_COLUMNS.map(csvCell).join(',')];
+  for (const log of logs) {
+    let metadata: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(String(log.metadata || '{}'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        metadata = sanitizeMetadata(parsed as Record<string, unknown>);
+      }
+    } catch {
+      metadata = {};
+    }
+    lines.push(
+      [
+        log.id,
+        log.createdAt,
+        log.actorEmail,
+        log.action,
+        log.category,
+        log.level,
+        log.targetType,
+        log.targetId,
+        log.targetUserEmail,
+        Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : '',
+      ]
+        .map(csvCell)
+        .join(',')
+    );
+  }
+
+  // The byte order mark so a spreadsheet opens the file as UTF-8.
+  const body = `\uFEFF${lines.join('\n')}\n`;
+  const stamp = new Date().toISOString().slice(0, 10);
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="audit-log-${stamp}.csv"`,
+      'Cache-Control': 'no-store',
+      'X-Audit-Export-Rows': String(logs.length),
+      'X-Audit-Export-Truncated': truncated ? 'true' : 'false',
+    },
   });
 }
 

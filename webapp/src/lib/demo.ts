@@ -1576,6 +1576,10 @@ export function createDemoMainRoutesProps(base: AppMainRoutesProps, notify: Noti
       notify('success', t('txt_logs_cleared'));
       return 0;
     },
+    onExportAuditLogs: async () => {
+      notify('success', t('txt_log_export_done', { rows: 0 }));
+      return { csv: '', rows: 0, truncated: false };
+    },
     onExportBackup: async (_masterPassword: string) => {
       notify('success', t('txt_backup_export_success'));
     },

@@ -1,8 +1,9 @@
 import type { AuditLog, Invite } from '../types';
 
 export interface AuditLogListOptions {
-  limit: number;
-  offset: number;
+  /** The list page size. The export does not page, so it leaves it out. */
+  limit?: number;
+  offset?: number;
   category?: string | null;
   level?: string | null;
   q?: string | null;
@@ -190,6 +191,36 @@ export async function pruneAuditLogs(db: D1Database, beforeIso: string): Promise
   return Number(result.meta.changes ?? 0);
 }
 
+const AUDIT_LOG_SELECT =
+  'SELECT l.id, l.actor_user_id, actor.email AS actor_email, l.action, l.category, l.level, l.target_type, l.target_id, target.email AS target_user_email, l.metadata, l.created_at ' +
+  'FROM audit_logs l ' +
+  'LEFT JOIN users actor ON actor.id = l.actor_user_id ' +
+  "LEFT JOIN users target ON l.target_type = 'user' AND target.id = l.target_id ";
+
+/**
+ * The rows for an export: the same filters as the list, but as many of them
+ * as the export is allowed to carry, newest first. The caller is told when
+ * there were more, so it can say so instead of pretending it exported
+ * everything.
+ */
+export async function listAuditLogsForExport(
+  db: D1Database,
+  options: AuditLogListOptions,
+  maxRows: number
+): Promise<{ logs: AuditLog[]; truncated: boolean }> {
+  const limit = Math.max(1, Math.floor(maxRows));
+  const { where, params } = buildAuditWhere(options);
+  const rows = await db
+    .prepare(`${AUDIT_LOG_SELECT}${where} ORDER BY l.created_at DESC LIMIT ?`)
+    .bind(...params, limit + 1)
+    .all<any>();
+  const results = rows.results || [];
+  return {
+    logs: results.slice(0, limit).map(auditLogFromRow),
+    truncated: results.length > limit,
+  };
+}
+
 export async function pruneAuditLogsToMax(db: D1Database, maxEntries: number): Promise<number> {
   const limit = Math.max(1, Math.floor(maxEntries));
   const result = await db
@@ -214,13 +245,7 @@ export async function listAuditLogs(db: D1Database, options: AuditLogListOptions
   const { where, params } = buildAuditWhere(options);
 
   const rows = await db
-    .prepare(
-      'SELECT l.id, l.actor_user_id, actor.email AS actor_email, l.action, l.category, l.level, l.target_type, l.target_id, target.email AS target_user_email, l.metadata, l.created_at ' +
-        'FROM audit_logs l ' +
-        'LEFT JOIN users actor ON actor.id = l.actor_user_id ' +
-        "LEFT JOIN users target ON l.target_type = 'user' AND target.id = l.target_id " +
-        `${where} ORDER BY l.created_at DESC LIMIT ? OFFSET ?`
-    )
+    .prepare(`${AUDIT_LOG_SELECT}${where} ORDER BY l.created_at DESC LIMIT ? OFFSET ?`)
     .bind(...params, limit + 1, offset)
     .all<any>();
   const results = rows.results || [];

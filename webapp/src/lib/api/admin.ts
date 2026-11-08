@@ -106,6 +106,31 @@ export async function listAuditLogs(authedFetch: AuthedFetch, filters: AuditLogF
   };
 }
 
+/**
+ * The audit log as a CSV file. The server cleans the metadata again on the
+ * way out, so the file carries no secret that an old event may have held.
+ */
+export async function exportAuditLogs(
+  authedFetch: AuthedFetch,
+  filters: AuditLogFilters = {}
+): Promise<{ csv: string; rows: number; truncated: boolean }> {
+  const params = new URLSearchParams();
+  if (filters.category && filters.category !== 'all') params.set('category', filters.category);
+  if (filters.level && filters.level !== 'all') params.set('level', filters.level);
+  if (filters.q?.trim()) params.set('q', filters.q.trim());
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+
+  const resp = await authedFetch(`/api/admin/logs/export${params.toString() ? `?${params.toString()}` : ''}`);
+  if (!resp.ok) throw new Error('Failed to export audit logs');
+  const csv = await resp.text();
+  return {
+    csv,
+    rows: Number(resp.headers.get('X-Audit-Export-Rows') || 0),
+    truncated: resp.headers.get('X-Audit-Export-Truncated') === 'true',
+  };
+}
+
 export async function getAuditLogSettings(authedFetch: AuthedFetch): Promise<AuditLogSettings> {
   const resp = await authedFetch('/api/admin/logs/settings');
   if (!resp.ok) throw new Error('Failed to load audit log settings');
