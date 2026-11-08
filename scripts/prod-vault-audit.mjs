@@ -217,6 +217,9 @@ async function main() {
     namePerUser.set(key, (namePerUser.get(key) || 0) + 1);
   }
   const duplicateFolderNames = [...namePerUser.values()].filter((count) => count > 1).length;
+  // A folder with no name cannot become a collection: there would be nothing
+  // to call it. Its items have to go somewhere else.
+  const foldersWithoutName = folders.filter((folder) => !String(folder.name || '').trim()).length;
   const foldersWithoutTagName = folders.filter((folder) => folder.tag_name === null || folder.tag_name === '').length;
 
   const folderIds = new Set(folders.map((folder) => folder.id));
@@ -236,6 +239,11 @@ async function main() {
   // server, so a move into an organization would refuse it. The count says
   // how many items that would be before the move, not after.
   const itemsWithPlainTextFields = ciphers.filter((cipher) => plainTextFields(cipher).length > 0);
+  // Which items stayed personal, and the folder each of them is in. Only ids:
+  // the audit never prints vault content.
+  const personalItemRows = ciphers
+    .filter((cipher) => !cipher.organization_id)
+    .map((cipher) => ({ id: cipher.id, folderId: cipher.folder_id || null }));
 
   const marker = markers.find((row) => row.key.startsWith('tags.legacy-repair.v1:'));
   const repairMarker = marker ? String(marker.value || '') : 'missing';
@@ -253,11 +261,13 @@ async function main() {
     folders: folders.length,
     foldersWithPlainTextName: plainTextFolders.length,
     foldersWithoutTagName,
+    foldersWithoutName,
     duplicateFolderNames,
     items: ciphers.length,
     itemsInAFolder: ciphers.filter((cipher) => !!cipher.folder_id).length,
     itemsInAnOrganization: ciphers.filter((cipher) => !!cipher.organization_id).length,
     personalItems: ciphers.filter((cipher) => !cipher.organization_id).length,
+    personalItemRows,
     attachments: attachments.length,
     itemsWithAttachments: attachmentCipherIds.size,
     cipherVersions: versions.length,
