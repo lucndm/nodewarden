@@ -338,7 +338,13 @@ async function seedVault(baseUrl) {
     token,
     body: {
       name: 'UI Team',
-      collectionName: 'UI Shared',
+      // A real client encrypts the collection name with the organization key,
+      // so the browser has to decrypt it to show it.
+      collectionName: await encryptBw(
+        new TextEncoder().encode('UI Shared'),
+        organizationKey.slice(0, 32),
+        organizationKey.slice(32, 64)
+      ),
       key: organizationWrappedForOwner,
       keys: {
         publicKey: bytesToBase64(publicKey),

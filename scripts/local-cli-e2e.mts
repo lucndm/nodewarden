@@ -113,7 +113,7 @@ async function createAccount(baseUrl) {
       },
     },
   });
-  return { status: response.status, body: response.body, masterHash, vaultKey };
+  return { status: response.status, body: response.body, masterHash, vaultKey, publicKey, privateKey };
 }
 
 // The client encrypts item fields with the item key and stores that key under
@@ -131,7 +131,7 @@ async function decryptField(cipherString, itemKeyCipher, vaultKey) {
   return decryptStr(cipherString, encKey, macKey);
 }
 
-async function run(baseUrl, checks, cli, cliEnv) {
+async function run(baseUrl, checks, cli, cliEnv, workerLog = () => '') {
   const account = await createAccount(baseUrl);
   if (!checks.equal('register the account', account.status, 200, JSON.stringify(account.body))) return;
 
@@ -321,6 +321,183 @@ async function run(baseUrl, checks, cli, cliEnv) {
   }
   checks.equal('the CLI sees the restored username', restoredItem?.login?.username, 'cli-user-v1');
   checks.equal('the restored item keeps its id', restoredItem?.id, itemId);
+
+  // Sharing. An organization item is encrypted with the organization key,
+  // which the server stores wrapped with the member's own RSA key. The CLI
+  // has to unwrap it before it can read a single shared item, so a decrypted
+  // name here is the proof that the wrapping is the shape the official client
+  // expects.
+  const subtle = webcrypto.subtle;
+  const organizationKey = webcrypto.getRandomValues(new Uint8Array(64));
+  const importedMemberKey = await subtle.importKey(
+    'spki',
+    account.publicKey.buffer.slice(account.publicKey.byteOffset, account.publicKey.byteOffset + account.publicKey.byteLength),
+    { name: 'RSA-OAEP', hash: 'SHA-1' },
+    false,
+    ['encrypt']
+  );
+  const wrappedOrganizationKey = `4.${bytesToBase64(
+    new Uint8Array(
+      await subtle.encrypt(
+        { name: 'RSA-OAEP' },
+        importedMemberKey,
+        organizationKey.buffer.slice(0, 64)
+      )
+    )
+  )}`;
+
+  const organization = await api(baseUrl, '/api/organizations', {
+    method: 'POST',
+    token,
+    body: {
+      name: 'CLI Team',
+      // A real client encrypts the collection name with the organization key,
+      // and the official client refuses a name it cannot decrypt.
+      collectionName: await encryptBw(
+        new TextEncoder().encode('CLI Shared'),
+        organizationKey.slice(0, 32),
+        organizationKey.slice(32, 64)
+      ),
+      key: wrappedOrganizationKey,
+      keys: {
+        publicKey: bytesToBase64(account.publicKey),
+        encryptedPrivateKey: await encryptBw(
+          account.privateKey,
+          organizationKey.slice(0, 32),
+          organizationKey.slice(32, 64)
+        ),
+      },
+    },
+  });
+  if (!checks.equal('create the organization', organization.status, 200, JSON.stringify(organization.body))) return;
+  const organizationId = organization.body?.id || '';
+
+  // The CLI reads the organization and its collections from its own synced
+  // copy, so it has to sync before it can see either.
+  const syncAfterOrg = await runCli(cli, ['sync'], { env });
+  checks.equal('the CLI syncs after the organization is created', syncAfterOrg.code, 0, syncAfterOrg.stderr.trim());
+  const orgCollections = await runCli(cli, ['list', 'org-collections', '--organizationid', organizationId, '--raw'], { env });
+  let listedCollections = [];
+  try {
+    listedCollections = JSON.parse(orgCollections.stdout || '[]');
+  } catch {
+    listedCollections = [];
+  }
+  checks.ok(
+    'the CLI decrypts the collection name',
+    listedCollections.some((entry) => entry?.name === 'CLI Shared'),
+    orgCollections.stdout.slice(0, 300) || orgCollections.stderr.trim()
+  );
+
+  const collections = await api(baseUrl, '/api/collections', { token });
+  const collectionId = (collections.body?.data || [])[0]?.id || '';
+  if (!checks.ok('the organization has a collection', !!collectionId, JSON.stringify(collections.body).slice(0, 300))) return;
+
+  // An item the Web Vault would have written: its key wrapped with the
+  // organization key, its payload under that item key.
+  const sharedItemKey = webcrypto.getRandomValues(new Uint8Array(64));
+  const sharedEncrypt = (value) =>
+    encryptBw(new TextEncoder().encode(value), sharedItemKey.slice(0, 32), sharedItemKey.slice(32, 64));
+  const sharedItem = await api(baseUrl, '/api/ciphers', {
+    method: 'POST',
+    token,
+    body: {
+      type: 1,
+      name: await sharedEncrypt('Web Vault Shared Login'),
+      organizationId,
+      collectionIds: [collectionId],
+      key: await encryptBw(sharedItemKey, organizationKey.slice(0, 32), organizationKey.slice(32, 64)),
+      login: { username: await sharedEncrypt('shared-user'), password: await sharedEncrypt('shared-pass') },
+    },
+  });
+  if (!checks.equal('write a shared item', sharedItem.status, 200, JSON.stringify(sharedItem.body))) return;
+  const sharedItemId = sharedItem.body?.id || '';
+
+  await runCli(cli, ['sync'], { env });
+  const orgList = await runCli(cli, ['list', 'organizations', '--raw'], { env });
+  let organizations = [];
+  try {
+    organizations = JSON.parse(orgList.stdout || '[]');
+  } catch {
+    organizations = [];
+  }
+  checks.ok(
+    'the CLI lists the organization',
+    organizations.some((entry) => entry?.id === organizationId),
+    orgList.stderr.trim() || orgList.stdout.slice(0, 300)
+  );
+  const orgItems = await runCli(cli, ['list', 'items', '--organizationid', organizationId, '--raw'], { env });
+  let sharedItems = [];
+  try {
+    sharedItems = JSON.parse(orgItems.stdout || '[]');
+  } catch {
+    sharedItems = [];
+  }
+  const readShared = sharedItems.find((entry) => entry?.id === sharedItemId);
+  checks.ok(
+    'the CLI decrypts the shared item the server holds',
+    readShared?.name === 'Web Vault Shared Login',
+    JSON.stringify(readShared || {}).slice(0, 400) || orgItems.stderr.trim()
+  );
+  checks.equal('the CLI decrypts the shared username', readShared?.login?.username, 'shared-user');
+
+  // The other direction: the CLI puts an item into the organization, which
+  // means it wrapped the item key under the organization key itself.
+  const personal = await runCli(
+    cli,
+    ['create', 'item', Buffer.from(JSON.stringify({
+      type: 1,
+      name: 'CLI Shared Login',
+      login: { username: 'cli-shared-user', password: 'cli-shared-pass' },
+    })).toString('base64'), '--raw'],
+    { env }
+  );
+  if (!checks.ok('the CLI creates an item to share', personal.code === 0, personal.stderr.trim())) return;
+  // The create output is not the id, so the item is looked up the way a user
+  // would find it.
+  await runCli(cli, ['sync'], { env });
+  const personalList = await runCli(cli, ['list', 'items', '--raw'], { env });
+  let personalItems = [];
+  try {
+    personalItems = JSON.parse(personalList.stdout || '[]');
+  } catch {
+    personalItems = [];
+  }
+  const personalId = personalItems.find((entry) => entry?.name === 'CLI Shared Login')?.id || '';
+  if (!checks.ok('the new item is in the CLI vault', !!personalId, personalList.stdout.slice(0, 300))) return;
+  await runCli(cli, ['sync'], { env });
+  const movedToOrganization = await runCli(
+    cli,
+    ['move', personalId, organizationId, Buffer.from(JSON.stringify([collectionId])).toString('base64')],
+    { env }
+  );
+  checks.equal(
+    'the CLI moves an item into the organization',
+    movedToOrganization.code,
+    0,
+    movedToOrganization.stderr.trim() + '\n' + workerLog().slice(-2500)
+  );
+
+  await runCli(cli, ['sync'], { env });
+  const movedItems = await runCli(cli, ['list', 'items', '--organizationid', organizationId, '--raw'], { env });
+  let itemsAfterMove = [];
+  try {
+    itemsAfterMove = JSON.parse(movedItems.stdout || '[]');
+  } catch {
+    itemsAfterMove = [];
+  }
+  const movedShared = itemsAfterMove.find((entry) => entry?.id === personalId);
+  checks.equal('the CLI reads back the item it shared', movedShared?.name, 'CLI Shared Login');
+  checks.equal('the shared item keeps its username', movedShared?.login?.username, 'cli-shared-user');
+
+  // What the server stored is an organization item, in the collection.
+  const stored = (await api(baseUrl, `/api/ciphers/${personalId}`, { token })).body;
+  checks.equal('the server keeps the item in the organization', stored?.organizationId, organizationId);
+  checks.ok(
+    'the server keeps the collection the CLI chose',
+    Array.isArray(stored?.collectionIds) && stored.collectionIds.includes(collectionId),
+    JSON.stringify(stored?.collectionIds)
+  );
 }
 
 const cli = findCli();
@@ -345,7 +522,7 @@ try {
   console.log(`local Worker: ${worker.baseUrl} (https for the CLI: ${proxy.baseUrl})`);
   console.log(`Bitwarden CLI: ${cli}`);
   const checks = createChecks('local end-to-end through the official Bitwarden CLI');
-  await run(worker.baseUrl, checks, cli, cliEnv);
+  await run(worker.baseUrl, checks, cli, cliEnv, worker.log);
   checks.finish();
 } finally {
   await runCli(cli, ['logout'], { env: { BITWARDENCLI_APPDATA_DIR: appDataDir } });

@@ -204,6 +204,25 @@ Hai hàm phía client: `openOrganizationKey` (mở khóa organization hiện t�
 - Endpoint mới: `GET /api/organizations/:orgId/users` (chỉ owner/admin) trả member + email + vai trò + quyền từng collection.
 - Kiểm chứng trong Chromium thật (`npm run test:local-ui`, thêm 6 check): hộp thoại tên organization và liệt kê member; **mời được và member được confirm** (đọc `status` từ API); **xoá được member**; organization báo phải xoay khóa; xoay khóa xong item vẫn đọc được.
 
+**Kiểm chứng bằng client chính thức (đã chạy):**
+
+`npm run test:local-cli` chạy **CLI Bitwarden chính thức 2025.1.0** trên Worker/D1 local qua HTTPS, tổng **42 check**, trong đó nhánh chia sẻ:
+
+- CLI mở **khóa organization** bằng RSA private key của member (định dạng bọc `4.<base64>` đúng như client chính thức).
+- CLI **giải mã item chia sẻ do server tạo** (item key bọc dưới khóa organization, payload dưới item key) — đọc đúng tên và username.
+- CLI **giải mã tên collection** (tên collection phải là EncString dưới khóa organization).
+- CLI **move một item cá nhân vào organization** qua `PUT /ciphers/{id}/share`, rồi đọc lại từ organization; server giữ đúng `organizationId` và `collectionIds`.
+
+Kiểm chứng này tìm ra và đã sửa **5 lỗi tương thích thật**:
+
+1. `POST /api/organizations` **không bump revision date** → client chính thức thấy "không có gì thay đổi" và **không bao giờ thấy organization mới** cho tới khi có thay đổi khác. Nay đã bump + notify.
+2. `POST /api/organizations/:orgId/collections` cũng vậy → nay bump revision cho mọi member đã confirm.
+3. `GET /api/organizations/:orgId/collections` **không tồn tại** (501) → client không lấy được danh sách collection. Đã thêm (chỉ member đã confirm, trả quyền của họ).
+4. `PUT /api/ciphers/:id/share` **không tồn tại** (404) → `bw move`/`bw share` không dùng được. Đã thêm: nhận `{ cipher, collectionIds }` (collection nằm **cạnh** cipher), kiểm quyền ghi, xoá folder/tag cá nhân, đặt `organizationId` + collection.
+5. `PUT /api/ciphers/:id/collections_v2` **không tồn tại** → client mới không gán được collection sau khi share. Đã thêm.
+
+Ngoài ra Web Vault nay **giải mã tên collection** bằng khóa organization (`decryptCollectionNames`), có fallback hiển thị nguyên văn cho collection cũ lưu plaintext — trước đó tên do client thật tạo sẽ hiện thành `2.xxx`.
+
 **Còn làm (P1-B):** chưa có endpoint quản lý group, và mời member bằng email còn thiếu bước **member tự chấp nhận** (hiện admin confirm ngay khi người mời đã có public key; nếu chưa có thì phải admin bấm lại sau).
 
 **Tham chiếu thực tế từ `dani-garcia/vaultwarden` (đọc source `17b159b`):** đây là server Bitwarden-compatible tự host, đã làm phần lớn P3/P4/P5 mà NodeWarden còn mở, nên nó cho biết hình hình thực tế trước khi chốt. Những gì **không** có trong vaultwarden, tức là phần NodeWarden đang đi trước: không có bảng `tags` (chỉ `folders`), không có cột usage/`last_used_at` cho cipher, không có bảng version của item (chỉ `password_history`), **không** có kiểm tra tên Folder plaintext — `folders.name` lưu thẳng chuỗi client gửi lên (`src/db/models/folder.rs:52-61`), nên NodeWarden phải tự kiểm tra ciphertext-vs-plaintext như đã làm. Những gì vaultwarden có: Organizations + Collections + Groups + Member Roles (Owner/Admin/Manager/User/Custom), Event Logs, Policies, Directory Connector, Emergency Access, SSO OIDC; SCIM thì **không** (`"useScim": false` vì không thuộc AGPLv3). Bài học dùng được cho P1-B/P3/P5: `/sync` chỉ trả cipher **visible** cho user — `Cipher::find_by_user_visible` (`src/db/models/cipher.rs:926`) và `get_access_restrictions` trả `None` khi user không có quyền, nên lọc quyền nằm ở tầng query chứ không ở UI; và **gán trực tiếp thắng gán qua group** cho cùng collection (upstream cũng vậy: `WHERE NOT EXISTS (SELECT 1 FROM CollectionUser ...)` trong SQL của server chính thức). Lưu ý: vaultwarden cộng dồn quyền bằng AND cho `read_only`/`hide_passwords` và OR cho `manage`, khác quy tắc rank của server chính thức; NodeWarden theo server chính thức, chi tiết ở mục P1.
