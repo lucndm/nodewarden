@@ -195,6 +195,13 @@ async function main() {
     database.uuid,
     'SELECT id, user_id, org_id, type, status, key FROM organization_users'
   );
+  // The account's own key pair: the organization key is wrapped with the
+  // account's public key and opened with its private key.
+  const accountKeys = await queryAll(
+    database.uuid,
+    'SELECT id, email, public_key IS NOT NULL AS has_public_key, private_key IS NOT NULL AS has_private_key, ' +
+      'length(public_key) AS public_key_length, length(private_key) AS private_key_length FROM users'
+  );
   const markers = await queryAll(
     database.uuid,
     "SELECT key, value FROM config WHERE key LIKE 'tags.legacy-repair.v1:%'"
@@ -282,6 +289,16 @@ async function main() {
     status: Number(row.status),
     hasKey: !!String(row.key || '').trim(),
   }));
+  // How the shared items sit in the collections, and whether the names they
+  // carry are the encrypted form the sync requires.
+  const itemsPerCollection = new Map();
+  for (const row of collectionCipherRows) {
+    const key = String(row.collection_id || '');
+    itemsPerCollection.set(key, (itemsPerCollection.get(key) || 0) + 1);
+  }
+  const sharedNamesNotEncrypted = ciphers.filter(
+    (cipher) => !!cipher.organization_id && !CIPHER_STRING.test(String(cipher.name || '').trim())
+  ).length;
   const personalItemRows = ciphers
     .filter((cipher) => !cipher.organization_id)
     .map((cipher) => ({ id: cipher.id, folderId: cipher.folder_id || null }));
@@ -314,6 +331,16 @@ async function main() {
     itemsInNoCollection,
     visibleSharedItems: visibleShared.length,
     membershipRows: membershipRowsSummary,
+    accountKeys: accountKeys.map((row) => ({
+      id: row.id,
+      email: row.email,
+      hasPublicKey: !!row.has_public_key,
+      hasPrivateKey: !!row.has_private_key,
+      publicKeyLength: Number(row.public_key_length || 0),
+      privateKeyLength: Number(row.private_key_length || 0),
+    })),
+    itemsPerCollection: [...itemsPerCollection.entries()].map(([collectionId, count]) => ({ collectionId, count })),
+    sharedNamesNotEncrypted,
     attachments: attachments.length,
     itemsWithAttachments: attachmentCipherIds.size,
     cipherVersions: versions.length,
