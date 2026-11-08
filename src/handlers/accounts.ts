@@ -545,9 +545,16 @@ export async function handleSetKeys(request: Request, env: Env, userId: string):
   if (body.key) user.key = body.key;
   if (body.encryptedPrivateKey) user.privateKey = body.encryptedPrivateKey;
   if (body.publicKey) user.publicKey = body.publicKey;
+  // Replacing the account key is what a user does when the old key may be
+  // exposed, so every other session ends here: the ones that hold a refresh
+  // token and the ones that skip the two-step challenge on a trusted device.
+  user.securityStamp = generateUUID();
   user.updatedAt = new Date().toISOString();
 
   await storage.saveUser(user);
+  await storage.deleteRefreshTokensByUserId(user.id);
+  await storage.deleteTrustedTwoFactorTokensByUserId(user.id);
+  AuthService.invalidateUserCache(user.id);
   await writeAuditEvent(storage, {
     actorUserId: user.id,
     action: 'account.keys.update',
@@ -701,6 +708,10 @@ export async function handleChangePassword(request: Request, env: Env, userId: s
   user.updatedAt = new Date().toISOString();
   await storage.saveUser(user);
   await storage.deleteRefreshTokensByUserId(user.id);
+  // A device that was trusted to skip the two-step challenge must not keep
+  // that trust once the password changed: a password change is what a user
+  // does when somebody else may know it.
+  await storage.deleteTrustedTwoFactorTokensByUserId(user.id);
   AuthService.invalidateUserCache(user.id);
   await writeAuditEvent(storage, {
     actorUserId: user.id,
