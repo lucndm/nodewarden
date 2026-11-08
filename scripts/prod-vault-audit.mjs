@@ -189,6 +189,12 @@ async function main() {
     database.uuid,
     'SELECT collection_id, org_user_id, read_only FROM collection_users'
   );
+  // The membership rows: the type decides who reaches every collection, the
+  // key is the organization key wrapped for that member.
+  const membershipRows = await queryAll(
+    database.uuid,
+    'SELECT id, user_id, org_id, type, status, key FROM organization_users'
+  );
   const markers = await queryAll(
     database.uuid,
     "SELECT key, value FROM config WHERE key LIKE 'tags.legacy-repair.v1:%'"
@@ -255,6 +261,27 @@ async function main() {
   const itemsInNoCollection = ciphers.filter(
     (cipher) => !!cipher.organization_id && !collectionLinks.has(String(cipher.id))
   ).length;
+  // The same rule the sync uses to decide what a member may see: the personal
+  // items, plus the shared items that sit in a collection the member reaches.
+  const visibleShared = await queryAll(
+    database.uuid,
+    'SELECT DISTINCT C.id AS id FROM ciphers C ' +
+      'INNER JOIN collection_ciphers CC ON CC.cipher_id = C.id ' +
+      'INNER JOIN collections COL ON COL.id = CC.collection_id ' +
+      'INNER JOIN organization_users OU ON OU.org_id = COL.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+      'LEFT JOIN collection_users CU ON CU.collection_id = COL.id AND CU.org_user_id = OU.id ' +
+      'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
+      'LEFT JOIN collection_groups CG ON CG.collection_id = COL.id AND CG.group_id = GU.group_id ' +
+      'WHERE CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1',
+    users.length ? [users[0].id] : ['']
+  );
+  const membershipRowsSummary = membershipRows.map((row) => ({
+    id: row.id,
+    orgId: row.org_id,
+    type: Number(row.type),
+    status: Number(row.status),
+    hasKey: !!String(row.key || '').trim(),
+  }));
   const personalItemRows = ciphers
     .filter((cipher) => !cipher.organization_id)
     .map((cipher) => ({ id: cipher.id, folderId: cipher.folder_id || null }));
@@ -285,6 +312,8 @@ async function main() {
     collectionCipherRows: collectionCipherRows.length,
     collectionUserRows: collectionUserRows.length,
     itemsInNoCollection,
+    visibleSharedItems: visibleShared.length,
+    membershipRows: membershipRowsSummary,
     attachments: attachments.length,
     itemsWithAttachments: attachmentCipherIds.size,
     cipherVersions: versions.length,
