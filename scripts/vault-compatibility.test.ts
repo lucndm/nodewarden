@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { StorageService } from '../src/services/storage';
+import { ensureStorageSchema } from '../src/services/storage-schema';
 import { handleAuthenticatedRoute } from '../src/router-authenticated';
 import { cipherToResponse } from '../src/handlers/ciphers';
 import { bytesToBase64, encryptBw, decryptStr } from '../webapp/src/lib/crypto';
@@ -28,19 +29,6 @@ async function fixture(ctx: TestContext) {
   // result wrapper and unrelated audit/notification integrations are substituted.
   const sqlite = new DatabaseSync(':memory:');
   ctx.after(async () => { await new Promise((resolve) => setImmediate(resolve)); sqlite.close(); });
-  sqlite.exec(`
-    CREATE TABLE ciphers(id TEXT PRIMARY KEY, user_id TEXT, type INTEGER,
-      folder_id TEXT, name TEXT, notes TEXT, favorite INTEGER, data TEXT,
-      reprompt INTEGER, key TEXT, created_at TEXT, updated_at TEXT,
-      archived_at TEXT, deleted_at TEXT);
-    CREATE TABLE cipher_versions(id TEXT PRIMARY KEY, cipher_id TEXT, user_id TEXT,
-      kind TEXT, revision_date TEXT, created_at TEXT, type INTEGER, name TEXT,
-      notes TEXT, key TEXT, reprompt INTEGER, data TEXT);
-    CREATE TABLE attachments(id TEXT PRIMARY KEY, cipher_id TEXT,
-      file_name TEXT, size INTEGER, size_name TEXT, key TEXT);
-    CREATE TABLE folders(id TEXT PRIMARY KEY, user_id TEXT, name TEXT, tag_name TEXT, created_at TEXT, updated_at TEXT);
-    CREATE TABLE devices(user_id TEXT, push_token TEXT);
-  `);
   const db: any = {
     prepare(sql: string) {
       let values: any[] = [];
@@ -61,6 +49,13 @@ async function fixture(ctx: TestContext) {
       return results;
     },
   };
+  // The production schema, so this fixture cannot drift from it again: it had
+  // its own copy of the tables and lost the columns P1 added.
+  await ensureStorageSchema(db);
+  // The fixture writes rows whose user has no row in `users`; the foreign
+  // keys are there to catch production mistakes, not this one.
+  sqlite.exec('PRAGMA foreign_keys = OFF');
+
   let revisionBumps = 0;
   ctx.mock.method(StorageService.prototype, 'updateRevisionDate', async () => {
     revisionBumps += 1;
