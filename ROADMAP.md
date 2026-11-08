@@ -226,7 +226,7 @@ Kiểm chứng này tìm ra và đã sửa **5 lỗi tương thích thật**:
 - Tạo **account thứ hai** (mời bằng invite code của owner), owner **mời** nó vào organization và **bọc khóa organization bằng public key RSA của người mời**; owner gán **collection** cho member (member chỉ thấy item qua collection mình có quyền).
 - Member thứ hai đăng nhập bằng CLI chính thức (data dir riêng) và **đọc được item do owner viết** — đúng tên, đúng username. Đây mới là bài toán chia sẻ thật, không phải mô phỏng phía server.
 - **Sau khi xoay khóa**: member vẫn đọc được item bằng khóa mới, và owner vẫn đọc được item nó đã share. Tức là vòng xoay tạo ra khóa mà **client chính thức mở được** — không chỉ mở được bởi Web Vault của chính mình.
-- `npm run test:local-cli` nay **55 check**, tất cả xanh.
+- `npm run test:local-cli` nay **59 check**, tất cả xanh (59 = 55 + 4 check vòng mời → nhận → cấp khóa → đọc item).
 
 Ngoài ra Web Vault nay **giải mã tên collection** bằng khóa organization (`decryptCollectionNames`), có fallback hiển thị nguyên văn cho collection cũ lưu plaintext — trước đó tên do client thật tạo sẽ hiện thành `2.xxx`.
 
