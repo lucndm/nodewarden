@@ -1031,8 +1031,10 @@ test('the organization list shows an invitation as unanswered', async () => {
   assert.equal(own.status, 0, 'the invitation is not answered yet');
   assert.equal(own.key, null, 'there is no key to open yet');
 
-  // Once the owner hands the key over, the member is confirmed and the key
-  // comes with the list.
+  // Once the member accepts and the owner hands the key over, the member is
+  // confirmed and the key comes with the list.
+  const accepted = await call(env, `https://vault.example.test/api/organizations/${ORG}/accept`, 'POST', 'user-newcomer');
+  assert.equal(accepted.status, 200);
   const membership = await storage.getOrganizationUserForUser(ORG, 'user-newcomer');
   assert.ok(membership);
   const confirmed = await call(

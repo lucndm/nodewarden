@@ -193,7 +193,11 @@ export default function OrganizationDialog(props: OrganizationDialogProps) {
                     <span className="org-member-email" title={label}>
                       {label}
                     </span>
-                    {member.status !== 2 && <span className="org-member-state">{t('txt_member_invited')}</span>}
+                    {member.status !== 2 && (
+                      <span className="org-member-state">
+                        {member.status === 1 ? t('txt_member_accepted') : t('txt_member_invited')}
+                      </span>
+                    )}
                     <select
                       className="input org-member-role"
                       value={String(member.type)}
@@ -205,7 +209,9 @@ export default function OrganizationDialog(props: OrganizationDialogProps) {
                       <option value="1">{t('txt_role_admin')}</option>
                       <option value="2">{t('txt_role_user')}</option>
                     </select>
-                    {member.status !== 2 && (
+                    {/* The key goes only to a member who accepted the invitation;
+                        only the owner gives it to an admin. */}
+                    {member.status === 1 && (isOwner || member.type === 2) && (
                       <button
                         type="button"
                         className="btn btn-secondary small org-member-give-key"
