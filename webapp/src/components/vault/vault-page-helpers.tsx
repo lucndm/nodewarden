@@ -749,6 +749,33 @@ export function sortTimeValue(cipher: Cipher): number {
   return 0;
 }
 
+/**
+ * The name of the day a timestamp falls on, as the user would say it: today
+ * and yesterday are named, the rest is a date.
+ *
+ * The day is the day of the user's own clock, not of the server: the same
+ * moment is today for the person looking at it. The caller passes the label
+ * for today and yesterday so the wording comes from the translation file.
+ */
+export function relativeDayLabel(
+  time: number,
+  labels: { today: string; yesterday: string },
+  now: number = Date.now()
+): string {
+  if (!Number.isFinite(time)) return '';
+  const date = new Date(time);
+  const reference = new Date(now);
+  // The day is compared on the calendar, not by counting days: counting days
+  // from the start of the year makes the day before 1 January look a long way
+  // away.
+  const startOfDay = (value: Date): number =>
+    new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const difference = Math.round((startOfDay(reference) - startOfDay(date)) / 86400000);
+  if (difference === 0) return labels.today;
+  if (difference === 1) return labels.yesterday;
+  return date.toLocaleDateString(undefined, { dateStyle: 'medium' });
+}
+
 export function creationTimeValue(cipher: Cipher): number {
   const time = new Date(String(cipher.creationDate || '')).getTime();
   return Number.isFinite(time) ? time : 0;
