@@ -241,8 +241,9 @@ export async function listEmergencyAccessAwaitingApproval(
  * left waiting for an account holder who may never answer. This is the same
  * rule the upstream applies.
  *
- * A grant that only lets the other person read is not approved by this: it
- * never gives them the account, so there is nothing to wait for.
+ * A grant that only lets the other person read waits just as long: reading
+ * the vault is handing over the whole list of items, so the wait is what
+ * stands between the grant and the items.
  *
  * Returns the grants that were approved, so the owner can be told.
  */
@@ -253,7 +254,6 @@ export async function approveExpiredEmergencyAccess(
   const rows = await listEmergencyAccessAwaitingApproval(db);
   const approved: EmergencyAccessRow[] = [];
   for (const row of rows) {
-    if (row.type !== EMERGENCY_ACCESS_TYPE_TAKEOVER) continue;
     if (!isEmergencyRecoveryAllowed(row, now)) continue;
     await updateEmergencyAccess(db, row.id, {
       status: EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,

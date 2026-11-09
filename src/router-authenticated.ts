@@ -59,6 +59,11 @@ import {
 } from './handlers/ciphers';
 import {
   handleAcceptEmergencyAccess,
+  handleConfirmEmergencyAccess,
+  handleEmergencyAccessPolicies,
+  handleReinviteEmergencyAccess,
+  handleUpdateEmergencyAccess,
+  handleViewEmergencyAccess,
   handleApproveEmergencyAccess,
   handleDeleteEmergencyAccess,
   handleEmergencyAccessPassword,
@@ -398,11 +403,26 @@ export async function handleAuthenticatedRoute(
     if (!action && method === 'GET') {
       return handleGetEmergencyAccess(request, env, userId, emergencyId);
     }
+    if (!action && (method === 'PUT' || method === 'POST')) {
+      return handleUpdateEmergencyAccess(request, env, userId, emergencyId);
+    }
     if (action === 'accept' && (method === 'PUT' || method === 'POST')) {
       return handleAcceptEmergencyAccess(request, env, userId, emergencyId);
     }
     if (action === 'reject' && (method === 'PUT' || method === 'POST')) {
       return handleRejectEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'confirm' && (method === 'PUT' || method === 'POST')) {
+      return handleConfirmEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'reinvite' && (method === 'PUT' || method === 'POST')) {
+      return handleReinviteEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'view' && (method === 'PUT' || method === 'POST')) {
+      return handleViewEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'policies' && method === 'GET') {
+      return handleEmergencyAccessPolicies(request, env, userId, emergencyId);
     }
     if (action === 'initiate' && (method === 'PUT' || method === 'POST')) {
       return handleInitiateEmergencyAccess(request, env, userId, emergencyId);
