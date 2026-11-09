@@ -384,10 +384,27 @@ async function seedVault(baseUrl) {
     throw new Error(`shared item create failed: ${shared.status} ${JSON.stringify(shared.body)}`);
   }
 
+  const memberToken = (
+    await api(baseUrl, '/identity/connect/token', {
+      method: 'POST',
+      form: {
+        grant_type: 'password',
+        username: memberEmail,
+        password: bytesToBase64(memberMasterHash),
+        scope: 'api offline_access',
+        deviceIdentifier: 'local-ui-member',
+        deviceName: 'local ui member',
+        deviceType: '14',
+      },
+    })
+  ).body?.access_token;
+  if (!memberToken) throw new Error('the API did not issue a member token');
+
   return {
     itemId: created.body.id,
     token,
     memberEmail,
+    memberToken,
     organizationId: organization.body.id,
     organizationName: 'UI Team',
     collectionName: 'UI Shared',
@@ -815,15 +832,50 @@ async function main() {
       'the invited member',
       20000
     );
-    checks.ok('a member can be invited and given the organization key', true);
+    checks.ok('a member can be invited', true);
 
-    const membersAfterInvite = await api(worker.baseUrl, `/api/organizations/${seeded.organizationId}/users`, {
-      token: seeded.token,
-    });
-    const invitedRow = (membersAfterInvite.body?.data || []).find(
-      (member) => member.email === seeded.memberEmail
+    const memberRow = async () => {
+      const listed = await api(worker.baseUrl, `/api/organizations/${seeded.organizationId}/users`, {
+        token: seeded.token,
+      });
+      return (listed.body?.data || []).find((member) => member.email === seeded.memberEmail);
+    };
+    checks.ok('the invited member waits for their answer', (await memberRow())?.status === 0);
+    checks.ok(
+      'no key can be given before they accept',
+      !(await evaluate(`!!document.querySelector('.org-member-give-key')`))
     );
-    checks.ok('the invited member is confirmed', !!invitedRow && invitedRow.status === 2);
+
+    // The member accepts; then the owner gives them the organization key,
+    // wrapped with their own RSA key, so they can open the shared items.
+    const accepted = await api(worker.baseUrl, `/api/organizations/${seeded.organizationId}/accept`, {
+      method: 'POST',
+      token: seeded.memberToken,
+    });
+    checks.equal('the member accepts the invitation', accepted.status, 200, JSON.stringify(accepted.body));
+    // The dialog reads the members when it opens, so open it again.
+    await evaluate(`(() => {
+      const button = document.querySelector('.org-dialog .dialog-close-btn');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(`document.querySelector('.org-dialog') === null`, 'the organization dialog to close');
+    await evaluate(`(() => {
+      const target = [...document.querySelectorAll('.sidebar .tree-btn')].find(b => b.textContent.trim() === 'Manage organization');
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.org-member-give-key')`, 'the give-key button for the accepted member', 20000);
+    await evaluate(`(() => {
+      const button = document.querySelector('.org-member-give-key');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(`!document.querySelector('.org-member-give-key')`, 'the member to be confirmed', 20000);
+    checks.ok('the accepted member is given the organization key', (await memberRow())?.status === 2);
 
     // A group hands a set of collections to a set of members in one go.
     await evaluate(`(() => {

@@ -125,15 +125,13 @@ export async function handleCreateOrganization(
 interface InviteMemberBody {
   emails?: unknown;
   type?: unknown;
-  /** The organization key wrapped for each invited member, keyed by email. */
-  keys?: unknown;
 }
 
 // POST /api/organizations/:orgId/users
 //
-// An owner or admin adds a member. The wrapped key for that member is optional
-// here: it can only be produced once the member's public key is known, so the
-// usual flow is invite, then confirm with the wrapped key.
+// An owner or admin invites a member. The membership starts as an invitation:
+// the member accepts it, then an admin confirms it with the organization key
+// wrapped for them. No key goes out with the invitation.
 export async function handleInviteOrganizationUser(
   request: Request,
   env: Env,
@@ -164,8 +162,6 @@ export async function handleInviteOrganizationUser(
     return errorResponse('An organization has one owner', 400);
   }
 
-  const wrappedKeys =
-    body.keys && typeof body.keys === 'object' ? (body.keys as Record<string, unknown>) : {};
   const now = new Date().toISOString();
   const added: string[] = [];
 
@@ -175,28 +171,14 @@ export async function handleInviteOrganizationUser(
     const existing = await storage.getOrganizationUserForUser(orgId, user.id);
     if (existing) continue;
 
-    const wrappedKey = text(wrappedKeys[email], 4096).trim();
     await storage.addOrganizationUser({
       id: crypto.randomUUID(),
       userId: user.id,
       orgId,
       type,
-      // A member whose key was wrapped in the same request is already
-      // confirmed; a member without one stays invited.
-      status: wrappedKey ? STATUS_CONFIRMED : STATUS_INVITED,
+      status: STATUS_INVITED,
       now,
     });
-    if (wrappedKey) {
-      const membership = await storage.getOrganizationUserForUser(orgId, user.id);
-      if (membership) {
-        await storage.confirmOrganizationUser({
-          membershipId: membership.id,
-          orgId,
-          wrappedOrganizationKey: wrappedKey,
-          now,
-        });
-      }
-    }
     added.push(user.id);
   }
 
@@ -209,8 +191,8 @@ interface ConfirmMemberBody {
 
 // POST /api/organizations/:orgId/users/:membershipId/confirm
 //
-// An admin wraps the organization key for the confirmed member and sends it.
-// The server stores the blob and confirms the membership.
+// An admin wraps the organization key for a member who accepted the invitation
+// and sends it. The server stores the blob and confirms the membership.
 export async function handleConfirmOrganizationUser(
   request: Request,
   env: Env,
@@ -237,13 +219,34 @@ export async function handleConfirmOrganizationUser(
     return errorResponse('The wrapped organization key is required', 400);
   }
 
+  const membership = (await storage.getOrganizationUsers(orgId)).find((entry) => entry.id === membershipId);
+  if (!membership) return errorResponse('Organization member not found', 404);
+  // An admin confirms plain members; confirming an admin takes the owner.
+  if (membership.type !== USER_TYPE && requester.type !== OWNER_TYPE) {
+    return errorResponse('Only the owner can confirm an admin', 400);
+  }
+
+  const now = new Date().toISOString();
   const confirmed = await storage.confirmOrganizationUser({
     membershipId,
     orgId,
     wrappedOrganizationKey,
-    now: new Date().toISOString(),
+    now,
   });
-  if (!confirmed) return errorResponse('Organization member not found', 404);
+  if (!confirmed) {
+    // Say why, so the admin knows whether to wait for the member.
+    if (membership.status === STATUS_INVITED) {
+      return errorResponse('The member has not accepted the invitation yet', 400);
+    }
+    if (membership.status === STATUS_CONFIRMED) {
+      return errorResponse('This membership is already confirmed', 400);
+    }
+    return errorResponse('This invitation was withdrawn', 400);
+  }
+
+  // The member's clients sync and pick up the organization key.
+  const revision = await storage.updateRevisionDate(membership.userId, now);
+  notifyVaultSyncForRequest(request, env, membership.userId, revision);
 
   return jsonResponse({ id: membershipId, status: STATUS_CONFIRMED, object: 'organizationUser' }, 200);
 }

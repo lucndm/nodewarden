@@ -561,6 +561,10 @@ export async function addOrganizationUser(
  * The wrapped key comes from an admin's client, which knows the organization
  * key and the member's public key. The server stores the blob: it can neither
  * read the key nor wrap it for anyone.
+ *
+ * Only a membership the member accepted is confirmed. An invitation nobody
+ * answered stays an invitation, so the key never reaches an account whose
+ * owner did not agree to join.
  */
 export async function confirmOrganizationUser(
   db: D1Database,
@@ -568,7 +572,8 @@ export async function confirmOrganizationUser(
 ): Promise<boolean> {
   const result = await db
     .prepare(
-      'UPDATE organization_users SET key = ?, status = 2, updated_at = ? WHERE id = ? AND org_id = ?'
+      'UPDATE organization_users SET key = ?, status = 2, updated_at = ? ' +
+        'WHERE id = ? AND org_id = ? AND status = 1'
     )
     .bind(input.wrappedOrganizationKey, input.now, input.membershipId, input.orgId)
     .run();

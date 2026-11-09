@@ -153,11 +153,10 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
   };
 
   /**
-   * Invites a member and gives them the organization key.
+   * Invites a member.
    *
-   * The invite creates the membership; the key is what makes it a member. It
-   * is wrapped with the member's own RSA key, so a member without a public
-   * key stays invited until they have one.
+   * The invitation is only an offer: the member accepts it, and then an owner
+   * or admin gives them the organization key (giveOrganizationKey).
    */
   const inviteMember = async (organizationId: string, email: string): Promise<boolean> => {
     const address = String(email || '').trim().toLowerCase();
@@ -169,30 +168,8 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
         input.onNotify('warning', t('txt_member_not_found'));
         return false;
       }
-      const members = await getOrganizationMembers(input.authedFetch, organizationId);
-      const invited = members.find((member) => member.userId === userIds[0]);
-      if (!invited) {
-        input.onNotify('warning', t('txt_member_not_found'));
-        return false;
-      }
-
-      const keys = await getMemberPublicKeys(input.authedFetch, organizationId, userIds);
-      const publicKey = keys.get(userIds[0]);
-      const organizationKey = await openOrganizationKeyFor(organizationId);
-      if (!publicKey || !organizationKey) {
-        // The member is invited but cannot be confirmed until they have a key
-        // of their own.
-        input.onNotify('warning', t('txt_member_invited_without_key'));
-        return true;
-      }
-      await confirmOrganizationMember(
-        input.authedFetch,
-        organizationId,
-        invited.id,
-        await wrapKeyForMember(organizationKey, publicKey)
-      );
       await input.onChanged();
-      input.onNotify('success', t('txt_member_invited'));
+      input.onNotify('success', t('txt_member_invited_waiting'));
       return true;
     } catch (error) {
       input.onNotify(

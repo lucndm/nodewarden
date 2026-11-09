@@ -199,10 +199,33 @@ test('the organization key reaches each member wrapped for them', async () => {
   assert.equal(pending.data[0].key, null, 'an invited member has no organization key yet');
   assert.equal(pending.data[0].status, 0, 'the invitation is not answered yet');
 
-  // Confirm with the key wrapped for the member.
+  // The key goes only to a member who said yes to the invitation.
   const memberWrapped = await wrapFor(memberKeys.publicKey, organizationKey);
   const memberMembership = await new StorageService(env.DB).getOrganizationUserForUser(organization.id, MEMBER);
   assert.ok(memberMembership);
+  const tooEarly = await call(
+    env,
+    `https://vault.example.test/api/organizations/${organization.id}/users/${memberMembership.id}/confirm`,
+    'POST',
+    OWNER,
+    { key: memberWrapped.wrapped }
+  );
+  assert.ok(tooEarly);
+  assert.equal(tooEarly.status, 400, 'a member who has not accepted cannot be confirmed');
+  const stillInvited = await new StorageService(env.DB).getOrganizationUserForUser(organization.id, MEMBER);
+  assert.equal(stillInvited?.status, 0, 'the refused confirm leaves the invitation as it was');
+  assert.equal(stillInvited?.key ?? null, null, 'and hands out no key');
+
+  const accepted = await call(
+    env,
+    `https://vault.example.test/api/organizations/${organization.id}/accept`,
+    'POST',
+    MEMBER
+  );
+  assert.ok(accepted);
+  assert.equal(accepted.status, 200);
+
+  // Confirm with the key wrapped for the member.
   const confirmed = await call(
     env,
     `https://vault.example.test/api/organizations/${organization.id}/users/${memberMembership.id}/confirm`,
@@ -351,4 +374,49 @@ test('a backup carries the organization and the wrapped keys across', async () =
     organizationKeyWrapped.wrapped,
     'the wrapped organization key must survive a backup'
   );
+});
+
+test('only the owner confirms an admin, and the confirmed member is told to sync', async () => {
+  const { env, memberKeys, organizationKey } = await fixture();
+  const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
+    name: 'Acme',
+    collectionName: 'Default',
+    key: '2.a|b|c',
+  });
+  assert.ok(created);
+  const organization = (await created.json()) as { id: string };
+  const base = `https://vault.example.test/api/organizations/${organization.id}`;
+
+  // Two admins are invited, and both accept.
+  const invited = await call(env, `${base}/users`, 'POST', OWNER, {
+    emails: ['member@example.test', 'outsider@example.test'],
+    type: 1,
+  });
+  assert.equal(invited?.status, 200);
+  for (const userId of [MEMBER, OUTSIDER]) {
+    const accepted = await call(env, `${base}/accept`, 'POST', userId);
+    assert.equal(accepted?.status, 200);
+  }
+  const storage = new StorageService(env.DB);
+  const memberMembership = await storage.getOrganizationUserForUser(organization.id, MEMBER);
+  const outsiderMembership = await storage.getOrganizationUserForUser(organization.id, OUTSIDER);
+  assert.ok(memberMembership && outsiderMembership);
+  const wrapped = (await wrapFor(memberKeys.publicKey, organizationKey)).wrapped;
+
+  // Confirming the member raises their revision date, so their clients sync
+  // and pick up the organization key.
+  const revisionBefore = await call(env, 'https://vault.example.test/api/accounts/revision-date', 'GET', MEMBER);
+  const before = (await revisionBefore?.json()) as number;
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const byOwner = await call(env, `${base}/users/${memberMembership.id}/confirm`, 'POST', OWNER, { key: wrapped });
+  assert.equal(byOwner?.status, 200, 'the owner confirms an admin');
+  const revisionAfter = await call(env, 'https://vault.example.test/api/accounts/revision-date', 'GET', MEMBER);
+  assert.ok(((await revisionAfter?.json()) as number) > before, 'the confirmed member is told to sync');
+
+  // The member is now a confirmed admin, but an admin does not confirm
+  // another admin: that takes the owner, as in Vaultwarden.
+  const byAdmin = await call(env, `${base}/users/${outsiderMembership.id}/confirm`, 'POST', MEMBER, { key: wrapped });
+  assert.equal(byAdmin?.status, 400, 'an admin cannot confirm another admin');
+  const stillAccepted = await storage.getOrganizationUserForUser(organization.id, OUTSIDER);
+  assert.equal(stillAccepted?.status, 1, 'the refused confirm changes nothing');
 });
