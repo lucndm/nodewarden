@@ -528,7 +528,7 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 - Check "mời trùng" so sánh sai (một bên là id, một bên là email) ⇒ **cho phép** mời trùng. Nay cả hai vế so cùng kiểu.
 - Component đọc trang trước khi danh sách grant tải xong ⇒ check đọc được trang đang ở trạng thái "Loading...". Nay check **đợi danh sách nạp xong** rồi mới đọc.
 
-**Còn lại của lát này (chưa làm):** takeover, thông báo email, thu khoá tự động, và phần **lời mời tới người nhận theo email** (hiện chỉ thấy được trong Web Vault).
+**Còn lại của lát này (chưa làm):** phần **lời mời tới người nhận ngoài Web Vault** — upstream gửi **email** cho cả hai phía (mời, và "đã duyệt"), còn server này **không có kênh mail**. Chủ vault thì đã được báo qua **Telegram**; người được mời thì vẫn phải tự vào Web Vault để thấy lời mời.
 
 
 ## P5 — Alias và doanh nghiệp (F-70–74, F-83–85)
