@@ -314,7 +314,9 @@ Danh sách organization trước đây được tải riêng với `staleTime` 6
 - **Giới hạn đã nói rõ:** một thiết bị đã tải bản rõ của link thì **không thu hồi được từ xa** — thu hồi chỉ chặn được lần mở **tiếp theo**. Đây là giới hạn của mô hình "bản sao có khoá", không phải lỗi cài đặt.
 - **Backup không chứa Send:** Send là thứ tạm, không đưa vào archive (đúng như export của Bitwarden).
 
-**Còn mở:** chưa có check tự động cho **public page** mở link Send trong trình duyệt (`PublicSendPage.tsx` đã có trong Web Vault); chưa kiểm chứng Send **tải file** với extension (mới kiểm chứng dạng text).
+**Public page đã có check tự động trong trình duyệt (2026-11-09):** `scripts/local-send-public-e2e.mts` (chạy bằng `npm run test:local-send-public`, có trong `test:local`) mở link Send thật trong Chromium và kiểm **8** điều: link mở ra nội dung và tên của Send; **khoá sai trong link** thì không lộ nội dung và trang báo lỗi thay vì trắng; **link không có khoá** thì không lộ nội dung; **Send đã xoá** thì không mở được; **Send hết lượt xem** thì không mở được (lần mở đầu vẫn được). Check chạy với khoá thật của client (16 byte seed, HKDF ra enc/mac) nên nó bắt được lỗi thật — đã thử cố tình làm sai khoá và check báo fail.
+
+**Còn mở:** chưa kiểm chứng Send **tải file** với extension (mới kiểm chứng dạng text).
 
 ## P4 — bảo mật sản phẩm (F-50–56, F-60–64)
 
