@@ -1126,6 +1126,13 @@ async function main() {
       return true;
     })()`);
     await waitFor(`!!document.querySelector('.emergency-access-list, .settings-submodule')`, 'the emergency access section', 20000);
+    // The page loads the grants first, so wait for the list to settle before
+    // reading what it says.
+    await waitFor(
+      `!document.body.textContent.includes('Loading...') || !!document.querySelector('.emergency-access-list')`,
+      'the emergency access grants to load',
+      20000
+    );
     const emergencyText = await evaluate('document.body.textContent');
     checks.ok(
       'the settings offer emergency access',
@@ -1145,6 +1152,18 @@ async function main() {
     checks.ok(
       'and it says a takeover is not offered',
       emergencyText.includes('Taking over an account is not offered'),
+      emergencyText.slice(-300)
+    );
+    // The page also shows the invitations this account was given, so the
+    // person who was let in can answer it.
+    checks.ok(
+      'and it shows the invitations this account was given',
+      emergencyText.includes('Invitations for you'),
+      emergencyText.slice(-300)
+    );
+    checks.ok(
+      'and says nobody has let them in when there is none',
+      emergencyText.includes('Nobody has let you into their vault.'),
       emergencyText.slice(-300)
     );
 

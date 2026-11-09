@@ -425,7 +425,8 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 - **Bảng `emergency_access`** (`migrations/0001_init.sql` + `src/services/storage-schema.ts`), cột theo đúng hình dạng upstream nên client chính thức đọc được: `grantor_id`, `grantee_id`, `email`, `wrapped_key`, `type`, `status`, `wait_time_days`, `recovery_initiated_at`. `schema.version` bump lên `2026-11-09-emergency-access` và bảng được đưa vào `REQUIRED_SCHEMA_TABLES` để instance nào chỉ nâng cấp dở thì chạy lại bootstrap.
 - **Storage** (`src/services/storage-emergency-access-repo.ts`): grant tìm được từ **cả hai phía** (người cho và người được cho), grant **chưa ai nhận** tìm được theo **địa chỉ** đã gửi, và hạn chờ tính từ **lúc bắt đầu phục hồi** (`recovery_initiated_at + wait_time_days`), đúng quy tắc upstream.
 - **Route** (`src/handlers/emergency-access.ts` + `src/router-authenticated.ts`) theo hình dạng upstream: `GET /trusted`, `GET /granted`, `GET /:id`, `POST /invite`, `PUT /:id/accept`, `PUT /:id/reject`, `DELETE /:id`.
-- **UI** (`webapp/src/components/EmergencyAccessSettings.tsx`, mục **Emergency access** trong Settings): xem grant, rút grant, mời người — và **nói thẳng trên trang** những gì nó **không** làm.
+- **UI** (`webapp/src/components/EmergencyAccessSettings.tsx`, mục **Emergency access** trong Settings): xem grant, rút grant, mời người — và **nói thẳng trên trang** những gì nó **không** làm. API calls đi qua `webapp/src/lib/api/emergency-access.ts` như các module API khác.
+- **Phía người được mời**: cùng trang đó hiện **lời mời mà tài khoản này nhận được** với nút **Accept** / **Decline**, và nói rõ khi chưa có lời mời nào.
 
 **Ba giới hạn đã nói rõ (không hứa quá):**
 
@@ -433,14 +434,15 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 2. **Không làm takeover.** Takeover nghĩa là đổi master key của chủ ⇒ phải **re-encrypt toàn vault**, mà hiện chưa có đường đó (`reencryptPayload` chỉ chạy được cho **một item** và **một tổ chức**). Lời mời takeover bị **từ chối** (400) chứ không nhận rồi không thực hiện được.
 3. **Không hứa thu khoá tức thì.** Thời gian chờ được lưu và hạn được tính, nhưng việc **thu khoá** khi hết hạn cần một lần quét; server không tự chạy việc đó.
 
-**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **4 check UI** trong `scripts/local-ui-e2e.mts`: trang có mục Emergency access, nói rõ server **không giữ khoá nào mở được**, nói rõ **không gửi email**, nói rõ **không có takeover**. Tổng UI e2e: **50/50**.
+**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **6 check UI** trong `scripts/local-ui-e2e.mts`: trang có mục Emergency access, nói rõ server **không giữ khoá nào mở được**, nói rõ **không gửi email**, nói rõ **không có takeover**, và phía người được mời thấy **lời mời của mình** (kèm dòng "chưa có ai cho bạn vào"). Tổng UI e2e: **52/52**.
 
-**Hai lỗi thật do test bắt được trong lúc làm:**
+**Ba lỗi thật do test bắt được trong lúc làm:**
 
 - `updateEmergencyAccess` ghi **đè mọi** field không nêu ⇒ một bước chỉ đổi trạng thái cũng **xoá thời gian chờ** (deadline ra 2026-01-02 thay vì 2026-01-08). Nay field không nêu thì **giữ nguyên giá trị cũ**.
 - Check "mời trùng" so sánh sai (một bên là id, một bên là email) ⇒ **cho phép** mời trùng. Nay cả hai vế so cùng kiểu.
+- Component đọc trang trước khi danh sách grant tải xong ⇒ check đọc được trang đang ở trạng thái "Loading...". Nay check **đợi danh sách nạp xong** rồi mới đọc.
 
-**Còn lại của lát này (chưa làm):** takeover, thông báo email, thu khoá tự động, và phần **nhận lời mời ở phía người được mời** (route có, UI chưa có).
+**Còn lại của lát này (chưa làm):** takeover, thông báo email, thu khoá tự động, và phần **lời mời tới người nhận theo email** (hiện chỉ thấy được trong Web Vault).
 
 
 ## P5 — Alias và doanh nghiệp (F-70–74, F-83–85)

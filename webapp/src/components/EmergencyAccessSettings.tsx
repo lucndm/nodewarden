@@ -13,16 +13,16 @@ import { useEffect, useState } from 'preact/hooks';
 import { ShieldCheck, Trash2, UserPlus } from 'lucide-preact';
 import { t } from '@/lib/i18n';
 import type { AuthedFetch } from '@/lib/api/shared';
-
-export interface EmergencyAccessGrant {
-  id: string;
-  status: number;
-  type: number;
-  waitTimeDays: number;
-  email?: string | null;
-  name?: string | null;
-  grantorId?: string | null;
-}
+import {
+  acceptEmergencyAccess,
+  getGrantedEmergencyAccess,
+  getTrustedEmergencyAccess,
+  inviteEmergencyAccess,
+  rejectEmergencyAccess,
+  withdrawEmergencyAccess,
+  type EmergencyAccessGranteeDetails,
+  type EmergencyAccessGrantorDetails,
+} from '@/lib/api/emergency-access';
 
 interface EmergencyAccessSettingsProps {
   authedFetch?: AuthedFetch | null;
@@ -37,7 +37,8 @@ const STATUS_LABELS: Record<number, string> = {
 };
 
 export default function EmergencyAccessSettings(props: EmergencyAccessSettingsProps) {
-  const [grants, setGrants] = useState<EmergencyAccessGrant[]>([]);
+  const [grants, setGrants] = useState<EmergencyAccessGranteeDetails[]>([]);
+  const [received, setReceived] = useState<EmergencyAccessGrantorDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [email, setEmail] = useState('');
@@ -52,10 +53,14 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
     setLoading(true);
     setError('');
     try {
-      const response = await props.authedFetch('/api/emergency-access/trusted');
-      if (!response.ok) throw new Error('failed');
-      const body = (await response.json()) as { data?: EmergencyAccessGrant[] };
-      setGrants(Array.isArray(body.data) ? body.data : []);
+      // One of the two lists failing must not hide the other: the grants this
+      // account gave and the ones it was given are separate things.
+      const [given, got] = await Promise.all([
+        getTrustedEmergencyAccess(props.authedFetch).catch(() => [] as EmergencyAccessGranteeDetails[]),
+        getGrantedEmergencyAccess(props.authedFetch).catch(() => [] as EmergencyAccessGrantorDetails[]),
+      ]);
+      setGrants(given);
+      setReceived(got);
     } catch {
       setError(t('txt_emergency_access_load_failed'));
     } finally {
@@ -67,33 +72,41 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
     void load();
   }, []);
 
+  const answer = async (id: string, action: 'accept' | 'reject') => {
+    if (!props.authedFetch) return;
+    setError('');
+    try {
+      if (action === 'accept') await acceptEmergencyAccess(props.authedFetch, id);
+      else await rejectEmergencyAccess(props.authedFetch, id);
+      await load();
+    } catch {
+      setError(
+        action === 'accept'
+          ? t('txt_emergency_access_accept_failed')
+          : t('txt_emergency_access_reject_failed')
+      );
+    }
+  };
+
   const invite = async () => {
     if (!props.authedFetch || !email.trim()) return;
     setInviting(true);
     setError('');
     try {
-      const response = await props.authedFetch('/api/emergency-access/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          type: 0,
-          waitTimeDays: waitDays,
-          // The key the grantor wraps for the grantee is added by the caller
-          // that holds the vault key; this page cannot wrap it, so the
-          // invitation is made without one and the server refuses it.
-          encryptedUserKey: '',
-        }),
+      await inviteEmergencyAccess(props.authedFetch, {
+        email: email.trim(),
+        type: 0,
+        waitTimeDays: waitDays,
+        // The key the grantor wraps for the grantee is made by the caller
+        // that holds the vault key. This page does not hold it, so the
+        // invitation goes without one and the server refuses it rather than
+        // storing a grant that could never be opened.
+        encryptedUserKey: '',
       });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { message?: string } | null;
-        setError(body?.message || t('txt_emergency_access_invite_failed'));
-        return;
-      }
       setEmail('');
       await load();
-    } catch {
-      setError(t('txt_emergency_access_invite_failed'));
+    } catch (error) {
+      setError(error instanceof Error && error.message ? error.message : t('txt_emergency_access_invite_failed'));
     } finally {
       setInviting(false);
     }
@@ -103,13 +116,7 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
     if (!props.authedFetch) return;
     setError('');
     try {
-      const response = await props.authedFetch(`/api/emergency-access/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        setError(t('txt_emergency_access_withdraw_failed'));
-        return;
-      }
+      await withdrawEmergencyAccess(props.authedFetch, id);
       await load();
     } catch {
       setError(t('txt_emergency_access_withdraw_failed'));
@@ -157,6 +164,47 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
                 >
                   <Trash2 size={14} className="btn-icon" /> {t('txt_emergency_access_withdraw')}
                 </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="settings-submodule">
+        <h4>{t('txt_emergency_access_received_title')}</h4>
+        <p className="muted-inline settings-field-note">{t('txt_emergency_access_received_help')}</p>
+        {loading ? (
+          <p className="muted-inline">{t('txt_loading')}</p>
+        ) : received.length === 0 ? (
+          <p className="muted-inline">{t('txt_emergency_access_no_received')}</p>
+        ) : (
+          <ul className="emergency-access-list">
+            {received.map((grant) => (
+              <li key={grant.id} className="emergency-access-row">
+                <div>
+                  <strong>{grant.name || grant.email || t('txt_emergency_access_grantor')}</strong>
+                  <div className="muted-inline settings-field-note">
+                    {t(STATUS_LABELS[grant.status] || 'txt_emergency_access_invited')}
+                  </div>
+                </div>
+                {grant.status < 2 && (
+                  <div className="actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary small"
+                      onClick={() => void answer(grant.id, 'accept')}
+                    >
+                      {t('txt_emergency_access_accept')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary small"
+                      onClick={() => void answer(grant.id, 'reject')}
+                    >
+                      {t('txt_emergency_access_reject')}
+                    </button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
