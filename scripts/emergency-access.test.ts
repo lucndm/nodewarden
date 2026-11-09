@@ -171,14 +171,22 @@ test('the grantee declines and the grant is gone', async () => {
   assert.equal((await trusted.json()).data.length, 0);
 });
 
-test('an invitation without a wrapped key is refused', async () => {
+test('an invitation without a wrapped key is accepted, because the key comes later', async () => {
   const { env } = await fixture();
-  const refused = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
+  // The official client invites with the address, the kind of access and the
+  // wait, and hands the key over when it confirms the grant.
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
     email: 'grantee@example.test',
     type: 0,
     waitTimeDays: 7,
   });
-  assert.equal(refused.status, 400);
+  assert.equal(invited.status, 200);
+  const { id } = (await invited.json()) as { id: string };
+
+  // The grant is not confirmed yet, so nothing can be started with it.
+  await call(env, 'PUT', `/api/emergency-access/${id}/accept`, GRANTEE);
+  const tooSoon = await call(env, 'PUT', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  assert.equal(tooSoon.status, 404, 'the grant cannot be started before the key is handed over');
 });
 
 test('an invitation without an address is refused', async () => {

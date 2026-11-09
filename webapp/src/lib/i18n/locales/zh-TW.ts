@@ -663,7 +663,7 @@ const zhTW: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "無法開始等待。",
   "txt_emergency_access_approve_failed": "無法批准復原。",
   "txt_emergency_access_title": "緊急存取",
-  "txt_emergency_access_intro": "當你無法進入時讓其他人進入。交出的金鑰已為對方加密，因此本伺服器從不保存可開啟的金鑰。不會寄送郵件：邀請顯示在這裡，對方需登入才能看到。接管可讓你更換主密碼，但必須先經過你選擇的等待時間並得到你的批准。",
+  "txt_emergency_access_intro": "當你無法進入時讓其他人進入。交出的金鑰已為對方加密，因此本伺服器從不保存可開啟的金鑰。不會寄送郵件：邀請顯示在這裡，對方需登入才能看到。接管可讓你更換主密碼，但必須先經過你選擇的等待時間，除非你提前親自批准；無論哪種情況，你都可以隨時在此撤銷該授權。若本實例開啟了 Telegram 通知，對方申請接管時會在這裡通知你。",
   "txt_emergency_access_grants": "你允許進入的人",
   "txt_emergency_access_no_grants": "沒有人能存取此保管庫。",
   "txt_emergency_access_invite_title": "讓某人進入",

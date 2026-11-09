@@ -610,7 +610,7 @@ const de: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "Die Wartezeit konnte nicht begonnen werden.",
   "txt_emergency_access_approve_failed": "Die Wiederherstellung konnte nicht genehmigt werden.",
   "txt_emergency_access_title": "Notfallzugang",
-  "txt_emergency_access_intro": "Lass jemanden herein, wenn Sie selbst nicht hineinkommen. Der übergebene Schlüssel ist für sie umschlossen, daher hält dieser Server nie einen Schlüssel, den er öffnen könnte. Es wird keine E-Mail verschickt: die Einladung erscheint hier, und sie müssen sich anmelden, um sie zu sehen. Eine Übernahme lässt sie Ihr Master-Passwort ersetzen, aber erst nach Ablauf der von Ihnen gewählten Wartezeit und nach Ihrer Zustimmung.",
+  "txt_emergency_access_intro": "Lass jemanden herein, wenn Sie selbst nicht hineinkommen. Der übergebene Schlüssel ist für sie umschlossen, daher hält dieser Server nie einen Schlüssel, den er öffnen könnte. Es wird keine E-Mail verschickt: die Einladung erscheint hier, und sie müssen sich anmelden, um sie zu sehen. Eine Übernahme lässt sie Ihr Master-Passwort ersetzen, aber erst nach Ablauf der von Ihnen gewählten Wartezeit, sofern Sie sie nicht selbst früher freigeben; wie auch immer, Sie können sie hier jederzeit zurückziehen. Ist für diese Instanz eine Telegram-Meldung eingerichtet, erfahren Sie dort, wenn jemand die Übernahme verlangt.",
   "txt_emergency_access_grants": "Personen, die Sie hereinlassen",
   "txt_emergency_access_no_grants": "Niemand hat Zugriff auf diesen Tresor.",
   "txt_emergency_access_invite_title": "Jemanden hereinlassen",

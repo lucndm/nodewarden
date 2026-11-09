@@ -613,7 +613,7 @@ const zhCN: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "无法开始等待。",
   "txt_emergency_access_approve_failed": "无法批准恢复。",
   "txt_emergency_access_title": "紧急访问",
-  "txt_emergency_access_intro": "当你无法进入时让其他人进入。交出的密钥已为对方加密，因此本服务器从不保存可打开的密钥。不会发送邮件：邀请显示在这里，对方需登录才能看到。接管可让你更换主密码，但必须先经过你选择的等待时间并得到你的批准。",
+  "txt_emergency_access_intro": "当你无法进入时让其他人进入。交出的密钥已为对方加密，因此本服务器从不保存可打开的密钥。不会发送邮件：邀请显示在这里，对方需登录才能看到。接管可让你更换主密码，但必须先经过你选择的等待时间，除非你提前亲自批准；无论哪种情况，你都可以随时在此撤销该授权。若本实例开启了 Telegram 通知，对方申请接管时会在这里通知你。",
   "txt_emergency_access_grants": "你允许进入的人",
   "txt_emergency_access_no_grants": "没有人能访问此保险库。",
   "txt_emergency_access_invite_title": "让某人进入",

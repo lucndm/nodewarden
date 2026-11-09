@@ -29,6 +29,7 @@ import {
   EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
   EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED,
   EMERGENCY_ACCESS_TYPE_TAKEOVER,
+  EMERGENCY_ACCESS_TYPE_VIEW,
   createEmergencyAccess,
   updateEmergencyAccess,
 } from '../src/services/storage-emergency-access-repo';
@@ -43,6 +44,11 @@ const NOW = '2026-01-01T00:00:00.000Z';
 async function fixture(): Promise<{ env: Env; storage: StorageService }> {
   const db = new DatabaseSync(':memory:');
   await ensureStorageSchema(sqliteD1(db));
+  // The rate limiter makes its own table, but it only does so once per
+  // process, so a fresh database here has to have the table already.
+  db.exec(
+    'CREATE TABLE IF NOT EXISTS rate_limit_buckets(bucket_key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)'
+  );
   const env = { DB: sqliteD1(db) } as unknown as Env;
   const storage = new StorageService(env.DB);
   for (const [id, email] of [
@@ -143,18 +149,12 @@ test('the grantee starts the wait and the grantor approves it', async () => {
   assert.equal(initiated.status, 200);
   assert.equal((await initiated.json()).status, EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED);
 
-  // The wait has not passed yet, so the grantor cannot approve.
-  const tooEarly = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
-  assert.equal(tooEarly.status, 400, 'the wait cannot be shortened by approving early');
-
-  // Once the wait has passed, the grantor approves.
-  await updateEmergencyAccess(env.DB, id, {
-    recoveryInitiatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: NOW,
-  });
-  const approved = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
-  assert.equal(approved.status, 200);
-  assert.equal((await approved.json()).status, EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED);
+  // The wait has not passed yet. The grantor may still approve, because the
+  // grantor answering is consent; the wait is for the case where nobody
+  // answers at all.
+  const early = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
+  assert.equal(early.status, 200, 'the grantor may approve before the wait is over');
+  assert.equal((await early.json()).status, EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED);
 });
 
 test('the wait is counted in days, so a day has to pass', async () => {
@@ -162,20 +162,33 @@ test('the wait is counted in days, so a day has to pass', async () => {
   const id = await confirmedGrant(env, { waitTimeDays: 7 });
   await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
 
-  // Six days is not seven.
+  // Six days is not seven: the automatic approval waits for the whole wait.
   await updateEmergencyAccess(env.DB, id, {
     recoveryInitiatedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: NOW,
   });
-  const tooEarly = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
-  assert.equal(tooEarly.status, 400);
+  const tooEarly = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(tooEarly.length, 0, 'the automatic approval waits for the whole wait');
 
   await updateEmergencyAccess(env.DB, id, {
     recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: NOW,
   });
-  const approved = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
-  assert.equal(approved.status, 200);
+  const approved = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(approved.length, 1, 'after seven days the grant stands on its own');
+});
+
+test('only the grantor can approve, and the person who was let in cannot', async () => {
+  const { env } = await fixture();
+  const id = await confirmedGrant(env);
+  await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+
+  // The person who was let in cannot approve their own takeover.
+  const byGrantee = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTEE);
+  assert.equal(byGrantee.status, 404, 'the person who was let in cannot approve');
+
+  const byGrantor = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
+  assert.equal(byGrantor.status, 200, 'the grantor can approve');
 });
 
 test('somebody else cannot start or approve the recovery', async () => {
@@ -411,7 +424,7 @@ test('the wait ends on its own, without the account holder answering', async () 
   });
 
   const approvedTooEarly = await approveExpiredEmergencyAccess(env.DB);
-  assert.equal(approvedTooEarly, 0, 'the wait is still running');
+  assert.equal(approvedTooEarly.length, 0, 'the wait is still running');
   const still = await getEmergencyAccess(env.DB, id);
   assert.equal(still?.status, EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED);
 
@@ -421,12 +434,16 @@ test('the wait ends on its own, without the account holder answering', async () 
     updatedAt: NOW,
   });
   const approved = await approveExpiredEmergencyAccess(env.DB);
-  assert.equal(approved, 1);
+  assert.equal(approved.length, 1);
+  // The owner has to hear about it, so the grant that was approved is handed
+  // back for them to be told.
+  assert.equal(approved[0].grantorId, GRANTOR);
+  assert.equal(approved[0].granteeId, GRANTEE);
   const row = await getEmergencyAccess(env.DB, id);
   assert.equal(row?.status, EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED);
 });
 
-test('the wait does not end early for a grant that only lets the other person read', async () => {
+test('a grant that only lets the other person read waits just as long', async () => {
   const { env } = await fixture();
   const id = 'sweep-view-grant';
   await createEmergencyAccess(env.DB, {
@@ -435,17 +452,119 @@ test('the wait does not end early for a grant that only lets the other person re
     granteeId: GRANTEE,
     email: 'grantee@example.test',
     wrappedKey: '4.placeholder-not-a-real-key',
-    type: 0,
+    type: EMERGENCY_ACCESS_TYPE_VIEW,
     status: EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED,
-    waitTimeDays: 1,
-    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    waitTimeDays: 7,
+    recoveryInitiatedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
     lastNotificationAt: null,
     createdAt: NOW,
     updatedAt: NOW,
   });
 
+  // Reading the vault hands over the whole list of items, so the wait is
+  // what stands between the grant and the items.
   const approved = await approveExpiredEmergencyAccess(env.DB);
-  assert.equal(approved, 0, 'a view grant is never approved by the sweep');
+  assert.equal(approved.length, 0, 'the wait is still running');
   const row = await getEmergencyAccess(env.DB, id);
   assert.equal(row?.status, EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED);
+
+  await updateEmergencyAccess(env.DB, id, {
+    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: NOW,
+  });
+  const later = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(later.length, 1, 'after the wait the read access opens too');
+});
+
+test('the owner is told that somebody asked to take over', async () => {
+  const { env } = await fixture();
+  const id = 'notice-grant';
+  await createEmergencyAccess(env.DB, {
+    id,
+    grantorId: GRANTOR,
+    granteeId: GRANTEE,
+    email: 'grantee@example.test',
+    wrappedKey: '4.placeholder-not-a-real-key',
+    type: EMERGENCY_ACCESS_TYPE_TAKEOVER,
+    status: EMERGENCY_ACCESS_STATUS_CONFIRMED,
+    waitTimeDays: 7,
+    recoveryInitiatedAt: null,
+    lastNotificationAt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  } as never);
+
+  const sent: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (new URL(String(input)).hostname === 'api.telegram.org') {
+      sent.push(String(init?.body || ''));
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return original(input, init);
+  }) as typeof fetch;
+  const talking = { ...env, TELEGRAM_BOT_TOKEN: '123456:AAF-fake', TELEGRAM_CHAT_ID: '-1001234567890' } as Env;
+  try {
+    const response = await call(talking, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+    assert.equal(response.status, 200);
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.equal(sent.length, 1, 'the owner is told once');
+  assert.ok(sent[0].includes('asked to take over'), sent[0].slice(0, 200));
+  assert.ok(sent[0].includes(GRANTOR.slice(0, 8)), 'it names the vault of the owner');
+});
+
+test('a request without the Telegram secrets still works', async () => {
+  const { env } = await fixture();
+  const id = 'no-notice-grant';
+  await createEmergencyAccess(env.DB, {
+    id,
+    grantorId: GRANTOR,
+    granteeId: GRANTEE,
+    email: 'grantee@example.test',
+    wrappedKey: '4.placeholder-not-a-real-key',
+    type: EMERGENCY_ACCESS_TYPE_TAKEOVER,
+    status: EMERGENCY_ACCESS_STATUS_CONFIRMED,
+    waitTimeDays: 7,
+    recoveryInitiatedAt: null,
+    lastNotificationAt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  } as never);
+  const response = await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  assert.equal(response.status, 200, 'the request succeeds even with no way to send a notice');
+});
+
+test('the owner is told when the account has actually been taken over', async () => {
+  const { env } = await fixture();
+  const id = await confirmedGrant(env);
+  const sent: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (new URL(String(input)).hostname === 'api.telegram.org') {
+      sent.push(String(init?.body || ''));
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return original(input, init);
+  }) as typeof fetch;
+  const talking = { ...env, TELEGRAM_BOT_TOKEN: '123456:AAF-fake', TELEGRAM_CHAT_ID: '-1001234567890' } as Env;
+  try {
+    await call(talking, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+    await updateEmergencyAccess(talking.DB, id, {
+      recoveryInitiatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      updatedAt: NOW,
+    });
+    await call(talking, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
+    const changed = await call(talking, 'POST', `/api/emergency-access/${id}/password`, GRANTEE, {
+      newMasterPasswordHash: 'new-hash',
+      key: '2.bmV3|dmV3|bmV3',
+    });
+    assert.equal(changed.status, 200);
+  } finally {
+    globalThis.fetch = original;
+  }
+  const takeover = sent.filter((body) => body.includes('has taken over your vault'));
+  assert.equal(takeover.length, 1, 'the owner is told once that the account is gone');
+  assert.ok(takeover[0].includes('master password of the account has been replaced'), takeover[0].slice(0, 300));
 });

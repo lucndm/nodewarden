@@ -610,7 +610,7 @@ const it: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "Non è stato possibile iniziare l’attesa.",
   "txt_emergency_access_approve_failed": "Non è stato possibile approvare il ripristino.",
   "txt_emergency_access_title": "Accesso di emergenza",
-  "txt_emergency_access_intro": "Lascia entrare qualcuno quando non riesci a entrare tu stesso. La chiave che consegni è avvolta per quella persona, quindi questo server non conserva mai una chiave che potrebbe aprire. Non viene inviata alcuna e-mail: l’invito compare qui e quella persona deve accedere per vederlo. Il takeover le permette di sostituire la tua master password, ma solo dopo il tempo di attesa che hai scelto e la tua approvazione.",
+  "txt_emergency_access_intro": "Lascia entrare qualcuno quando non riesci a entrare tu stesso. La chiave che consegni è avvolta per quella persona, quindi questo server non conserva mai una chiave che potrebbe aprire. Non viene inviata alcuna e-mail: l’invito compare qui e quella persona deve accedere per vederlo. Il takeover le permette di sostituire la tua master password, ma solo dopo il tempo di attesa che hai scelto, a meno che non l’approvi prima tu stesso; in ogni caso puoi revocare l’autorizzazione qui quando vuoi. Se su questa istanza sono attivi gli avvisi Telegram, lì verrai avvisato quando qualcuno chiede il takeover.",
   "txt_emergency_access_grants": "Persone che lasci entrare",
   "txt_emergency_access_no_grants": "Nessuno ha accesso a questo vault.",
   "txt_emergency_access_invite_title": "Lascia entrare qualcuno",

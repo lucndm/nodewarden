@@ -610,7 +610,7 @@ const sv: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "Väntan kunde inte startas.",
   "txt_emergency_access_approve_failed": "Återställningen kunde inte godkännas.",
   "txt_emergency_access_title": "Nödinåtkomst",
-  "txt_emergency_access_intro": "Låt någon komma in när du inte kan komma in själv. Nyckeln du lämnar över är omsluten för dem, så servern håller aldrig en nyckel den skulle kunna öppna. Inget mejl skickas: inbjudan syns här, och de måste logga in för att se den. En takeover låter dem byta ditt huvudlösenord, men först efter den väntetid du valt och ditt godkännande.",
+  "txt_emergency_access_intro": "Låt någon komma in när du inte kan komma in själv. Nyckeln du lämnar över är omsluten för dem, så servern håller aldrig en nyckel den skulle kunna öppna. Inget mejl skickas: inbjudan syns här, och de måste logga in för att se den. En takeover låter dem byta ditt huvudlösenord, men först efter den väntetid du valt, om du inte godkänner den själv tidigare; hur som helst kan du återkalla den här när du vill. Om Telegram-aviseringar är påslagna i den här instansen får du veta det där när någon begär takeover.",
   "txt_emergency_access_grants": "Personer du låter in",
   "txt_emergency_access_no_grants": "Ingen har tillgång till det här valvet.",
   "txt_emergency_access_invite_title": "Låt någon komma in",

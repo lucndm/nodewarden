@@ -610,7 +610,7 @@ const fr: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "L’attente n’a pas pu commencer.",
   "txt_emergency_access_approve_failed": "La récupération n’a pas pu être approuvée.",
   "txt_emergency_access_title": "Accès d’urgence",
-  "txt_emergency_access_intro": "Laissez quelqu’un entrer quand vous ne pouvez pas entrer vous-même. La clé que vous confiez est enveloppée pour cette personne, donc ce serveur ne conserve jamais de clé qu’il pourrait ouvrir. Aucun e-mail n’est envoyé : l’invitation apparaît ici, et la personne doit se connecter pour la voir. Une prise de contrôle lui permet de remplacer votre mot de passe maître, mais seulement après le délai que vous avez choisi et votre approbation.",
+  "txt_emergency_access_intro": "Laissez quelqu’un entrer quand vous ne pouvez pas entrer vous-même. La clé que vous confiez est enveloppée pour cette personne, donc ce serveur ne conserve jamais de clé qu’il pourrait ouvrir. Aucun e-mail n’est envoyé : l’invitation apparaît ici, et la personne doit se connecter pour la voir. Une prise de contrôle lui permet de remplacer votre mot de passe maître, mais seulement après le délai que vous avez choisi, sauf si vous l’approuvez vous-même plus tôt ; dans tous les cas vous pouvez la retirer ici à tout moment. Si des alertes Telegram sont activées sur cette instance, vous en êtes averti là quand quelqu’un demande la prise de contrôle.",
   "txt_emergency_access_grants": "Personnes que vous laissez entrer",
   "txt_emergency_access_no_grants": "Personne n’a accès à ce coffre.",
   "txt_emergency_access_invite_title": "Laisser quelqu’un entrer",
