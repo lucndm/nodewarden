@@ -151,7 +151,10 @@ import {
   handleGetOrganizationRotationData,
   handleGetOrganizationUsers,
   handleGetOrganizations,
+  handleGetOrganizationKeys,
   handleInviteOrganizationUser,
+  handleLeaveOrganization,
+  handleSetOrganizationKeys,
   handleUnsupportedOrganizationAction,
 } from './handlers/organizations';
 
@@ -593,6 +596,22 @@ export async function handleAuthenticatedRoute(
     const acceptMatch = path.match(/^\/api\/organizations\/([^/]+)\/accept$/i);
     if (acceptMatch) {
       if (method === 'POST') return handleAcceptOrganization(request, env, userId, acceptMatch[1]);
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // GET and POST /api/organizations/:orgId/keys — the public key a member
+    // reads, and the admin action that sets the key pair.
+    const keysMatch = path.match(/^\/api\/organizations\/([^/]+)\/keys$/i);
+    if (keysMatch) {
+      if (method === 'GET') return handleGetOrganizationKeys(request, env, userId, keysMatch[1]);
+      if (method === 'POST') return handleSetOrganizationKeys(request, env, userId, keysMatch[1]);
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // POST /api/organizations/:orgId/leave — the member leaves.
+    const leaveMatch = path.match(/^\/api\/organizations\/([^/]+)\/leave$/i);
+    if (leaveMatch) {
+      if (method === 'POST') return handleLeaveOrganization(request, env, userId, leaveMatch[1]);
       return handleUnsupportedOrganizationAction();
     }
 

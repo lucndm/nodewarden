@@ -936,6 +936,91 @@ export async function handleRemoveOrganizationUser(
   return new Response(null, { status: 204 });
 }
 
+// GET /api/organizations/:orgId/keys
+//
+// The public key of the organization's RSA key pair. The official clients read
+// it from here for account recovery enrollment and the organization settings.
+// vaultwarden's `get_organization_keys` answers a member of the organization
+// with the public key alone: the private key never leaves the organization.
+export async function handleGetOrganizationKeys(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const membership = await storage.getOrganizationUserForUser(orgId, userId);
+  if (!membership || membership.status !== STATUS_CONFIRMED) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  const organizations = await storage.getOrganizationsForUser(userId);
+  const organization = organizations.find((entry) => entry.id === orgId);
+  if (!organization) return errorResponse('Organization not found', 404);
+
+  return jsonResponse(
+    {
+      object: 'organizationPublicKey',
+      publicKey: organization.publicKey,
+    },
+    200
+  );
+}
+
+// POST /api/organizations/:orgId/keys
+//
+// Setting the key pair is an owner or admin action. vaultwarden's
+// `post_org_keys` refuses once the organization holds both keys, and every
+// NodeWarden organization gets its key pair when it is created, so the
+// official path has nothing left to write.
+export async function handleSetOrganizationKeys(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const requester = await requireOrgAdmin(storage, orgId, userId);
+  if (!requester) return errorResponse('Organization not found', 404);
+
+  const organizations = await storage.getOrganizationsForUser(userId);
+  const organization = organizations.find((entry) => entry.id === orgId);
+  if (organization?.publicKey && organization?.privateKey) {
+    return errorResponse('Organization keys already exist', 400);
+  }
+  return handleUnsupportedOrganizationAction();
+}
+
+// POST /api/organizations/:orgId/leave
+//
+// A member who leaves keeps the organization key they already unwrapped, the
+// same as a member who is removed, so the organization is left marked as
+// needing a key rotation. vaultwarden refuses when the last owner would
+// leave, which keeps an organization from losing every owner.
+export async function handleLeaveOrganization(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const membership = await storage.getOrganizationUserForUser(orgId, userId);
+  if (!membership || membership.status !== STATUS_CONFIRMED) {
+    return errorResponse('You need to be a confirmed member of the organization to leave it', 400);
+  }
+
+  if (membership.type === OWNER_TYPE) {
+    const owners = (await storage.getOrganizationUsers(orgId)).filter(
+      (entry) => entry.type === OWNER_TYPE && entry.status === STATUS_CONFIRMED
+    );
+    if (owners.length <= 1) return errorResponse("The last owner can't leave", 400);
+  }
+
+  const removed = await storage.removeOrganizationUser(orgId, membership.id);
+  if (!removed) return errorResponse('Organization member not found', 404);
+  return new Response(null, { status: 200 });
+}
+
 interface RotateKeyBody {
   privateKey?: unknown;
   members?: unknown;
