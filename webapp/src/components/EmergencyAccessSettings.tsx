@@ -15,8 +15,10 @@ import { t } from '@/lib/i18n';
 import type { AuthedFetch } from '@/lib/api/shared';
 import {
   acceptEmergencyAccess,
+  approveEmergencyAccess,
   getGrantedEmergencyAccess,
   getTrustedEmergencyAccess,
+  initiateEmergencyAccess,
   inviteEmergencyAccess,
   rejectEmergencyAccess,
   withdrawEmergencyAccess,
@@ -36,6 +38,13 @@ const STATUS_LABELS: Record<number, string> = {
   4: 'txt_emergency_access_recovery_approved',
 };
 
+// A view grant lets the other person read; a takeover grant lets them replace
+// the master password once the wait has passed and the grantor approves.
+const TYPE_LABELS: Record<number, string> = {
+  0: 'txt_emergency_access_type_view',
+  1: 'txt_emergency_access_type_takeover',
+};
+
 export default function EmergencyAccessSettings(props: EmergencyAccessSettingsProps) {
   const [grants, setGrants] = useState<EmergencyAccessGranteeDetails[]>([]);
   const [received, setReceived] = useState<EmergencyAccessGrantorDetails[]>([]);
@@ -43,6 +52,7 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
   const [error, setError] = useState('');
   const [email, setEmail] = useState('');
   const [waitDays, setWaitDays] = useState(7);
+  const [grantType, setGrantType] = useState(0);
   const [inviting, setInviting] = useState(false);
 
   const load = async () => {
@@ -72,6 +82,22 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
     void load();
   }, []);
 
+  const recover = async (id: string, action: 'initiate' | 'approve') => {
+    if (!props.authedFetch) return;
+    setError('');
+    try {
+      if (action === 'initiate') await initiateEmergencyAccess(props.authedFetch, id);
+      else await approveEmergencyAccess(props.authedFetch, id);
+      await load();
+    } catch {
+      setError(
+        action === 'initiate'
+          ? t('txt_emergency_access_initiate_failed')
+          : t('txt_emergency_access_approve_failed')
+      );
+    }
+  };
+
   const answer = async (id: string, action: 'accept' | 'reject') => {
     if (!props.authedFetch) return;
     setError('');
@@ -95,7 +121,7 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
     try {
       await inviteEmergencyAccess(props.authedFetch, {
         email: email.trim(),
-        type: 0,
+        type: grantType,
         waitTimeDays: waitDays,
         // The key the grantor wraps for the grantee is made by the caller
         // that holds the vault key. This page does not hold it, so the
@@ -153,17 +179,30 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
                 <div>
                   <strong>{grant.name || grant.email || t('txt_emergency_access_invited_user')}</strong>
                   <div className="muted-inline settings-field-note">
+                    {t(TYPE_LABELS[grant.type] || 'txt_emergency_access_type_view')}
+                    {' · '}
                     {t(STATUS_LABELS[grant.status] || 'txt_emergency_access_invited')}
                     {grant.waitTimeDays > 0 && ` · ${t('txt_emergency_access_wait_days', { value: String(grant.waitTimeDays) })}`}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary small"
-                  onClick={() => void withdraw(grant.id)}
-                >
-                  <Trash2 size={14} className="btn-icon" /> {t('txt_emergency_access_withdraw')}
-                </button>
+                <div className="actions">
+                  {grant.type === 1 && grant.status === 3 && (
+                    <button
+                      type="button"
+                      className="btn btn-primary small"
+                      onClick={() => void recover(grant.id, 'approve')}
+                    >
+                      {t('txt_emergency_access_approve')}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary small"
+                    onClick={() => void withdraw(grant.id)}
+                  >
+                    <Trash2 size={14} className="btn-icon" /> {t('txt_emergency_access_withdraw')}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -205,6 +244,17 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
                     </button>
                   </div>
                 )}
+                {grant.status === 2 && grant.type === 1 && (
+                  <div className="actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary small"
+                      onClick={() => void recover(grant.id, 'initiate')}
+                    >
+                      {t('txt_emergency_access_start_wait')}
+                    </button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -222,6 +272,14 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
             value={email}
             onInput={(e) => setEmail((e.currentTarget as HTMLInputElement).value)}
           />
+          <select
+            className="input"
+            value={grantType}
+            onInput={(e) => setGrantType(Number((e.currentTarget as HTMLSelectElement).value))}
+          >
+            <option value={0}>{t('txt_emergency_access_type_view')}</option>
+            <option value={1}>{t('txt_emergency_access_type_takeover')}</option>
+          </select>
           <select
             className="input"
             value={waitDays}

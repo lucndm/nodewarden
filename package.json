@@ -74,7 +74,7 @@
     "test:folder-collection-mapping": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/folder-collection-mapping.test.ts",
     "test:local-send-public": "tsx --tsconfig webapp/tsconfig.json scripts/local-send-public-e2e.mts",
     "test:relative-day-label": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/relative-day-label.test.ts",
-    "test:emergency-access": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/emergency-access.test.ts scripts/emergency-access-storage.test.ts"
+    "test:emergency-access": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/emergency-access.test.ts scripts/emergency-access-takeover.test.ts scripts/emergency-access-storage.test.ts"
   },
   "keywords": [
     "bitwarden",
