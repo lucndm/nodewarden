@@ -29,6 +29,7 @@ import {
   EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
   EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED,
   EMERGENCY_ACCESS_TYPE_TAKEOVER,
+  EMERGENCY_ACCESS_TYPE_VIEW,
   createEmergencyAccess,
   updateEmergencyAccess,
 } from '../src/services/storage-emergency-access-repo';
@@ -442,7 +443,7 @@ test('the wait ends on its own, without the account holder answering', async () 
   assert.equal(row?.status, EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED);
 });
 
-test('the wait does not end early for a grant that only lets the other person read', async () => {
+test('a grant that only lets the other person read waits just as long', async () => {
   const { env } = await fixture();
   const id = 'sweep-view-grant';
   await createEmergencyAccess(env.DB, {
@@ -451,19 +452,28 @@ test('the wait does not end early for a grant that only lets the other person re
     granteeId: GRANTEE,
     email: 'grantee@example.test',
     wrappedKey: '4.placeholder-not-a-real-key',
-    type: 0,
+    type: EMERGENCY_ACCESS_TYPE_VIEW,
     status: EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED,
-    waitTimeDays: 1,
-    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    waitTimeDays: 7,
+    recoveryInitiatedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
     lastNotificationAt: null,
     createdAt: NOW,
     updatedAt: NOW,
   });
 
+  // Reading the vault hands over the whole list of items, so the wait is
+  // what stands between the grant and the items.
   const approved = await approveExpiredEmergencyAccess(env.DB);
-  assert.equal(approved.length, 0, 'a view grant is never approved by the sweep');
+  assert.equal(approved.length, 0, 'the wait is still running');
   const row = await getEmergencyAccess(env.DB, id);
   assert.equal(row?.status, EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED);
+
+  await updateEmergencyAccess(env.DB, id, {
+    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: NOW,
+  });
+  const later = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(later.length, 1, 'after the wait the read access opens too');
 });
 
 test('the owner is told that somebody asked to take over', async () => {
