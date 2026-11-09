@@ -11,8 +11,11 @@ import { vaultDigest } from './prod-vault-audit.mjs';
 
 function encryptedName(seed) {
   // The shape of an encrypted string: a type, then base64 parts joined by '|'.
-  const part = (text) => Buffer.from(text, 'utf8').toString('base64').replace(/=+$/, '');
-  return `2.${part(seed)}|${part(`${seed}-mac`)}|${part(`${seed}-iv`)}`;
+  // The parts carry the byte counts the format fixes, so the name opens the
+  // way a real one does: a 16 byte iv, block sized data and a 32 byte mac.
+  const fill = [...seed].reduce((total, character) => total + character.charCodeAt(0), 0) % 256;
+  const part = (bytes) => Buffer.alloc(bytes, fill).toString('base64');
+  return `2.${part(16)}|${part(16)}|${part(32)}`;
 }
 
 /** A vault that the audit has to accept. */
@@ -213,8 +216,28 @@ function parseSummary(stdout) {
   const summary = parseSummary(result.stdout);
   assert.equal(result.code, 1, 'a plain-text folder name must fail');
   assert.equal(summary.foldersWithPlainTextName, 1);
+  assert.equal(summary.foldersWithBrokenName, 0, 'a plain-text name is not a broken one');
   assert.match(result.stderr, /plain-text folder names/);
   console.log('ok   a plain-text folder name is reported');
+}
+
+{
+  // A folder name that has the shape of an encrypted string but the wrong
+  // bytes never opens: the mac was cut short. The shape alone would call it
+  // encrypted and report the vault clean, and the item it holds could not go
+  // into a collection of its own.
+  const vault = cleanVault();
+  vault.folders[0].name = `2.${Buffer.alloc(16, 1).toString('base64')}|${Buffer.alloc(16, 2).toString('base64')}|${Buffer.alloc(8, 3).toString('base64')}`;
+  const server = await startStandIn(vault);
+  const result = await runAudit(server.address().port);
+  server.close();
+  server.closeAllConnections?.();
+  const summary = parseSummary(result.stdout);
+  assert.equal(result.code, 1, 'a folder name that cannot be opened must fail');
+  assert.equal(summary.foldersWithBrokenName, 1);
+  assert.equal(summary.foldersWithPlainTextName, 0, 'a broken name is not plain text');
+  assert.match(result.stderr, /folder names that cannot be opened/);
+  console.log('ok   a folder name that cannot be opened is reported');
 }
 
 {

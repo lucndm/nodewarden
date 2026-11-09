@@ -54,6 +54,41 @@ const API_BASE = process.env.CLOUDFLARE_API_BASE || 'https://api.cloudflare.com/
 const CIPHER_STRING = /^\d+\.[A-Za-z0-9+/=]+\|[A-Za-z0-9+/=]+(?:\|[A-Za-z0-9+/=]+)?$/;
 const PAGE_SIZE = 500;
 
+/** How many bytes a base64 segment carries, without decoding it. */
+function base64Bytes(segment) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(segment)) return null;
+  const padding = segment.endsWith('==') ? 2 : segment.endsWith('=') ? 1 : 0;
+  return (segment.length / 4) * 3 - padding;
+}
+
+/**
+ * True when the value has the shape of an encrypted string and its segments
+ * carry the byte counts their type fixes.
+ *
+ * The shape alone is not enough: "2.iv|data|mac" with a twelve character mac
+ * has the right shape and the wrong bytes, so it never opens. The production
+ * vault holds four folder names like that, and a check that only looked at
+ * the shape called them encrypted and reported the vault clean.
+ */
+function isWholeCipherString(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!CIPHER_STRING.test(trimmed)) return false;
+
+  const dot = trimmed.indexOf('.');
+  const type = Number(trimmed.slice(0, dot));
+  const parts = trimmed.slice(dot + 1).split('|');
+  const sizes = parts.map((part) => base64Bytes(part));
+  if (sizes.some((size) => size === null)) return false;
+  const [iv, data, mac] = sizes;
+
+  if (type === 0 || type === 1) return iv === 16 && data > 0 && data % 16 === 0;
+  if (type === 2) return iv === 16 && data > 0 && data % 16 === 0 && mac === 32;
+  if (type === 4) return iv === 256;
+  if (type === 5 || type === 6) return iv === 256 && data === 32;
+  return true;
+}
+
 function api(path, init = {}) {
   return fetch(`${API_BASE}${path}`, {
     ...init,
@@ -225,6 +260,14 @@ async function main() {
   // to call it. Its items have to go somewhere else.
   const foldersWithoutName = folders.filter((folder) => !String(folder.name || '').trim()).length;
   const foldersWithoutTagName = folders.filter((folder) => folder.tag_name === null || folder.tag_name === '').length;
+  // A folder whose name is an encrypted string of the right shape but the
+  // wrong bytes never opens: the mac was cut short. Its items cannot go into
+  // a collection of their own, they end up in the general one. A name that is
+  // plain text is counted on its own, so it is left out here.
+  const foldersWithBrokenName = folders.filter((folder) => {
+    const name = String(folder.name || '').trim();
+    return name !== '' && CIPHER_STRING.test(name) && !isWholeCipherString(name);
+  }).length;
 
   const folderIds = new Set(folders.map((folder) => folder.id));
   const itemsWithoutFolder = ciphers.filter(
@@ -259,6 +302,7 @@ async function main() {
     collections: collections.length,
     folders: folders.length,
     foldersWithPlainTextName: plainTextFolders.length,
+    foldersWithBrokenName,
     foldersWithoutTagName,
     foldersWithoutName,
     duplicateFolderNames,
@@ -285,6 +329,7 @@ async function main() {
 
   const problems = [];
   if (summary.foldersWithPlainTextName > 0) problems.push('plain-text folder names');
+  if (summary.foldersWithBrokenName > 0) problems.push('folder names that cannot be opened');
   if (summary.itemsWithCiphertextShapedTag > 0) problems.push('ciphertext-shaped tags');
   if (summary.duplicateFolderNames > 0) problems.push('duplicate folder names');
   if (summary.itemsWithoutFolder > 0) problems.push('items pointing at a missing folder');
