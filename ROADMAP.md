@@ -473,6 +473,8 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 | `GET /:id/policies` | Luật của tổ chức chủ, đi kèm takeover |
 | `GET /api/users/:id/public-key` | Public key của một người — chủ cần nó để bọc khoá (client chính thức gọi đúng URL này) |
 
+**Thêm một thứ nữa, đọc từ client hiện hành:** `PUT /:id/password` nay nhận **cả hai** dạng payload mà upstream nhận — dạng cũ `{newMasterPasswordHash, key}` và dạng **hiện tại** `{authenticationData, unlockData}` (client 2026 gửi dạng này). Dạng hiện tại được **kiểm** với tài khoản bị lấy: **salt phải là salt của tài khoản** (salt của mật khẩu chính là email) và **KDF phải đúng KDF của tài khoản** — không thì một người được mời có thể đặt mật khẩu mà tài khoản chưa từng dùng để dẫn ra.
+
 **Một chỗ tôi đã làm sai và đã sửa:** grant chỉ **xem** (View) trước đây **không phải chờ hạn**. Đọc upstream thì thấy `view` cũng đòi `RecoveryApproved` — và đúng vậy: đọc vault là **đưa cả danh sách item** ra, nên hạn chờ chính là thứ đứng giữa grant và các item. Nay grant View **chờ đúng như grant takeover**.
 
 **Web Vault của tôi cũng đi trọn đường:** nút **"Hand over the key"** xuất hiện khi người được mời đã **chấp nhận** — trang lấy **public key** của họ (`GET /api/users/:id/public-key`), **bọc vault key** bằng RSA-OAEP (`4.<base64>`, đúng định dạng client chính thức), rồi `confirm`. Trước đó nút "Let somebody in" **luôn fail** (trang gửi khoá rỗng mà server bắt buộc có khoá) — nghĩa là tính năng này **chưa từng chạy được** từ Web Vault.

@@ -665,6 +665,105 @@ export async function handleTakeoverEmergencyAccess(
 }
 
 /**
+ * The new master password and the new wrapped key.
+ *
+ * The current clients send the authentication data and the unlock data; the
+ * older ones send the hash and the key directly. Both are read here, and the
+ * current shape is checked against the account being taken over: the salt
+ * has to be the one of that account, and the key derivation has to be the
+ * one it uses. Without that check, a grantee could set a password that the
+ * account was never derived with.
+ */
+function readTakeoverCredentials(
+  body: {
+    newMasterPasswordHash?: unknown;
+    key?: unknown;
+    authenticationData?: unknown;
+    unlockData?: unknown;
+  },
+  grantor: {
+    email: string;
+    kdfType: number;
+    kdfIterations: number;
+    kdfMemory?: number | null;
+    kdfParallelism?: number | null;
+  }
+): { newMasterPasswordHash: string; nextKey: string } | { error: string } {
+  const legacyHash = String(body.newMasterPasswordHash || '').trim();
+  const legacyKey = String(body.key || '').trim();
+  if (legacyHash || legacyKey) {
+    if (!legacyHash || !legacyKey) {
+      return { error: 'The new master password hash and the key are required.' };
+    }
+    return { newMasterPasswordHash: legacyHash, nextKey: legacyKey };
+  }
+
+  const authentication = body.authenticationData as
+    | { salt?: unknown; kdf?: unknown; masterPasswordAuthenticationHash?: unknown }
+    | undefined;
+  const unlock = body.unlockData as
+    | { salt?: unknown; kdf?: unknown; masterKeyWrappedUserKey?: unknown }
+    | undefined;
+  if (!authentication || !unlock) {
+    return { error: 'The new master password hash and the key are required.' };
+  }
+  const hash = String(authentication.masterPasswordAuthenticationHash || '').trim();
+  const nextKey = String(unlock.masterKeyWrappedUserKey || '').trim();
+  if (!hash || !nextKey) {
+    return { error: 'The new master password hash and the key are required.' };
+  }
+  const salt = String(authentication.salt || '').trim().toLowerCase();
+  const unlockSalt = String(unlock.salt || '').trim().toLowerCase();
+  // The salt of a master password is the address of the account, the same
+  // as everywhere else in the format.
+  const accountSalt = grantor.email.trim().toLowerCase();
+  if (!salt || salt !== accountSalt || salt !== unlockSalt) {
+    return { error: 'Invalid master password salt' };
+  }
+  const kdf = readKdfSettings(authentication.kdf);
+  const unlockKdf = readKdfSettings(unlock.kdf);
+  if (!kdf || !unlockKdf) {
+    return { error: 'KDF settings do not match the grantor account' };
+  }
+  if (
+    kdf.kdfType !== unlockKdf.kdfType ||
+    kdf.iterations !== unlockKdf.iterations ||
+    kdf.memory !== unlockKdf.memory ||
+    kdf.parallelism !== unlockKdf.parallelism
+  ) {
+    return { error: 'KDF settings must be equal for authentication and unlock' };
+  }
+  if (
+    kdf.kdfType !== grantor.kdfType ||
+    kdf.iterations !== grantor.kdfIterations ||
+    (kdf.kdfType === 2 &&
+      (kdf.memory !== (grantor.kdfMemory ?? null) || kdf.parallelism !== (grantor.kdfParallelism ?? null)))
+  ) {
+    return { error: 'KDF settings do not match the grantor account' };
+  }
+  return { newMasterPasswordHash: hash, nextKey };
+}
+
+/** The key derivation settings, as the clients send them. */
+function readKdfSettings(
+  value: unknown
+): { kdfType: number; iterations: number; memory: number | null; parallelism: number | null } | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const kdfType = Number(raw.kdfType ?? raw.KdfType);
+  const iterations = Number(raw.iterations ?? raw.Iterations);
+  if (!Number.isFinite(kdfType) || !Number.isFinite(iterations)) return null;
+  const memoryRaw = raw.memory ?? raw.Memory;
+  const parallelismRaw = raw.parallelism ?? raw.Parallelism;
+  return {
+    kdfType,
+    iterations,
+    memory: memoryRaw === null || memoryRaw === undefined ? null : Number(memoryRaw),
+    parallelism: parallelismRaw === null || parallelismRaw === undefined ? null : Number(parallelismRaw),
+  };
+}
+
+/**
  * POST /api/emergency-access/:id/password
  *
  * The grantee sets a new master password for the grantor. The vault key
@@ -682,6 +781,8 @@ export async function handleEmergencyAccessPassword(
   let body: {
     newMasterPasswordHash?: unknown;
     key?: unknown;
+    authenticationData?: unknown;
+    unlockData?: unknown;
   };
   try {
     body = await request.json();
@@ -700,15 +801,15 @@ export async function handleEmergencyAccessPassword(
   if (row.type !== EMERGENCY_ACCESS_TYPE_TAKEOVER) {
     return errorResponse('Emergency access not valid.', 404);
   }
-  const newMasterPasswordHash = String(body.newMasterPasswordHash || '').trim();
-  const nextKey = String(body.key || '').trim();
-  if (!newMasterPasswordHash || !nextKey) {
-    return errorResponse('The new master password hash and the key are required.', 400);
-  }
   const grantor = await getUserById(env.DB, row.grantorId);
   if (!grantor) {
     return errorResponse('Grantor user not found.', 404);
   }
+  const credentials = readTakeoverCredentials(body, grantor);
+  if ('error' in credentials) {
+    return errorResponse(credentials.error, 400);
+  }
+  const { newMasterPasswordHash, nextKey } = credentials;
   const storage = new StorageService(env.DB);
   grantor.masterPasswordHash = newMasterPasswordHash;
   grantor.key = nextKey;
