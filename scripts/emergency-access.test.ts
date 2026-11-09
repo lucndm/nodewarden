@@ -90,7 +90,7 @@ const INVITE = {
   waitTimeDays: 7,
   // The grantor wraps their own vault key for the grantee. It arrives
   // encrypted, so the server holds a key it cannot open.
-  encryptedUserKey: '4.wrapped-for-the-grantee',
+  encryptedUserKey: '4.not-a-real-key-just-a-placeholder',
 };
 
 test('the grantor invites somebody and sees the grant', async () => {
@@ -186,7 +186,7 @@ test('an invitation without an address is refused', async () => {
   const refused = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
     type: 0,
     waitTimeDays: 7,
-    encryptedUserKey: '4.wrapped',
+    encryptedUserKey: '4.placeholder-not-a-real-key',
   });
   assert.equal(refused.status, 400);
 });
