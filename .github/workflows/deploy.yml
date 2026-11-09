@@ -54,16 +54,25 @@ jobs:
       - name: Test
         run: npm run test:unit
 
+      # The Cloudflare token exists only inside this one step, as shell
+      # variables of this script: it is never written to GITHUB_ENV, so no
+      # later step or post-step of another action sees it. Nothing from
+      # Infisical but an error message is printed, and the values are masked
+      # in case a tool echoes them.
+      #
+      # The build ran above, without the token. wrangler.toml has a [build]
+      # section that would run the whole npm build chain again inside
+      # `wrangler deploy`, with the token in its environment; a copy of the
+      # config without that section makes wrangler deploy the dist/ that is
+      # already there.
+      #
       # The deploy does not touch secrets. Cloudflare refuses a secret edit
       # while the newest version of the worker is not the deployed one, which
       # happens right after a deploy, so writing the secret here turned a
-      # successful deploy into a failed run. The secret is set once, by hand in
-      # the dashboard, and this step only reports what is there.
-      # Fetched after the tests, so only the deploy step runs with the
-      # Cloudflare values in its environment. Every value is masked before it
-      # is written to the job environment, and nothing from Infisical but the
-      # error message is ever printed.
-      - name: Fetch Cloudflare credentials
+      # successful deploy into a failed run. The secret is set once, by hand,
+      # and this step only counts what is there: the names stay out of the
+      # public log.
+      - name: Deploy worker
         env:
           INFISICAL_URL: https://infisical.minhluc.info
           INFISICAL_IDENTITY_ID: ${{ vars.INFISICAL_IDENTITY_ID }}
@@ -84,20 +93,24 @@ jobs:
             --data-urlencode "workspaceId=$INFISICAL_PROJECT_ID" \
             --data-urlencode environment=prod --data-urlencode secretPath=/ \
             "$INFISICAL_URL/api/v3/secrets/raw")
-          if [ "$code" != 200 ]; then echo "HTTP $code"; jq -r .message "$body"; exit 1; fi
-          jq -r '.secrets[] | @base64' "$body" | while read -r row; do
-            key=$(base64 -d <<<"$row" | jq -r .secretKey)
-            val=$(base64 -d <<<"$row" | jq -r .secretValue)
-            echo "::add-mask::$val"
-            { echo "$key<<__INFISICAL_EOF__"; echo "$val"; echo "__INFISICAL_EOF__"; } >> "$GITHUB_ENV"
-            echo "fetched $key"
-          done
+          if [ "$code" != 200 ]; then echo "HTTP $code"; jq -r .message "$body"; rm -f "$body"; exit 1; fi
+          pick() { jq -r --arg k "$1" '.secrets[] | select(.secretKey == $k) | .secretValue' "$body"; }
+          CLOUDFLARE_API_TOKEN=$(pick CLOUDFLARE_API_TOKEN)
+          CLOUDFLARE_ACCOUNT_ID=$(pick CLOUDFLARE_ACCOUNT_ID)
           rm -f "$body"
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Infisical project is missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID"; exit 1
+          fi
+          export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
 
-      - name: Deploy worker
-        run: |
-          npx wrangler deploy
-          npx wrangler secret list
+          sed '/^\[build\]$/,/^$/d' wrangler.toml > wrangler.deploy.toml
+          if grep -q '^\[build\]' wrangler.deploy.toml; then echo "[build] still in deploy config"; exit 1; fi
+          npx wrangler deploy --config wrangler.deploy.toml
+          count=$(npx wrangler secret list --config wrangler.deploy.toml --format json 2>/dev/null | jq length) || count=unknown
+          echo "worker secrets: $count"
+          rm -f wrangler.deploy.toml
 
       # The vault is not read back here on purpose. This repository is public,
       # so a CI log is a public log: anything the runner prints about the
