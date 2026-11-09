@@ -430,7 +430,7 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 
 **Ba giới hạn đã nói rõ (không hứa quá):**
 
-1. **Không gửi email.** Server không có kênh email (chỉ có Telegram cho cảnh báo bảo mật) ⇒ lời mời **hiện trong Web Vault** và người được mời phải đăng nhập mới thấy. Trang ghi rõ điều này.
+1. **Không gửi email.** Server không có kênh email ⇒ lời mời **hiện trong Web Vault** và người được mời phải đăng nhập mới thấy. Trang ghi rõ điều này. (Chủ vault thì **có** được báo qua Telegram — xem lát "chủ vault được báo" bên dưới.)
 2. **Không thu khoá — mà tự duyệt khi hết hạn.** Chủ đã nói "sau N ngày thì bạn có thể tiếp quản", nên khi N ngày trôi qua thì **lời hứa đó tự đứng**, không cần chủ trả lời (người được mời không bị kẹt vì một chủ vault không liên lạc được). Cron `*/5` đang có sẵn chạy việc này. **Sửa lại chỗ đã ghi sai trước đó:** ROADMAP từng nói "không hứa thu khoá tức thì" — đó là **sai**: upstream làm đúng như vậy (`emergency_request_timeout_job` chuyển `RecoveryInitiated` → `RecoveryApproved` khi hết hạn), và giữ luật đó thì hợp với client chính thức.
 
 #### Lát Emergency Access — phần **Takeover** đã làm (2026-11-09)
@@ -448,7 +448,23 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 
 **Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **7 check UI** trong `scripts/local-ui-e2e.mts`: trang nói rõ **server không giữ khoá nào mở được**, **không gửi email**, takeover **chỉ sau khi hạn chờ đã qua và chủ đã duyệt**, và trang **cho cả hai loại** truy cập. Tổng UI e2e: **53/53**.
 
-**Còn lại của lát này (chưa làm):** thông báo email (cần kênh mail) và phần **lời mời tới người nhận ngoài Web Vault**.
+**Còn lại của lát này (chưa làm):** phần **lời mời tới người nhận ngoài Web Vault** (người được mời chưa nhận được tin nào qua Telegram — chỉ chủ vault được báo).
+
+#### Lát Emergency Access — **chủ vault được báo** (2026-11-09)
+
+**Vấn đề:** Emergency access là đường duy nhất khiến người khác vào được vault của bạn. Nhưng chủ vault **không hề biết** ai đang xin — lời mời chỉ hiện trong Web Vault, và người được mời có thể bắt đầu chờ ngay cả khi chủ không hề hay biết.
+
+**Đã có** (`src/services/emergency-access-notifier.ts`): chủ vault nhận tin qua **Telegram** — cùng kênh với cảnh báo bảo mật, và **là người duy nhất có thể ngăn việc này**. Ba thông báo, mỗi thằng một lúc:
+
+| Khi nào | Chủ được biết |
+|---|---|
+| Người được mời **bắt đầu chờ** | "Có người bạn cho vào đang xin tiếp quản vault của bạn" — **còn kịp từ chối**, và chủ **xoá được grant** bất kỳ lúc nào |
+| Hạn chờ **hết** (cron tự duyệt) hoặc chủ **duyệt** | "Người đó giờ có thể tiếp quản" — xoá grant nếu không muốn |
+| Mật khẩu **đã bị thay** | "Tài khoản của bạn **đã** bị lấy" — mật khẩu chủ đổi, session cũ bị đuổi |
+
+**Ràng buộc đã kiểm:** thông báo **không mang** khoá, mật khẩu, hash hay ciphertext (chỉ 8 ký tự đầu của id, đúng như cảnh báo bảo mật); **một** thông báo mỗi vault mỗi 15 phút + trần toàn cục 10 lần/15 phút nên không thể thành lũy; **gửi hỏng không được làm hỏng request** (best-effort, log lỗi chứ không ném); không có token Telegram thì request vẫn chạy bình thường.
+
+**Kiểm chứng:** `scripts/emergency-access-notice.test.ts` (**6/6**) — chủ được báo, không rò rỉ bí mật, không lũy, mỗi vault một thông báo, thiếu token thì im lặng, Telegram từ chối thì không ném. Thêm **2 check** trong `scripts/emergency-access-takeover.test.ts`: đi qua **router thật** và thấy thông báo "xin tiếp quản", và thấy thông báo "**đã** bị lấy" sau khi mật khẩu bị thay; cùng một check cho thấy **không có token thì request vẫn 200**. Tổng `test:emergency-access`: **44/44**.
 
 #### Lát Emergency Access — phần **chờ tự kết thúc** đã làm (2026-11-09)
 
