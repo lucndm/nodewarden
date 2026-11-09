@@ -364,3 +364,51 @@ test('two folders with the same name share one collection', async () => {
   // The default, the one collection the two folders share, and the general one.
   assert.equal(collections.length, 3);
 });
+
+test('folders that repeat a name across many rounds make one collection for that name', async () => {
+  // The vault on the running instance holds 300 folders in thirteen rounds of
+  // about thirty-three, and the organization ended up with thirty-three
+  // collections. The rounds repeat the same names, so the folders that share
+  // a name share a collection, and the folders left without items add
+  // nothing: there is nothing to put in a collection of their own.
+  const names = Array.from({ length: 33 }, (_, index) => `Folder ${index}`);
+  const folders: FolderSpec[] = [];
+  for (let round = 0; round < 9; round += 1) {
+    for (let index = 0; index < names.length; index += 1) {
+      folders.push({
+        id: `round-${round}-folder-${index}`,
+        name: names[index],
+        // The first folder of every round holds an item, so the folders that
+        // share a name can be seen to share a collection. The last round holds
+        // an item in every folder, the way the running vault is.
+        items: index === 0 ? 1 : round === 8 ? index + 1 : 0,
+      });
+    }
+  }
+
+  const { env, vaultHalves } = await vault(folders);
+  const result = await migrate(env, vaultHalves);
+  assert.equal(result.failed.length, 0, 'nothing should fail');
+
+  const collections = (await env.DB.prepare('SELECT id FROM collections WHERE org_id = ?').bind(ORGANIZATION).all<{
+    id: string;
+  }>()).results;
+  // The default, one collection per name, and the general one.
+  assert.equal(collections.length, 35, 'thirty-three names make thirty-three collections');
+
+  // The folders of a name share the collection of that name.
+  const { byItem } = await placement(env);
+  assert.equal(
+    byItem.get(itemIdFor('round-0-folder-0', 0)),
+    byItem.get(itemIdFor('round-8-folder-0', 0)),
+    'the folders of one name share its collection'
+  );
+
+  // Every item moved: nine rounds of the first folder, the last round, and
+  // the one item the vault holds without a folder.
+  const items = (await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM collection_ciphers WHERE collection_id IN (SELECT id FROM collections WHERE org_id = ?)'
+  ).bind(ORGANIZATION).first<{ n: number }>())!;
+  const expected = 9 + Array.from({ length: 32 }, (_, index) => index + 2).reduce((a, b) => a + b, 0) + 1;
+  assert.equal(items.n, expected, 'every item moved');
+});
