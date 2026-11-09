@@ -178,6 +178,29 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',
   'CREATE INDEX IF NOT EXISTS idx_cipher_scan_exclusions_user ON cipher_scan_exclusions(user_id, scope)',
 
+  // Emergency access: one account lets another person in when they cannot
+  // get in themselves. The row carries the grantor's wrapped key, so the
+  // server never holds a key it could open. The columns and their meaning
+  // follow the upstream shape, so the official clients read it.
+  'CREATE TABLE IF NOT EXISTS emergency_access (' +
+  'id TEXT PRIMARY KEY, ' +
+  'grantor_id TEXT NOT NULL, ' +
+  'grantee_id TEXT, ' +
+  'email TEXT, ' +
+  'wrapped_key TEXT, ' +
+  'type INTEGER NOT NULL DEFAULT 0, ' +
+  'status INTEGER NOT NULL DEFAULT 0, ' +
+  'wait_time_days INTEGER NOT NULL DEFAULT 1, ' +
+  'recovery_initiated_at TEXT, ' +
+  'last_notification_at TEXT, ' +
+  'created_at TEXT NOT NULL, ' +
+  'updated_at TEXT NOT NULL, ' +
+  'FOREIGN KEY (grantor_id) REFERENCES users(id) ON DELETE CASCADE, ' +
+  'FOREIGN KEY (grantee_id) REFERENCES users(id) ON DELETE CASCADE)',
+  'CREATE INDEX IF NOT EXISTS idx_emergency_access_grantor ON emergency_access(grantor_id)',
+  'CREATE INDEX IF NOT EXISTS idx_emergency_access_grantee ON emergency_access(grantee_id)',
+  'CREATE INDEX IF NOT EXISTS idx_emergency_access_email ON emergency_access(email)',
+
   'CREATE TABLE IF NOT EXISTS refresh_tokens (' +
   'token TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, device_identifier TEXT, device_session_stamp TEXT, security_stamp TEXT, created_at INTEGER, last_used_at INTEGER, absolute_expires_at INTEGER, client_type TEXT, ' +
   'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)',

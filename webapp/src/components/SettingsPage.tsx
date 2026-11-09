@@ -7,6 +7,7 @@ import { deriveLoginHash } from '@/lib/api/auth';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { AVAILABLE_LOCALES, getLocale, setLocale, t, type Locale } from '@/lib/i18n';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import EmergencyAccessSettings from '@/components/EmergencyAccessSettings';
 
 interface SettingsPageProps {
   profile: Profile;
@@ -46,7 +47,7 @@ interface SettingsPageProps {
 }
 
 type ThemePreference = 'system' | 'light' | 'dark';
-type SettingsSection = 'appearance' | 'session' | 'masterPassword' | 'twoStep' | 'keys' | 'sso';
+type SettingsSection = 'appearance' | 'session' | 'masterPassword' | 'twoStep' | 'keys' | 'sso' | 'emergencyAccess';
 
 type MasterPasswordPromptAction =
   | 'enableTotp'
@@ -597,6 +598,7 @@ export default function SettingsPage(props: SettingsPageProps) {
     { id: 'twoStep', label: t('txt_two_step_login') },
     { id: 'keys', label: t('txt_keys') },
     { id: 'sso', label: t('txt_sso_account_title') },
+    { id: 'emergencyAccess', label: t('txt_emergency_access_title') },
   ];
 
   return (
@@ -974,6 +976,10 @@ export default function SettingsPage(props: SettingsPageProps) {
                 </div>
               </section>
             </div>
+          )}
+
+          {activeSection === 'emergencyAccess' && (
+            <EmergencyAccessSettings authedFetch={props.authedFetch} />
           )}
         </section>
       </div>

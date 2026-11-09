@@ -387,10 +387,63 @@ Lập **plan riêng cho từng lát**; không biến Pass Monitor thành tập h
 | **Inactive 2FA** | **Chưa có gì**: không nơi nào kết luận website có hỗ trợ 2FA hay không; mọi TOTP/2FA hiện có là 2FA **đăng nhập tài khoản**. Dữ liệu trong vault chỉ chứng minh **người dùng có** TOTP/passkey cho site đó — thiếu TOTP **không** chứng minh site không hỗ trợ. | Chỉ làm được phần vault nói thật: trạng thái `twoFactorState` = `enabled` (có TOTP **hoặc** passkey) | `unknown`; **không** có nhãn "site không hỗ trợ" (chưa có nguồn đáng tin). "Inactive" cần **cột last-used mới** cho TOTP (migration) — chưa có. |
 | **Credential monitoring** | Có **hai đường khác nhau**, không được lẫn: (1) Password Health — **trình duyệt** băm SHA-1 và chỉ gửi **5 ký tự tiền tố** tới `api.pwnedpasswords.com`, kết quả **chỉ trong RAM trình duyệt**; (2) Email breach — **server** gửi **email tài khoản** của người dùng tới HIBP (cần `HIBP_API_KEY`) hoặc XposedOrNot (miễn phí), cache `email_breach_cache` 5 phút quét cron. | Chốt rõ: email tài khoản **không** phải Dark Web Monitoring cả vault. Muốn theo dõi **từng credential** thì phải chọn corpus, dữ liệu gửi đi, sự đồng ý, tần suất và định nghĩa kết quả — chưa làm gì cả. |
 | **Account protection** | ✅ xong (trên): hai lỗ hổng đã đóng, mọi biện pháp có test chứng minh được thực thi. Xác minh thiết bị mới **giữ là từ chối trung thực** (cần kênh email mà server không có). | — |
-| **Emergency Access** | **Chưa có gì**: không bảng, không route, không UI, không test — chỉ có dòng trong ROADMAP. | Cần threat model riêng (người nhận, thời gian chờ, hủy, xác thực, thông báo, cấp/thu khoá, audit) và **không** gửi master password/secret thô. Lớn nhất trong P4. |
+| **Emergency Access** | **Phần View đã làm (2026-11-09)** — bảng, route và UI có; xem mục "Lát Emergency Access" bên dưới. **Chưa có**: takeover, thông báo email, thu khoá tự động, và phần nhận lời mời ở phía người được mời. | Cần threat model riêng (người nhận, thời gian chờ, hủy, xác thực, thông báo, cấp/thu khoá, audit) và **không** gửi master password/secret thô. Lớn nhất trong P4. |
 | **Passkey / 2FA / zero-knowledge** | Passkey **tài khoản** có (`account-passkeys.ts`, `purpose: login | twoFactor`); `cipher.login.fido2Credentials` là passkey **website** (người dùng tự lưu) — hai thứ khác nhau. Mã hoá: server giữ payload mã hoá + khoá bọc, khoá tổ chức bọc theo RSA cho từng thành viên, xoay khoá mã hoá lại từng item. | Không cần gì mới về mã hoá; chỉ cần **rà lại** và **không tuyên bố tương đương Proton** khi chưa đo. Autofill thuộc client Bitwarden, không thuộc server. |
 
 Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi log/export, và review bảo mật trước phát hành. Card giáo dục F-56 là nội dung tùy chọn sau khi luồng thật ổn định.
+
+### Lát Emergency Access — đã khảo sát, chốt plan, chưa code (2026-11-09)
+
+**Đo được về hạ tầng hiện có (đọc code, không suy đoán):**
+
+| Cần | NodeWarden có? |
+|---|---|
+| Bọc khoá bằng RSA cho một người khác | **Có** — `wrapKeyForMember` (`webapp/src/lib/organization-key-rotation.ts:121`), dạng `4.` + base64, đúng hợp đồng upstream |
+| Khoá đối xứng 64 byte, tách enc/mac | **Có** (`deriveSendKeyParts`, `toSendKeyParts`) |
+| Re-encrypt payload khi đổi khoá | **Có, nhưng chỉ trong phạm vi hẹp** — `reencryptPayload` dùng cho **một item** và **một tổ chức** (`organization-key-rotation.ts`). **Không** có đường re-encrypt **toàn vault** |
+| Bảng | **Chưa có** — repo chỉ có `migrations/0001_init.sql` với 29 bảng, **không** có bảng nào cho emergency/grant (`grep -i "emergency\|grant"` = 0). Bảng `invites` có sẵn nhưng là **mời tài khoản mới** (admin), không phải mời emergency access → cần bảng riêng, vì nó mang **khoá đã bọc** và **hạn thời gian** |
+| Route / UI / test | **Chưa có gì** |
+| Kênh thông báo (email mời grantee) | **Chưa có** — server không gửi email; `security-alerts.ts` chỉ bắn Telegram |
+| Tự thu khoá khi hết thời gian chờ | **Chưa có** — cron `*/5` đang chạy nhưng chưa dùng cho việc này |
+
+**Hợp đồng upstream đã đọc từ `vaultwarden/src/db/models/emergency_access.rs`** (để tương thích client chính thức): type `View` (0) / `Takeover` (1); status `Invited` (0) → `Accepted` (1) → `Confirmed` (2) → `RecoveryInitiated` (3) → `RecoveryApproved` (4); thời gian chờ trong khoảng **1..=90 ngày**; `deadline_at = recovery_initiated_at + wait_time_days`; `is_recovery_allowed(now)` = đã qua hạn.
+
+**Chốt về phạm vi — làm gì và không làm gì:**
+
+- **Không** gửi master password, không gửi khoá tổ chức thô, không có đường đọc vault của người khác ngoài cơ chế **grantor bọc khoá vault của chính mình** (đúng như upstream: grantee nhận khoá đã bọc bằng public key của grantee).
+- **View**: grantee xem được item của grantor mà **không** đổi được; khoá bọc theo khoá org của grantor.
+- **Takeover**: sau khi hết thời gian chờ và grantor **duyệt**, grantee đổi master key của grantor → **phải re-encrypt toàn vault**. Đây là phần nặng nhất: phải có đường re-encrypt toàn vault, mà hiện NodeWarden **chưa có** (chỉ có re-encrypt *một item* và *một tổ chức*). ⇒ **Takeover không làm trong lát này**; làm `View` trước, có test, rồi mới tính Takeover.
+- **Thông báo**: không có kênh email ⇒ **mời bằng link hiển thị trong Web Vault** (grantee phải đăng nhập rồi xem mời), và **nói rõ** đây là giới hạn so với upstream.
+- **Thời gian chờ**: `wait_time_days` lưu cùng hàng; hết hạn thì quyền **không** tự mở — nó phải được **thu khoá khi grantor duyệt hoặc khi hết hạn và có người quét**; server không tự chạy việc đó ⇒ ghi rõ: **quyền chỉ hết khi có lần quét tiếp theo**, không hứa tức thì.
+
+**Đề xuất lát đầu tiên (chưa viết code):** bảng + route **View** + UI xem mời và từ chối, mỗi bước có test; **không** làm Takeover, **không** hứa thông báo email, **không** hứa thu khoá tức thì.
+
+#### Lát Emergency Access — phần **View** đã làm (2026-11-09)
+
+**Đã có, mỗi bước có test:**
+
+- **Bảng `emergency_access`** (`migrations/0001_init.sql` + `src/services/storage-schema.ts`), cột theo đúng hình dạng upstream nên client chính thức đọc được: `grantor_id`, `grantee_id`, `email`, `wrapped_key`, `type`, `status`, `wait_time_days`, `recovery_initiated_at`. `schema.version` bump lên `2026-11-09-emergency-access` và bảng được đưa vào `REQUIRED_SCHEMA_TABLES` để instance nào chỉ nâng cấp dở thì chạy lại bootstrap.
+- **Storage** (`src/services/storage-emergency-access-repo.ts`): grant tìm được từ **cả hai phía** (người cho và người được cho), grant **chưa ai nhận** tìm được theo **địa chỉ** đã gửi, và hạn chờ tính từ **lúc bắt đầu phục hồi** (`recovery_initiated_at + wait_time_days`), đúng quy tắc upstream.
+- **Route** (`src/handlers/emergency-access.ts` + `src/router-authenticated.ts`) theo hình dạng upstream: `GET /trusted`, `GET /granted`, `GET /:id`, `POST /invite`, `PUT /:id/accept`, `PUT /:id/reject`, `DELETE /:id`.
+- **UI** (`webapp/src/components/EmergencyAccessSettings.tsx`, mục **Emergency access** trong Settings): xem grant, rút grant, mời người — và **nói thẳng trên trang** những gì nó **không** làm. API calls đi qua `webapp/src/lib/api/emergency-access.ts` như các module API khác.
+- **Phía người được mời**: cùng trang đó hiện **lời mời mà tài khoản này nhận được** với nút **Accept** / **Decline**, và nói rõ khi chưa có lời mời nào.
+
+**Ba giới hạn đã nói rõ (không hứa quá):**
+
+1. **Không gửi email.** Server không có kênh email (chỉ có Telegram cho cảnh báo bảo mật) ⇒ lời mời **hiện trong Web Vault** và người được mời phải đăng nhập mới thấy. Trang ghi rõ điều này.
+2. **Không làm takeover.** Takeover nghĩa là đổi master key của chủ ⇒ phải **re-encrypt toàn vault**, mà hiện chưa có đường đó (`reencryptPayload` chỉ chạy được cho **một item** và **một tổ chức**). Lời mời takeover bị **từ chối** (400) chứ không nhận rồi không thực hiện được.
+3. **Không hứa thu khoá tức thì.** Thời gian chờ được lưu và hạn được tính, nhưng việc **thu khoá** khi hết hạn cần một lần quét; server không tự chạy việc đó.
+
+**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **6 check UI** trong `scripts/local-ui-e2e.mts`: trang có mục Emergency access, nói rõ server **không giữ khoá nào mở được**, nói rõ **không gửi email**, nói rõ **không có takeover**, và phía người được mời thấy **lời mời của mình** (kèm dòng "chưa có ai cho bạn vào"). Tổng UI e2e: **52/52**.
+
+**Ba lỗi thật do test bắt được trong lúc làm:**
+
+- `updateEmergencyAccess` ghi **đè mọi** field không nêu ⇒ một bước chỉ đổi trạng thái cũng **xoá thời gian chờ** (deadline ra 2026-01-02 thay vì 2026-01-08). Nay field không nêu thì **giữ nguyên giá trị cũ**.
+- Check "mời trùng" so sánh sai (một bên là id, một bên là email) ⇒ **cho phép** mời trùng. Nay cả hai vế so cùng kiểu.
+- Component đọc trang trước khi danh sách grant tải xong ⇒ check đọc được trang đang ở trạng thái "Loading...". Nay check **đợi danh sách nạp xong** rồi mới đọc.
+
+**Còn lại của lát này (chưa làm):** takeover, thông báo email, thu khoá tự động, và phần **lời mời tới người nhận theo email** (hiện chỉ thấy được trong Web Vault).
+
 
 ## P5 — Alias và doanh nghiệp (F-70–74, F-83–85)
 

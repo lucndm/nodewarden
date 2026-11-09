@@ -247,7 +247,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-08-org-policies';
+const STORAGE_SCHEMA_VERSION = '2026-11-09-emergency-access';
 const REQUIRED_SCHEMA_TABLES = [
   'webauthn_credentials',
   'webauthn_challenges',
@@ -263,6 +263,9 @@ const REQUIRED_SCHEMA_TABLES = [
   // The password scan exclusions: an install that claims this schema version
   // but is missing the table was upgraded only halfway.
   'cipher_scan_exclusions',
+  // Emergency access: the same, so an install that was upgraded only halfway
+  // runs the bootstrap again.
+  'emergency_access',
 ] as const;
 
 // D1-backed storage.
