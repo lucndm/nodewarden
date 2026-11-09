@@ -265,3 +265,115 @@ test('the rules of the owner come with a takeover', async () => {
   assert.equal(body.object, 'list');
   assert.ok(Array.isArray(body.data));
 });
+
+test('the current clients can set the new password, and the salt and the key derivation have to match', async () => {
+  const { env, storage } = await fixture();
+  const id = await officialInvite(env, EMERGENCY_ACCESS_TYPE_TAKEOVER, 7);
+  await call(env, 'PUT', `/api/emergency-access/${id}/accept`, GRANTEE, { token: 'token' });
+  await call(env, 'PUT', `/api/emergency-access/${id}/confirm`, GRANTOR, { key: WRAPPED_KEY });
+  await call(env, 'PUT', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  await updateEmergencyAccess(env.DB, id, {
+    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: NOW,
+  });
+  await approveExpiredEmergencyAccess(env.DB);
+
+  const kdf = { kdfType: 0, iterations: 600000, memory: null, parallelism: null };
+  const payload = {
+    authenticationData: {
+      salt: 'owner@example.test',
+      kdf,
+      masterPasswordAuthenticationHash: 'new-authentication-hash',
+    },
+    unlockData: {
+      salt: 'owner@example.test',
+      kdf,
+      masterKeyWrappedUserKey: '2.bmV3|dmV3|bmV3',
+    },
+  };
+
+  const changed = await call(env, 'PUT', `/api/emergency-access/${id}/password`, GRANTEE, payload);
+  assert.equal(changed.status, 200, 'the current shape is accepted');
+  const grantor = await storage.getUserById(GRANTOR);
+  assert.equal(grantor?.masterPasswordHash, 'new-authentication-hash');
+  assert.equal(grantor?.key, '2.bmV3|dmV3|bmV3');
+});
+
+test('a salt that is not the one of the account is refused', async () => {
+  const { env } = await fixture();
+  const id = await officialInvite(env, EMERGENCY_ACCESS_TYPE_TAKEOVER, 7);
+  await call(env, 'PUT', `/api/emergency-access/${id}/accept`, GRANTEE, { token: 'token' });
+  await call(env, 'PUT', `/api/emergency-access/${id}/confirm`, GRANTOR, { key: WRAPPED_KEY });
+  await call(env, 'PUT', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  await updateEmergencyAccess(env.DB, id, {
+    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: NOW,
+  });
+  await approveExpiredEmergencyAccess(env.DB);
+
+  const kdf = { kdfType: 0, iterations: 600000, memory: null, parallelism: null };
+  const refused = await call(env, 'PUT', `/api/emergency-access/${id}/password`, GRANTEE, {
+    authenticationData: {
+      salt: 'somebody-else@example.test',
+      kdf,
+      masterPasswordAuthenticationHash: 'new-authentication-hash',
+    },
+    unlockData: {
+      salt: 'somebody-else@example.test',
+      kdf,
+      masterKeyWrappedUserKey: '2.bmV3|dmV3|bmV3',
+    },
+  });
+  assert.equal(refused.status, 400, 'the salt has to be the one of the account');
+});
+
+test('a key derivation that is not the one of the account is refused', async () => {
+  const { env } = await fixture();
+  const id = await officialInvite(env, EMERGENCY_ACCESS_TYPE_TAKEOVER, 7);
+  await call(env, 'PUT', `/api/emergency-access/${id}/accept`, GRANTEE, { token: 'token' });
+  await call(env, 'PUT', `/api/emergency-access/${id}/confirm`, GRANTOR, { key: WRAPPED_KEY });
+  await call(env, 'PUT', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  await updateEmergencyAccess(env.DB, id, {
+    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: NOW,
+  });
+  await approveExpiredEmergencyAccess(env.DB);
+
+  const wrong = { kdfType: 0, iterations: 100000, memory: null, parallelism: null };
+  const refused = await call(env, 'PUT', `/api/emergency-access/${id}/password`, GRANTEE, {
+    authenticationData: {
+      salt: 'owner@example.test',
+      kdf: wrong,
+      masterPasswordAuthenticationHash: 'new-authentication-hash',
+    },
+    unlockData: {
+      salt: 'owner@example.test',
+      kdf: wrong,
+      masterKeyWrappedUserKey: '2.bmV3|dmV3|bmV3',
+    },
+  });
+  assert.equal(refused.status, 400, 'the key derivation has to be the one of the account');
+});
+
+test('the owner can fetch the public key of the person they let in', async () => {
+  const { env, storage } = await fixture();
+  // The grantee has a key pair on their account, so the owner can wrap the
+  // vault key with the public key of it.
+  const grantee = await storage.getUserById(GRANTEE);
+  assert.ok(grantee);
+  grantee.publicKey = 'RSA-PUBLIC-KEY-BASE64';
+  await storage.saveUser(grantee);
+
+  const response = await call(env, 'GET', `/api/users/${GRANTEE}/public-key`, GRANTOR);
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { userId: string; publicKey: string; object: string };
+  assert.equal(body.object, 'userKey');
+  assert.equal(body.userId, GRANTEE);
+  assert.equal(body.publicKey, 'RSA-PUBLIC-KEY-BASE64');
+});
+
+test('a user without a key pair has no public key to fetch', async () => {
+  const { env } = await fixture();
+  const response = await call(env, 'GET', `/api/users/${GRANTEE}/public-key`, GRANTOR);
+  assert.equal(response.status, 404);
+});

@@ -73,7 +73,7 @@ export async function getGrantedEmergencyAccess(
 /** POST /api/emergency-access/invite */
 export async function inviteEmergencyAccess(
   authedFetch: AuthedFetch,
-  input: { email: string; type: number; waitTimeDays: number; encryptedUserKey: string }
+  input: { email: string; type: number; waitTimeDays: number; encryptedUserKey?: string }
 ): Promise<void> {
   const resp = await authedFetch('/api/emergency-access/invite', {
     method: 'POST',
@@ -81,6 +81,47 @@ export async function inviteEmergencyAccess(
     body: JSON.stringify(input),
   });
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Invite failed'));
+}
+
+/**
+ * The person has no key pair on their account yet, so there is nothing to
+ * wrap the vault key with.
+ */
+export class PublicKeyUnavailableError extends Error {
+  constructor() {
+    super('public_key_unavailable');
+    this.name = 'PublicKeyUnavailableError';
+  }
+}
+
+/** GET /api/users/:id/public-key — the key the vault key is wrapped with. */
+export async function getUserPublicKey(
+  authedFetch: AuthedFetch,
+  userId: string
+): Promise<string> {
+  const resp = await authedFetch(`/api/users/${encodeURIComponent(userId)}/public-key`, {
+    method: 'GET',
+  });
+  if (resp.status === 404) throw new PublicKeyUnavailableError();
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'The public key could not be read'));
+  const body = await parseJson<{ publicKey?: string }>(resp);
+  const publicKey = String(body?.publicKey || '').trim();
+  if (!publicKey) throw new Error('The public key could not be read');
+  return publicKey;
+}
+
+/** PUT /api/emergency-access/:id/confirm — the grantor hands over the key. */
+export async function confirmEmergencyAccess(
+  authedFetch: AuthedFetch,
+  id: string,
+  key: string
+): Promise<void> {
+  const resp = await authedFetch(`/api/emergency-access/${encodeURIComponent(id)}/confirm`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'The key could not be handed over'));
 }
 
 /** PUT /api/emergency-access/:id/accept */

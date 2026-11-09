@@ -1,5 +1,6 @@
 import { Env, User } from '../types';
 import { StorageService } from '../services/storage';
+import { getUserById } from '../services/storage-user-repo';
 import { AuthService } from '../services/auth';
 import { RateLimitService, getClientIdentifier } from '../services/ratelimit';
 import { auditRequestMetadata, writeAuditEvent, safeWriteAuditEvent } from '../services/audit-events';
@@ -487,6 +488,34 @@ export async function handleSetVerifyDevices(request: Request, env: Env, userId:
   });
 
   return errorResponse('New device verification is not available on this server. Enable TOTP or WebAuthn two-factor authentication instead.', 400);
+}
+
+/**
+ * GET /api/users/:id/public-key
+ *
+ * The public key of a user. Somebody who lets another person into their
+ * vault needs it: they wrap their vault key with it, so only the person who
+ * was let in can open it. A public key is public, so anybody signed in may
+ * ask for one.
+ */
+export async function handleGetUserPublicKey(
+  request: Request,
+  env: Env,
+  id: string
+): Promise<Response> {
+  void request;
+  const user = await getUserById(env.DB, id);
+  if (!user) {
+    return errorResponse("User doesn't exist", 404);
+  }
+  if (!user.publicKey) {
+    return errorResponse('User has no public_key', 404);
+  }
+  return jsonResponse({
+    userId: user.id,
+    publicKey: user.publicKey,
+    object: 'userKey',
+  });
 }
 
 // GET /api/accounts/keys
