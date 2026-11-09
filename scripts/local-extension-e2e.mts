@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { webcrypto } from 'node:crypto';
 
-import { bytesToBase64, encryptBw, hkdfExpand, pbkdf2 } from '../webapp/src/lib/crypto.ts';
+import { bytesToBase64, encryptBw, hkdf, hkdfExpand, pbkdf2 } from '../webapp/src/lib/crypto.ts';
 import { startLocalWorker, startTlsProxy } from './local-worker.mjs';
 
 const EMAIL = 'local-extension@example.test';
@@ -220,7 +220,60 @@ async function seedVault(baseUrl) {
   if (shared.status !== 200) {
     throw new Error(`shared item create failed: ${shared.status} ${JSON.stringify(shared.body)}`);
   }
-  return { organizationId: organization.body.id, collectionId, token };
+  return {
+    organizationId: organization.body.id,
+    collectionId,
+    token,
+    vaultHalves: { encKey: vaultKey.slice(0, 32), macKey: vaultKey.slice(32, 64) },
+  };
+}
+
+/**
+ * Creates a Send that carries a file, the way a client writes it: the name
+ * and the file name are sealed with the Send key, the bytes are sealed with
+ * it too, and the link carries the seed of that key.
+ */
+async function createFileSend(baseUrl, account, fileName, contents) {
+  const { token, vaultHalves } = account;
+  const sendSeed = webcrypto.getRandomValues(new Uint8Array(16));
+  const derived = await hkdf(sendSeed, 'bitwarden-send', 'send', 64);
+  const sendEnc = derived.slice(0, 32);
+  const sendMac = derived.slice(32, 64);
+  const seal = (value) => encryptBw(new TextEncoder().encode(value), sendEnc, sendMac);
+
+  const created = await api(baseUrl, '/api/sends/file/v2', {
+    method: 'POST',
+    token,
+    body: {
+      type: 1,
+      name: await seal('Extension File Send'),
+      notes: await seal(''),
+      key: await encryptBw(sendSeed, vaultHalves.encKey, vaultHalves.macKey),
+      file: { fileName: await seal(fileName) },
+      fileLength: contents.byteLength,
+      deletionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  });
+  if (created.status !== 200) {
+    throw new Error(`file Send create failed: ${created.status} ${JSON.stringify(created.body)}`);
+  }
+  const uploadUrl = created.body?.url;
+  const send = created.body?.sendResponse;
+  if (!uploadUrl || !send?.id) {
+    throw new Error(`file Send create gave no upload url: ${JSON.stringify(created.body)}`);
+  }
+
+  // The bytes travel encrypted, so the server holds the file as it was
+  // handed over and never the words of it.
+  const upload = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: contents,
+  });
+  if (!upload.ok) {
+    throw new Error(`file Send upload failed: ${upload.status} ${await upload.text().catch(() => '')}`);
+  }
+  return { send, keyPart: bytesToBase64(sendSeed).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '') };
 }
 
 // A very small CDP client: the browser's own websocket, one target, and the
@@ -742,6 +795,55 @@ async function main() {
       'the extension says the Send was created and offers the link',
       doneText.includes('Send created') && doneText.includes('Copy link'),
       doneText.slice(-200)
+    );
+
+    // A Send that carries a file: the extension writes the file to the
+    // server, and the link hands it back to whoever holds it.
+    const fileSend = await createFileSend(
+      worker.baseUrl,
+      seeded,
+      'extension-file.txt',
+      new TextEncoder().encode('The bytes the extension shared.\n')
+    );
+    checks.ok(
+      'the server holds a file Send',
+      !!fileSend.send?.id && Number(fileSend.send.type) === 1,
+      JSON.stringify(fileSend.send || {}).slice(0, 200)
+    );
+    checks.ok(
+      'and it holds the file name encrypted',
+      String(fileSend.send?.file?.fileName || '').startsWith('2.'),
+      String(fileSend.send?.file?.fileName || '').slice(0, 30)
+    );
+
+    // The link opens the copy: the access id and the key of the Send.
+    const access = await fetch(
+      `${worker.baseUrl}/api/sends/access/${fileSend.send.accessId}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+    );
+    const accessBody = access.ok ? await access.json() : {};
+    checks.ok('the link opens the file Send', access.ok, String(access.status));
+    checks.ok(
+      'and the server holds the file without the key',
+      accessBody.object === 'send-access' && accessBody.key === undefined,
+      JSON.stringify(accessBody).slice(0, 160)
+    );
+
+    // The file itself comes back through the file route, sealed with the
+    // Send key, so the bytes on the wire are not the bytes of the file.
+    const fileId = accessBody?.file?.id;
+    const fileResponse = fileId
+      ? await fetch(
+          `${worker.baseUrl}/api/sends/${fileSend.send.id}/access/file/${fileId}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+        )
+      : null;
+    checks.ok('the file of the Send can be fetched', !!fileResponse?.ok, String(fileResponse?.status));
+    const fileBody = fileResponse?.ok ? await fileResponse.json() : {};
+    checks.ok(
+      'and it comes back as a sealed file, not as the words of it',
+      typeof fileBody.url === 'string' && !String(fileBody.url).includes('extension shared'),
+      JSON.stringify(fileBody).slice(0, 160)
     );
 
     return checks.finish() ? 0 : 1;
