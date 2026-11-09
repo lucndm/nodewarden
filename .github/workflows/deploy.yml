@@ -6,20 +6,19 @@ on:
   workflow_dispatch:
 
 # The deploy only reads the repository, and it is the only workflow that names
-# the production secrets.
+# the production environment, so it is the only one that can read the
+# Cloudflare credentials.
 #
-# The two Cloudflare secrets live in the "production" environment, not at the
-# repository level: an environment secret is readable only by a job that names
-# that environment, so this job is the only one that can see them. The values
-# are mirrored from Infisical by OpenTofu (infrastructure/github in the
-# docker-compose repo); see ADR-0274 there.
-#
-# The environment scope also wins over the repository scope for the same
-# secret name, which is what broke this workflow before: a repository secret
-# was set correctly, but the environment still held an older copy, and the
-# job read that one.
+# No Cloudflare credential is stored in GitHub. The deploy job asks GitHub for
+# a short-lived OIDC token and trades it at Infisical for the two Cloudflare
+# values. Infisical only accepts a token whose subject is this repository's
+# "production" environment, so no other job, branch environment or fork can
+# read them. The Infisical side (project ci-nodewarden, identity, OIDC rule)
+# lives in OpenTofu: infrastructure/infisical/ci-consumers.tf in the
+# docker-compose repo.
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: deploy-nodewarden
@@ -57,13 +56,25 @@ jobs:
       # happens right after a deploy, so writing the secret here turned a
       # successful deploy into a failed run. The secret is set once, by hand in
       # the dashboard, and this step only reports what is there.
+      # Fetched after the tests, so only the deploy step runs with the
+      # Cloudflare values in its environment. The action masks every value it
+      # exports.
+      - name: Fetch Cloudflare credentials
+        uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
+        with:
+          method: oidc
+          domain: https://infisical.minhluc.info
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          oidc-audience: https://infisical.minhluc.info
+          project-slug: ci-nodewarden
+          env-slug: prod
+          secret-path: /
+          export-type: env
+
       - name: Deploy worker
         run: |
           npx wrangler deploy
           npx wrangler secret list
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       # The vault is not read back here on purpose. This repository is public,
       # so a CI log is a public log: anything the runner prints about the
