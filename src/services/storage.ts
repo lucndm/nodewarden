@@ -764,11 +764,11 @@ export class StorageService {
   }
 
   async getMemberPublicKeys(userIds: string[]): Promise<Map<string, string | null>> {
-    return listStoredMemberPublicKeys(this.db, userIds);
+    return listStoredMemberPublicKeys(this.db, this.sqlChunkSize.bind(this), userIds);
   }
 
   async getMemberEmails(userIds: string[]): Promise<Map<string, string>> {
-    return listStoredMemberEmails(this.db, userIds);
+    return listStoredMemberEmails(this.db, this.sqlChunkSize.bind(this), userIds);
   }
 
   async acceptOrganizationUser(input: { membershipId: string; orgId: string; now: string }): Promise<boolean> {
@@ -848,11 +848,11 @@ export class StorageService {
   }
 
   async getCollectionRightsForCollections(userId: string, collectionIds: string[]) {
-    return listStoredCollectionRightsForCollections(this.db, userId, collectionIds);
+    return listStoredCollectionRightsForCollections(this.db, this.sqlChunkSize.bind(this), userId, collectionIds);
   }
 
   async getOrganizationCollectionIds(orgId: string, collectionIds: string[]) {
-    return listStoredOrganizationCollectionIds(this.db, orgId, collectionIds);
+    return listStoredOrganizationCollectionIds(this.db, this.sqlChunkSize.bind(this), orgId, collectionIds);
   }
 
   async getCollectionIdsForCipher(cipherId: string): Promise<string[]> {
@@ -860,7 +860,7 @@ export class StorageService {
   }
 
   async getCollectionIdsByCipherIds(cipherIds: string[]): Promise<Map<string, string[]>> {
-    return listStoredCollectionIdsByCipherIds(this.db, cipherIds);
+    return listStoredCollectionIdsByCipherIds(this.db, this.sqlChunkSize.bind(this), cipherIds);
   }
 
   async setCipherCollections(cipherId: string, collectionIds: string[]): Promise<void> {
@@ -873,11 +873,11 @@ export class StorageService {
    * or cannot reach at all, is not theirs to move, archive or delete.
    */
   async filterWritableCipherIds(cipherIds: string[], userId: string, minimumRank = 2): Promise<string[]> {
-    return filterStoredWritableCipherIds(this.db, userId, cipherIds, minimumRank);
+    return filterStoredWritableCipherIds(this.db, this.sqlChunkSize.bind(this), userId, cipherIds, minimumRank);
   }
 
   async getCipherRankByCipherForUser(userId: string): Promise<Map<string, number>> {
-    return listStoredCipherRanks(this.db, userId);
+    return listStoredCipherRanks(this.db, this.sqlChunkSize.bind(this), userId);
   }
 
   async createCollection(input: { id: string; orgId: string; name: string; now: string }): Promise<void> {
