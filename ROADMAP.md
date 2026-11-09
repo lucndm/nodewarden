@@ -475,7 +475,9 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 
 **Một chỗ tôi đã làm sai và đã sửa:** grant chỉ **xem** (View) trước đây **không phải chờ hạn**. Đọc upstream thì thấy `view` cũng đòi `RecoveryApproved` — và đúng vậy: đọc vault là **đưa cả danh sách item** ra, nên hạn chờ chính là thứ đứng giữa grant và các item. Nay grant View **chờ đúng như grant takeover**.
 
-**Còn lại của lát này (chưa làm):** **Web Vault của tôi** mới chỉ làm được tới bước mời — nó **chưa** bọc khoá được (chưa có UI nhập public key của người được mời), nên lời mời từ Web Vault của tôi **chưa hoàn chỉnh**. Client chính thức thì đi trọn đường.
+**Web Vault của tôi cũng đi trọn đường:** nút **"Hand over the key"** xuất hiện khi người được mời đã **chấp nhận** — trang lấy **public key** của họ (`GET /api/users/:id/public-key`), **bọc vault key** bằng RSA-OAEP (`4.<base64>`, đúng định dạng client chính thức), rồi `confirm`. Trước đó nút "Let somebody in" **luôn fail** (trang gửi khoá rỗng mà server bắt buộc có khoá) — nghĩa là tính năng này **chưa từng chạy được** từ Web Vault.
+
+**Kiểm chứng phần Web Vault:** `scripts/emergency-access-webapp.test.ts` (**4/4**) — vault key là hai nửa ghép lại (64 byte), khoá sai độ dài thì **từ chối**, khoá bọc ra **mở được** bằng private key của người được mời (chạy WebCrypto thật), public key không hợp lệ thì **từ chối**.
 
 **Kiểm chứng:** `scripts/emergency-access-flow.test.ts` (**10/10**, qua router thật) — đi trọn luồng client chính thức, hạn không bắt đầu được trước khi chủ xác nhận, chỉ chủ mới xác nhận được và chỉ một lần, grant View mở ra item của chủ **sau khi hết hạn**, grant takeover không xem được item, chủ đổi được grant, chủ gọi lại được, luật của chủ đi kèm takeover, và public key lấy được / không có thì 404. Tổng `test:emergency-access`: **56/56**.
 

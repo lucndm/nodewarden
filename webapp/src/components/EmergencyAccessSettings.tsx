@@ -6,18 +6,23 @@
 //
 // What this does NOT do, and says so on the page:
 //   - it does not send an email: the invitation is shown here, and the
-//     grantee has to sign in to see it;
-//   - it does not offer a takeover: that would mean re-encrypting the whole
-//     vault under a new master key, and there is no such path here.
+//     grantee has to sign in to see it.
+//
+// A takeover does not re-encrypt the vault: the vault key stays the same and
+// only the password that opens it is replaced.
 import { useEffect, useState } from 'preact/hooks';
 import { ShieldCheck, Trash2, UserPlus } from 'lucide-preact';
 import { t } from '@/lib/i18n';
 import type { AuthedFetch } from '@/lib/api/shared';
+import { wrapVaultKeyForGrantee } from '@/lib/emergency-access-key';
+import type { SessionState } from '@/lib/types';
 import {
   acceptEmergencyAccess,
   approveEmergencyAccess,
+  confirmEmergencyAccess,
   getGrantedEmergencyAccess,
   getTrustedEmergencyAccess,
+  getUserPublicKey,
   initiateEmergencyAccess,
   inviteEmergencyAccess,
   rejectEmergencyAccess,
@@ -28,6 +33,8 @@ import {
 
 interface EmergencyAccessSettingsProps {
   authedFetch?: AuthedFetch | null;
+  /** The session holds the vault key, which is what gets wrapped for the grantee. */
+  session?: SessionState | null;
 }
 
 const STATUS_LABELS: Record<number, string> = {
@@ -54,6 +61,7 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
   const [waitDays, setWaitDays] = useState(7);
   const [grantType, setGrantType] = useState(0);
   const [inviting, setInviting] = useState(false);
+  const [confirmingId, setConfirmingId] = useState('');
 
   const load = async () => {
     if (!props.authedFetch) {
@@ -114,6 +122,37 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
     }
   };
 
+  // The grantee accepted, so the grantor hands over the vault key, wrapped
+  // with the public key of the grantee. The server never sees a key it could
+  // open.
+  const confirmGrant = async (grant: EmergencyAccessGranteeDetails) => {
+    if (!props.authedFetch) return;
+    const session = props.session;
+    if (!session?.symEncKey || !session?.symMacKey) {
+      setError(t('txt_emergency_access_confirm_no_key'));
+      return;
+    }
+    if (!grant.granteeId) {
+      setError(t('txt_emergency_access_confirm_failed'));
+      return;
+    }
+    setConfirmingId(grant.id);
+    setError('');
+    try {
+      const publicKey = await getUserPublicKey(props.authedFetch, grant.granteeId);
+      const wrapped = await wrapVaultKeyForGrantee(
+        { symEncKey: session.symEncKey, symMacKey: session.symMacKey },
+        publicKey
+      );
+      await confirmEmergencyAccess(props.authedFetch, grant.id, wrapped);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : t('txt_emergency_access_confirm_failed'));
+    } finally {
+      setConfirmingId('');
+    }
+  };
+
   const invite = async () => {
     if (!props.authedFetch || !email.trim()) return;
     setInviting(true);
@@ -123,11 +162,10 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
         email: email.trim(),
         type: grantType,
         waitTimeDays: waitDays,
-        // The key the grantor wraps for the grantee is made by the caller
-        // that holds the vault key. This page does not hold it, so the
-        // invitation goes without one and the server refuses it rather than
-        // storing a grant that could never be opened.
-        encryptedUserKey: '',
+        // The key for the grantee is wrapped when the grantee has accepted
+        // and the grantor hands it over, because only then is the public key
+        // of the grantee known.
+        encryptedUserKey: ''
       });
       setEmail('');
       await load();
@@ -186,6 +224,16 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
                   </div>
                 </div>
                 <div className="actions">
+                  {grant.status === 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-primary small"
+                      disabled={confirmingId === grant.id}
+                      onClick={() => void confirmGrant(grant)}
+                    >
+                      {t('txt_emergency_access_confirm')}
+                    </button>
+                  )}
                   {grant.type === 1 && grant.status === 3 && (
                     <button
                       type="button"
