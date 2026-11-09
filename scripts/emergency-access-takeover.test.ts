@@ -299,3 +299,54 @@ test('a password change without the new key is refused', async () => {
   });
   assert.equal(refused.status, 400);
 });
+
+test('the sessions of the account are thrown out when its password is replaced', async () => {
+  const { env, storage } = await fixture();
+  const id = await confirmedGrant(env);
+  await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  await updateEmergencyAccess(env.DB, id, {
+    recoveryInitiatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: NOW,
+  });
+  await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
+
+  // A session of the grantor, and a device that was trusted to skip the
+  // two-step challenge.
+  await env.DB.prepare(
+    "INSERT INTO refresh_tokens(token, user_id, expires_at, created_at) VALUES ('tok', ?, ?, ?)"
+  )
+    .bind(GRANTOR, Date.now() + 3600_000, NOW)
+    .run();
+  await env.DB.prepare(
+    "INSERT INTO trusted_two_factor_device_tokens(token, user_id, device_identifier, expires_at) VALUES ('dev', ?, 'dev-1', ?)"
+  )
+    .bind(GRANTOR, Date.now() + 3600_000)
+    .run();
+  const sessionsBefore = await env.DB.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?')
+    .bind(GRANTOR)
+    .first<{ n: number }>();
+  assert.equal(sessionsBefore?.n, 1);
+
+  const changed = await call(env, 'POST', `/api/emergency-access/${id}/password`, GRANTEE, {
+    newMasterPasswordHash: 'new-hash',
+    key: '2.bmV3|dmV3|bmV3',
+  });
+  assert.equal(changed.status, 200);
+
+  const sessionsAfter = await env.DB.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?')
+    .bind(GRANTOR)
+    .first<{ n: number }>();
+  assert.equal(sessionsAfter?.n, 0, 'the sessions of the grantor are gone');
+
+  const trusted = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM trusted_two_factor_device_tokens WHERE user_id = ?'
+  )
+    .bind(GRANTOR)
+    .first<{ n: number }>();
+  assert.equal(trusted?.n, 0, 'the devices that skipped the two-step challenge are gone');
+
+  // The security stamp is renewed, so a token made before the change does
+  // not open anything.
+  const grantor = await storage.getUserById(GRANTOR);
+  assert.notEqual(grantor?.securityStamp, 'stamp', 'the security stamp is renewed');
+});
