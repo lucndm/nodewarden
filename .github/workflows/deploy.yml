@@ -57,22 +57,39 @@ jobs:
       # successful deploy into a failed run. The secret is set once, by hand in
       # the dashboard, and this step only reports what is there.
       # Fetched after the tests, so only the deploy step runs with the
-      # Cloudflare values in its environment. The action masks every value it
-      # exports.
+      # Cloudflare values in its environment. Every value is masked before it
+      # is written to the job environment, and nothing from Infisical but the
+      # error message is ever printed.
       - name: Fetch Cloudflare credentials
-        uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
-        with:
-          method: oidc
-          domain: https://infisical.minhluc.info
-          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
-          oidc-audience: https://infisical.minhluc.info
-          # project-id, not project-slug: the action sends a slug as
-          # `workspaceSlug`, which this Infisical server rejects; an id goes
-          # out as `workspaceId`, which it accepts.
-          project-id: ${{ vars.INFISICAL_PROJECT_ID }}
-          env-slug: prod
-          secret-path: /
-          export-type: env
+        env:
+          INFISICAL_URL: https://infisical.minhluc.info
+          INFISICAL_IDENTITY_ID: ${{ vars.INFISICAL_IDENTITY_ID }}
+          INFISICAL_PROJECT_ID: ${{ vars.INFISICAL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          jwt=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$INFISICAL_URL" | jq -r .value)
+          echo "::add-mask::$jwt"
+          login=$(curl -sS -X POST -H 'content-type: application/json' \
+            -d "$(jq -n --arg i "$INFISICAL_IDENTITY_ID" --arg j "$jwt" '{identityId:$i, jwt:$j}')" \
+            "$INFISICAL_URL/api/v1/auth/oidc-auth/login")
+          token=$(jq -r '.accessToken // empty' <<<"$login")
+          if [ -z "$token" ]; then jq -r .message <<<"$login"; exit 1; fi
+          echo "::add-mask::$token"
+          body=$(mktemp)
+          code=$(curl -sS -G -o "$body" -w '%{http_code}' -H "Authorization: Bearer $token" \
+            --data-urlencode "workspaceId=$INFISICAL_PROJECT_ID" \
+            --data-urlencode environment=prod --data-urlencode secretPath=/ \
+            "$INFISICAL_URL/api/v3/secrets/raw")
+          if [ "$code" != 200 ]; then echo "HTTP $code"; jq -r .message "$body"; exit 1; fi
+          jq -r '.secrets[] | @base64' "$body" | while read -r row; do
+            key=$(base64 -d <<<"$row" | jq -r .secretKey)
+            val=$(base64 -d <<<"$row" | jq -r .secretValue)
+            echo "::add-mask::$val"
+            { echo "$key<<__INFISICAL_EOF__"; echo "$val"; echo "__INFISICAL_EOF__"; } >> "$GITHUB_ENV"
+            echo "fetched $key"
+          done
+          rm -f "$body"
 
       - name: Deploy worker
         run: |
