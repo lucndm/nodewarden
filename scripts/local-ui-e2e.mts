@@ -1027,6 +1027,89 @@ async function main() {
       await provider.close();
     }
 
+    // The password check page is where the user goes to see what the vault
+    // knows about their passwords. It has to be readable in both themes, on a
+    // narrow screen, and the keyboard has to be able to find its way around
+    // it.
+    await evaluate(`(() => {
+      // The link sits in a nav group that can be folded away, so the group is
+      // opened first and the link is taken from there.
+      const trigger = [...document.querySelectorAll('.side-group-trigger')].find((b) => b.getAttribute('aria-expanded') === 'false');
+      if (trigger) trigger.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await evaluate(`(() => {
+      const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/security/password-health');
+      if (!link) return false;
+      link.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.password-security-page')`, 'the password check page', 20000);
+
+    const pageState = await evaluate(`(() => {
+      const page = document.querySelector('.password-security-page');
+      const label = document.querySelector('.password-security-checked-at');
+      const read = (element) => {
+        if (!element) return null;
+        const style = getComputedStyle(element);
+        return { color: style.color, background: style.backgroundColor };
+      };
+      return {
+        text: label ? (label.textContent || '').trim() : '',
+        label: read(label),
+        pageWidth: page ? page.getBoundingClientRect().width : 0,
+        viewport: window.innerWidth,
+        overflows: page ? page.scrollWidth > window.innerWidth + 1 : false,
+      };
+    })()`);
+    checks.ok('the password check page says where it stands', !!pageState?.text, String(pageState?.text || '').slice(0, 120));
+    checks.ok(
+      'the page does not scroll sideways on a narrow screen',
+      pageState?.overflows === false,
+      `overflow=${pageState?.overflows} page=${pageState?.pageWidth} viewport=${pageState?.viewport}`
+    );
+    checks.ok(
+      'the text of the page is not the same colour as the background behind it',
+      !!pageState?.label && pageState.label.color !== pageState.label.background,
+      JSON.stringify(pageState?.label || {})
+    );
+
+    // The keyboard has to be able to find its way around the page. The
+    // metric buttons are disabled until a scan has run, so the button that
+    // starts the scan is the one that has to take the focus.
+    const focusRing = await evaluate(`(() => {
+      const button = document.querySelector('.password-security-scan');
+      if (!button) return null;
+      button.focus();
+      const style = getComputedStyle(button);
+      return { outline: style.outlineWidth, style: style.outlineStyle, active: document.activeElement === button };
+    })()`);
+    checks.ok(
+      'the page takes the keyboard focus',
+      !!focusRing?.active,
+      JSON.stringify(focusRing || {})
+    );
+
+    // The dark theme has to keep the text readable, so the page cannot fall
+    // back to the light background while the rest of the app is dark.
+    const darkState = await evaluate(`(() => {
+      const before = document.documentElement.dataset.theme;
+      document.documentElement.dataset.theme = 'dark';
+      const label = document.querySelector('.password-security-checked-at');
+      const style = label ? getComputedStyle(label) : null;
+      const panel = getComputedStyle(document.querySelector('.password-security-intro') || document.body);
+      const result = { color: style?.color || '', panel: panel.backgroundColor };
+      document.documentElement.dataset.theme = before;
+      return result;
+    })()`);
+    checks.ok(
+      'the page stays readable in the dark theme',
+      !!darkState?.color && darkState.color !== darkState.panel,
+      JSON.stringify(darkState || {})
+    );
+
+
     return checks.finish() ? 0 : 1;
   } finally {
     if (browser) await browser.stop();
