@@ -8,13 +8,16 @@ on:
 # The deploy only reads the repository, and it is the only workflow that names
 # the production secrets.
 #
-# The secrets are named at the repository level today, not at the environment
-# level. The environment below does not hide them: a repository secret is
-# readable by every workflow of the repository, whatever environment the job
-# runs in. Moving the two Cloudflare secrets into the "production" environment
-# is the change that makes this job the only one that can see them; until
-# that is done, the repository scope is the wider of the two and this comment
-# says so rather than claiming an isolation that is not there.
+# The two Cloudflare secrets live in the "production" environment, not at the
+# repository level: an environment secret is readable only by a job that names
+# that environment, so this job is the only one that can see them. The values
+# are mirrored from Infisical by OpenTofu (infrastructure/github in the
+# docker-compose repo); see ADR-0274 there.
+#
+# The environment scope also wins over the repository scope for the same
+# secret name, which is what broke this workflow before: a repository secret
+# was set correctly, but the environment still held an older copy, and the
+# job read that one.
 permissions:
   contents: read
 
