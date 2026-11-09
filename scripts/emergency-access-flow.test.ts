@@ -265,3 +265,26 @@ test('the rules of the owner come with a takeover', async () => {
   assert.equal(body.object, 'list');
   assert.ok(Array.isArray(body.data));
 });
+
+test('the owner can fetch the public key of the person they let in', async () => {
+  const { env, storage } = await fixture();
+  // The grantee has a key pair on their account, so the owner can wrap the
+  // vault key with the public key of it.
+  const grantee = await storage.getUserById(GRANTEE);
+  assert.ok(grantee);
+  grantee.publicKey = 'RSA-PUBLIC-KEY-BASE64';
+  await storage.saveUser(grantee);
+
+  const response = await call(env, 'GET', `/api/users/${GRANTEE}/public-key`, GRANTOR);
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { userId: string; publicKey: string; object: string };
+  assert.equal(body.object, 'userKey');
+  assert.equal(body.userId, GRANTEE);
+  assert.equal(body.publicKey, 'RSA-PUBLIC-KEY-BASE64');
+});
+
+test('a user without a key pair has no public key to fetch', async () => {
+  const { env } = await fixture();
+  const response = await call(env, 'GET', `/api/users/${GRANTEE}/public-key`, GRANTOR);
+  assert.equal(response.status, 404);
+});

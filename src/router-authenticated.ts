@@ -29,6 +29,7 @@ import {
   handleDisableTwoFactorProvider,
   handleGetApiKey,
   handleRotateApiKey,
+  handleGetUserPublicKey,
 } from './handlers/accounts';
 import { handleGetBillingSubscription } from './handlers/billing';
 import {
@@ -387,6 +388,12 @@ export async function handleAuthenticatedRoute(
   // Emergency access: one account lets another person in when they cannot
   // get in themselves. The key travels wrapped, so the server holds no key
   // it could open.
+  // GET /api/users/:id/public-key — the key somebody wraps a vault key with.
+  const userPublicKeyMatch = path.match(/^\/api\/users\/([^/]+)\/public-key$/i);
+  if (userPublicKeyMatch && method === 'GET') {
+    return handleGetUserPublicKey(request, env, userPublicKeyMatch[1]);
+  }
+
   if (path === '/api/emergency-access/trusted' && method === 'GET') {
     return handleListTrustedEmergencyAccess(request, env, userId);
   }
