@@ -11,6 +11,8 @@
 // src/services/collection-access.ts, which follows the official server.
 import { resolveItemAccess, type CollectionGrant, type ItemAccess } from './collection-access';
 
+type SqlChunkSize = (fixedBindCount: number, bindCountPerItem?: number) => number;
+
 export interface Organization {
   id: string;
   name: string;
@@ -768,16 +770,21 @@ export async function getOrganizationCiphersForRotation(
  */
 export async function getMemberEmails(
   db: D1Database,
+  sqlChunkSize: SqlChunkSize,
   userIds: string[]
 ): Promise<Map<string, string>> {
   const emails = new Map<string, string>();
   if (!userIds.length) return emails;
-  const placeholders = userIds.map(() => '?').join(',');
-  const res = await db
-    .prepare(`SELECT id, email FROM users WHERE id IN (${placeholders})`)
-    .bind(...userIds)
-    .all<{ id: string; email: string }>();
-  for (const row of res.results || []) emails.set(row.id, row.email);
+  const chunkSize = sqlChunkSize(0);
+  for (let i = 0; i < userIds.length; i += chunkSize) {
+    const chunk = userIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const res = await db
+      .prepare(`SELECT id, email FROM users WHERE id IN (${placeholders})`)
+      .bind(...chunk)
+      .all<{ id: string; email: string }>();
+    for (const row of res.results || []) emails.set(row.id, row.email);
+  }
   return emails;
 }
 
@@ -795,45 +802,58 @@ export async function getWrappedOrganizationKey(
 /** The public keys of the members an admin wants to wrap the key for. */
 export async function getMemberPublicKeys(
   db: D1Database,
+  sqlChunkSize: SqlChunkSize,
   userIds: string[]
 ): Promise<Map<string, string | null>> {
   const keys = new Map<string, string | null>();
   if (!userIds.length) return keys;
-  const placeholders = userIds.map(() => '?').join(',');
-  const res = await db
-    .prepare(`SELECT id, public_key FROM users WHERE id IN (${placeholders})`)
-    .bind(...userIds)
-    .all<{ id: string; public_key: string | null }>();
-  for (const row of res.results || []) keys.set(row.id, row.public_key ?? null);
+  const chunkSize = sqlChunkSize(0);
+  for (let i = 0; i < userIds.length; i += chunkSize) {
+    const chunk = userIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const res = await db
+      .prepare(`SELECT id, public_key FROM users WHERE id IN (${placeholders})`)
+      .bind(...chunk)
+      .all<{ id: string; public_key: string | null }>();
+    for (const row of res.results || []) keys.set(row.id, row.public_key ?? null);
+  }
   return keys;
 }
 
 /** The collections each of these items sits in, keyed by item id. */
 export async function getCollectionIdsByCipherIds(
   db: D1Database,
+  sqlChunkSize: SqlChunkSize,
   cipherIds: string[]
 ): Promise<Map<string, string[]>> {
   const byCipher = new Map<string, string[]>();
   if (!cipherIds.length) return byCipher;
-  const placeholders = cipherIds.map(() => '?').join(',');
-  const res = await db
-    .prepare(
-      `SELECT cipher_id, collection_id FROM collection_ciphers WHERE cipher_id IN (${placeholders}) ` +
+  // A vault that was moved into an organization holds hundreds of shared
+  // items, and a statement binds one parameter per item. The read is split
+  // into chunks so it stays within what D1 accepts.
+  const chunkSize = sqlChunkSize(0);
+  for (let i = 0; i < cipherIds.length; i += chunkSize) {
+    const chunk = cipherIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const res = await db
+      .prepare(
+        `SELECT cipher_id, collection_id FROM collection_ciphers WHERE cipher_id IN (${placeholders}) ` +
         'ORDER BY collection_id ASC'
-    )
-    .bind(...cipherIds)
-    .all<{ cipher_id: string; collection_id: string }>();
-  for (const row of res.results || []) {
-    const list = byCipher.get(row.cipher_id) ?? [];
-    list.push(row.collection_id);
-    byCipher.set(row.cipher_id, list);
+      )
+      .bind(...chunk)
+      .all<{ cipher_id: string; collection_id: string }>();
+    for (const row of res.results || []) {
+      const list = byCipher.get(row.cipher_id) ?? [];
+      list.push(row.collection_id);
+      byCipher.set(row.cipher_id, list);
+    }
   }
   return byCipher;
 }
 
 /** The collections of one item. */
 export async function getCollectionIdsForCipher(db: D1Database, cipherId: string): Promise<string[]> {
-  const map = await getCollectionIdsByCipherIds(db, [cipherId]);
+  const map = await getCollectionIdsByCipherIds(db, () => 1, [cipherId]);
   return map.get(cipherId) ?? [];
 }
 
@@ -864,55 +884,65 @@ export async function setCipherCollections(
 /** The collections of one organization that these ids name. */
 export async function getOrganizationCollectionIds(
   db: D1Database,
+  sqlChunkSize: SqlChunkSize,
   orgId: string,
   collectionIds: string[]
 ): Promise<Set<string>> {
   const found = new Set<string>();
   if (!collectionIds.length) return found;
-  const placeholders = collectionIds.map(() => '?').join(',');
-  const res = await db
-    .prepare(`SELECT id FROM collections WHERE org_id = ? AND id IN (${placeholders})`)
-    .bind(orgId, ...collectionIds)
-    .all<{ id: string }>();
-  for (const row of res.results || []) found.add(row.id);
+  const chunkSize = sqlChunkSize(1);
+  for (let i = 0; i < collectionIds.length; i += chunkSize) {
+    const chunk = collectionIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const res = await db
+      .prepare(`SELECT id FROM collections WHERE org_id = ? AND id IN (${placeholders})`)
+      .bind(orgId, ...chunk)
+      .all<{ id: string }>();
+    for (const row of res.results || []) found.add(row.id);
+  }
   return found;
 }
 
 /** The collection rights a member holds on these collections, keyed by id. */
 export async function getCollectionRightsForCollections(
   db: D1Database,
+  sqlChunkSize: SqlChunkSize,
   userId: string,
   collectionIds: string[]
 ): Promise<Map<string, CollectionRights>> {
   const rights = new Map<string, CollectionRights>();
   if (!collectionIds.length) return rights;
-  const placeholders = collectionIds.map(() => '?').join(',');
-  const rows = await db
-    .prepare(
-      'SELECT C.id AS collection_id, ' +
-        'CASE WHEN OU.type <= 1 THEN 0 ELSE COALESCE(CU.read_only, CG.read_only, 0) END AS read_only, ' +
-        'CASE WHEN OU.type <= 1 THEN 0 ELSE COALESCE(CU.hide_passwords, CG.hide_passwords, 0) END AS hide_passwords, ' +
-        'CASE WHEN OU.type <= 1 THEN 1 ELSE COALESCE(CU.manage, CG.manage, 0) END AS manage, ' +
-        'CASE WHEN CU.collection_id IS NOT NULL THEN 1 ELSE 0 END AS direct ' +
-        'FROM collections C ' +
-        'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
-        'LEFT JOIN collection_users CU ON CU.collection_id = C.id AND CU.org_user_id = OU.id ' +
-        'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
-        'LEFT JOIN collection_groups CG ON CG.collection_id = C.id AND CG.group_id = GU.group_id ' +
-        `WHERE C.id IN (${placeholders}) AND (CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1)`
-    )
-    .bind(userId, ...collectionIds)
-    .all<GrantRow>();
-  for (const row of rows.results || []) {
-    const entry: CollectionRights = {
-      collectionId: row.collection_id,
-      readOnly: !!row.read_only,
-      hidePasswords: !!row.hide_passwords,
-      manage: !!row.manage,
-      direct: !!row.direct,
-    };
-    const existing = rights.get(entry.collectionId);
-    if (!existing || (entry.direct && !existing.direct)) rights.set(entry.collectionId, entry);
+  const chunkSize = sqlChunkSize(1);
+  for (let i = 0; i < collectionIds.length; i += chunkSize) {
+    const chunk = collectionIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await db
+      .prepare(
+        'SELECT C.id AS collection_id, ' +
+          'CASE WHEN OU.type <= 1 THEN 0 ELSE COALESCE(CU.read_only, CG.read_only, 0) END AS read_only, ' +
+          'CASE WHEN OU.type <= 1 THEN 0 ELSE COALESCE(CU.hide_passwords, CG.hide_passwords, 0) END AS hide_passwords, ' +
+          'CASE WHEN OU.type <= 1 THEN 1 ELSE COALESCE(CU.manage, CG.manage, 0) END AS manage, ' +
+          'CASE WHEN CU.collection_id IS NOT NULL THEN 1 ELSE 0 END AS direct ' +
+          'FROM collections C ' +
+          'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+          'LEFT JOIN collection_users CU ON CU.collection_id = C.id AND CU.org_user_id = OU.id ' +
+          'LEFT JOIN group_users GU ON GU.org_user_id = OU.id ' +
+          'LEFT JOIN collection_groups CG ON CG.collection_id = C.id AND CG.group_id = GU.group_id ' +
+          `WHERE C.id IN (${placeholders}) AND (CU.collection_id IS NOT NULL OR CG.collection_id IS NOT NULL OR OU.type <= 1)`
+      )
+      .bind(userId, ...chunk)
+      .all<GrantRow>();
+    for (const row of rows.results || []) {
+      const entry: CollectionRights = {
+        collectionId: row.collection_id,
+        readOnly: !!row.read_only,
+        hidePasswords: !!row.hide_passwords,
+        manage: !!row.manage,
+        direct: !!row.direct,
+      };
+      const existing = rights.get(entry.collectionId);
+      if (!existing || (entry.direct && !existing.direct)) rights.set(entry.collectionId, entry);
+    }
   }
   return rights;
 }
@@ -927,47 +957,63 @@ export async function getCollectionRightsForCollections(
  */
 export async function getCipherRankByCipherForUser(
   db: D1Database,
+  sqlChunkSize: SqlChunkSize,
   userId: string,
   cipherIds?: string[]
 ): Promise<Map<string, number>> {
   const ranks = new Map<string, number>();
-  const scope = cipherIds && cipherIds.length
-    ? ` AND CC.cipher_id IN (${cipherIds.map(() => '?').join(',')})`
-    : '';
-  const scopeBinds = cipherIds && cipherIds.length ? cipherIds : [];
-  const res = await db
-    .prepare(
-      'SELECT CC.cipher_id AS cipher_id, ' +
-        'MAX(CASE WHEN manage = 1 THEN 4 ELSE 0 END ' +
-        '+ CASE WHEN read_only = 0 THEN 2 ELSE 0 END ' +
-        '+ CASE WHEN hide_passwords = 0 THEN 1 ELSE 0 END) AS rank ' +
-        'FROM (' +
-        'SELECT CC.cipher_id AS cipher_id, CU.read_only AS read_only, CU.hide_passwords AS hide_passwords, CU.manage AS manage ' +
-        'FROM collection_ciphers CC ' +
-        'INNER JOIN collections C ON C.id = CC.collection_id ' +
-        'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
-        'INNER JOIN collection_users CU ON CU.collection_id = CC.collection_id AND CU.org_user_id = OU.id ' +
-        `WHERE 1 = 1 ${scope} ` +
-        'UNION ALL ' +
-        'SELECT CC.cipher_id AS cipher_id, CG.read_only AS read_only, CG.hide_passwords AS hide_passwords, CG.manage AS manage ' +
-        'FROM collection_ciphers CC ' +
-        'INNER JOIN collections C ON C.id = CC.collection_id ' +
-        'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
-        'INNER JOIN collection_groups CG ON CG.collection_id = CC.collection_id ' +
-        'INNER JOIN group_users GU ON GU.group_id = CG.group_id AND GU.org_user_id = OU.id ' +
-        'WHERE NOT EXISTS (SELECT 1 FROM collection_users CU2 ' +
-        `WHERE CU2.collection_id = CG.collection_id AND CU2.org_user_id = OU.id) ${scope} ` +
-        'UNION ALL ' +
-        'SELECT CC.cipher_id AS cipher_id, 0 AS read_only, 0 AS hide_passwords, 1 AS manage ' +
-        'FROM collection_ciphers CC ' +
-        'INNER JOIN collections C ON C.id = CC.collection_id ' +
-        'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 AND OU.type <= 1 ' +
-        `WHERE 1 = 1 ${scope} ` +
-        ') AS CC GROUP BY CC.cipher_id'
-    )
-    .bind(userId, ...scopeBinds, userId, ...scopeBinds, userId, ...scopeBinds)
-    .all<{ cipher_id: string; rank: number }>();
-  for (const row of res.results || []) ranks.set(row.cipher_id, Number(row.rank) || 0);
+  // The scope repeats the ids once per branch of the union, so a statement
+  // binds three parameters per item. The read is split into chunks to stay
+  // within what D1 accepts.
+  const chunkSize = sqlChunkSize(3, 3);
+  const scoped = cipherIds && cipherIds.length ? cipherIds : [];
+  const chunks: string[][] = [];
+  if (!scoped.length) {
+    chunks.push([]);
+  } else {
+    for (let i = 0; i < scoped.length; i += chunkSize) {
+      chunks.push(scoped.slice(i, i + chunkSize));
+    }
+  }
+  for (const chunk of chunks) {
+    const chunkScope = chunk.length
+      ? ` AND CC.cipher_id IN (${chunk.map(() => '?').join(',')})`
+      : '';
+    const chunkBinds = chunk.length ? chunk : [];
+    const res = await db
+      .prepare(
+        'SELECT CC.cipher_id AS cipher_id, ' +
+          'MAX(CASE WHEN manage = 1 THEN 4 ELSE 0 END ' +
+          '+ CASE WHEN read_only = 0 THEN 2 ELSE 0 END ' +
+          '+ CASE WHEN hide_passwords = 0 THEN 1 ELSE 0 END) AS rank ' +
+          'FROM (' +
+          'SELECT CC.cipher_id AS cipher_id, CU.read_only AS read_only, CU.hide_passwords AS hide_passwords, CU.manage AS manage ' +
+          'FROM collection_ciphers CC ' +
+          'INNER JOIN collections C ON C.id = CC.collection_id ' +
+          'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+          'INNER JOIN collection_users CU ON CU.collection_id = CC.collection_id AND CU.org_user_id = OU.id ' +
+          `WHERE 1 = 1 ${chunkScope} ` +
+          'UNION ALL ' +
+          'SELECT CC.cipher_id AS cipher_id, CG.read_only AS read_only, CG.hide_passwords AS hide_passwords, CG.manage AS manage ' +
+          'FROM collection_ciphers CC ' +
+          'INNER JOIN collections C ON C.id = CC.collection_id ' +
+          'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 ' +
+          'INNER JOIN collection_groups CG ON CG.collection_id = CC.collection_id ' +
+          'INNER JOIN group_users GU ON GU.group_id = CG.group_id AND GU.org_user_id = OU.id ' +
+          'WHERE NOT EXISTS (SELECT 1 FROM collection_users CU2 ' +
+          `WHERE CU2.collection_id = CG.collection_id AND CU2.org_user_id = OU.id) ${chunkScope} ` +
+          'UNION ALL ' +
+          'SELECT CC.cipher_id AS cipher_id, 0 AS read_only, 0 AS hide_passwords, 1 AS manage ' +
+          'FROM collection_ciphers CC ' +
+          'INNER JOIN collections C ON C.id = CC.collection_id ' +
+          'INNER JOIN organization_users OU ON OU.org_id = C.org_id AND OU.user_id = ? AND OU.status = 2 AND OU.type <= 1 ' +
+          `WHERE 1 = 1 ${chunkScope} ` +
+          ') AS CC GROUP BY CC.cipher_id'
+      )
+      .bind(userId, ...chunkBinds, userId, ...chunkBinds, userId, ...chunkBinds)
+      .all<{ cipher_id: string; rank: number }>();
+    for (const row of res.results || []) ranks.set(row.cipher_id, Number(row.rank) || 0);
+  }
   return ranks;
 }
 
@@ -981,24 +1027,32 @@ export async function getCipherRankByCipherForUser(
  */
 export async function filterWritableCipherIds(
   db: D1Database,
+  sqlChunkSize: SqlChunkSize,
   userId: string,
   cipherIds: string[],
   minimumRank = 2
 ): Promise<string[]> {
   if (!cipherIds.length) return [];
   const unique = [...new Set(cipherIds)];
-  const placeholders = unique.map(() => '?').join(',');
-  const owned = await db
-    .prepare(
-      `SELECT id FROM ciphers WHERE user_id = ? AND organization_id IS NULL AND id IN (${placeholders})`
-    )
-    .bind(userId, ...unique)
-    .all<{ id: string }>();
-  const allowed = new Set((owned.results || []).map((row) => row.id));
+  const allowed = new Set<string>();
+  // A bulk action can name hundreds of items, and a statement binds one
+  // parameter per item, so the reads are split into chunks.
+  const chunkSize = sqlChunkSize(1);
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const owned = await db
+      .prepare(
+        `SELECT id FROM ciphers WHERE user_id = ? AND organization_id IS NULL AND id IN (${placeholders})`
+      )
+      .bind(userId, ...chunk)
+      .all<{ id: string }>();
+    for (const row of owned.results || []) allowed.add(row.id);
+  }
 
   // Only the items this call is about: a bulk action on a few items must not
   // walk every item of the organization.
-  const ranks = await getCipherRankByCipherForUser(db, userId, unique);
+  const ranks = await getCipherRankByCipherForUser(db, sqlChunkSize, userId, unique);
   for (const id of unique) {
     if (allowed.has(id)) continue;
     const rank = ranks.get(id);

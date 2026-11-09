@@ -33,6 +33,9 @@ npm-debug.log*
 .env.local
 .env.*.local
 
+# Credentials of the local machine
+infisical.token.key
+
 # TypeScript
 *.tsbuildinfo
 
