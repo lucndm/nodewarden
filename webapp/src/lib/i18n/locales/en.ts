@@ -663,7 +663,7 @@ const en: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "The wait could not be started.",
   "txt_emergency_access_approve_failed": "The recovery could not be approved.",
   "txt_emergency_access_title": "Emergency access",
-  "txt_emergency_access_intro": "Let somebody in when you cannot get in yourself. The key you hand over is wrapped for them, so this server never holds a key it could open. Nobody is emailed: the invitation shows here, and they have to sign in to see it. A takeover lets them replace your master password, but only after the wait you chose has passed; the grant then stands on its own and you can still withdraw it here. If this instance has Telegram alerts turned on, you are told there when somebody asks to take over.",
+  "txt_emergency_access_intro": "Let somebody in when you cannot get in yourself. The key you hand over is wrapped for them, so this server never holds a key it could open. Nobody is emailed: the invitation shows here, and they have to sign in to see it. A takeover lets them replace your master password, but only after the wait you chose has passed, unless you approve it sooner yourself; either way you can withdraw the grant here at any time. If this instance has Telegram alerts turned on, you are told there when somebody asks to take over.",
   "txt_emergency_access_grants": "People you let in",
   "txt_emergency_access_no_grants": "Nobody has access to this vault.",
   "txt_emergency_access_invite_title": "Let somebody in",

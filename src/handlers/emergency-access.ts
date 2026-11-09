@@ -27,7 +27,6 @@ import {
   createEmergencyAccess,
   deleteEmergencyAccess,
   getEmergencyAccess,
-  isEmergencyRecoveryAllowed,
   isValidEmergencyWaitDays,
   listEmergencyAccessByGrantee,
   listEmergencyAccessByGrantor,
@@ -374,9 +373,11 @@ export async function handleApproveEmergencyAccess(
   if (row.status !== EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED) {
     return errorResponse('Emergency access not valid.', 404);
   }
-  if (!isEmergencyRecoveryAllowed(row)) {
-    return errorResponse('The wait has not passed yet.', 400);
-  }
+  // The grantor may approve before the wait is over: the wait is there for the
+  // case where nobody answers, and the grantor answering is consent. The
+  // person who was let in cannot approve, and the wait cannot be shortened by
+  // anyone but the grantor. This is what the upstream does, and it is what
+  // the official client expects when the grantor presses Approve.
   await updateEmergencyAccess(env.DB, id, {
     status: EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
     updatedAt: nowIso(),

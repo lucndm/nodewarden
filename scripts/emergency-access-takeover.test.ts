@@ -148,18 +148,12 @@ test('the grantee starts the wait and the grantor approves it', async () => {
   assert.equal(initiated.status, 200);
   assert.equal((await initiated.json()).status, EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED);
 
-  // The wait has not passed yet, so the grantor cannot approve.
-  const tooEarly = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
-  assert.equal(tooEarly.status, 400, 'the wait cannot be shortened by approving early');
-
-  // Once the wait has passed, the grantor approves.
-  await updateEmergencyAccess(env.DB, id, {
-    recoveryInitiatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: NOW,
-  });
-  const approved = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
-  assert.equal(approved.status, 200);
-  assert.equal((await approved.json()).status, EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED);
+  // The wait has not passed yet. The grantor may still approve, because the
+  // grantor answering is consent; the wait is for the case where nobody
+  // answers at all.
+  const early = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
+  assert.equal(early.status, 200, 'the grantor may approve before the wait is over');
+  assert.equal((await early.json()).status, EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED);
 });
 
 test('the wait is counted in days, so a day has to pass', async () => {
@@ -167,20 +161,33 @@ test('the wait is counted in days, so a day has to pass', async () => {
   const id = await confirmedGrant(env, { waitTimeDays: 7 });
   await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
 
-  // Six days is not seven.
+  // Six days is not seven: the automatic approval waits for the whole wait.
   await updateEmergencyAccess(env.DB, id, {
     recoveryInitiatedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: NOW,
   });
-  const tooEarly = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
-  assert.equal(tooEarly.status, 400);
+  const tooEarly = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(tooEarly.length, 0, 'the automatic approval waits for the whole wait');
 
   await updateEmergencyAccess(env.DB, id, {
     recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: NOW,
   });
-  const approved = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
-  assert.equal(approved.status, 200);
+  const approved = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(approved.length, 1, 'after seven days the grant stands on its own');
+});
+
+test('only the grantor can approve, and the person who was let in cannot', async () => {
+  const { env } = await fixture();
+  const id = await confirmedGrant(env);
+  await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+
+  // The person who was let in cannot approve their own takeover.
+  const byGrantee = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTEE);
+  assert.equal(byGrantee.status, 404, 'the person who was let in cannot approve');
+
+  const byGrantor = await call(env, 'POST', `/api/emergency-access/${id}/approve`, GRANTOR);
+  assert.equal(byGrantor.status, 200, 'the grantor can approve');
 });
 
 test('somebody else cannot start or approve the recovery', async () => {

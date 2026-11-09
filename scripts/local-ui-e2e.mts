@@ -1155,8 +1155,8 @@ async function main() {
       emergencyText.slice(-300)
     );
     checks.ok(
-      'and it says the grant stands on its own once the wait is over',
-      emergencyText.includes('you can still withdraw it here'),
+      'and it says the grant can be withdrawn at any time',
+      emergencyText.includes('you can withdraw the grant here at any time'),
       emergencyText.slice(-300)
     );
     checks.ok(
