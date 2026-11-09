@@ -66,7 +66,10 @@ jobs:
           domain: https://infisical.minhluc.info
           identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
           oidc-audience: https://infisical.minhluc.info
-          project-slug: ci-nodewarden
+          # project-id, not project-slug: the action sends a slug as
+          # `workspaceSlug`, which this Infisical server rejects; an id goes
+          # out as `workspaceId`, which it accepts.
+          project-id: ${{ vars.INFISICAL_PROJECT_ID }}
           env-slug: prod
           secret-path: /
           export-type: env
