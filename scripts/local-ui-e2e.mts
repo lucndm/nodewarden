@@ -716,6 +716,23 @@ async function main() {
       !!editedEntry && editedEntry.organizationId === seeded.organizationId
     );
 
+    // The list names the day of an item the way the user would say it. The
+    // item that was just edited falls on today, so the label reads "Today"
+    // rather than the date.
+    const dayLabels = await evaluate(
+      `[...document.querySelectorAll('.list-day-label')].map((el) => (el.textContent || '').trim())`
+    );
+    checks.ok(
+      'the list names the day of the items it groups',
+      Array.isArray(dayLabels) && dayLabels.length > 0 && dayLabels.every((label) => label.length > 0),
+      JSON.stringify(dayLabels).slice(0, 200)
+    );
+    checks.ok(
+      'and an item edited today is named today',
+      Array.isArray(dayLabels) && dayLabels.some((label) => label === 'Today'),
+      JSON.stringify(dayLabels).slice(0, 200)
+    );
+
     // The owner can replace the key every member holds. The item has to stay
     // readable afterwards: the rotation gives it a new key and re-encrypts it,
     // and the vault reads it again with the new organization key.

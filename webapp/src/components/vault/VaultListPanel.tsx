@@ -34,6 +34,7 @@ import {
   getCreateTypeOptions,
   getDuplicateDetectionOptions,
   getVaultSortOptions,
+  relativeDayLabel,
   sortTimeValue,
   VaultListIcon,
   type DuplicateDetectionMode,
@@ -133,7 +134,7 @@ function dateGroupLabel(cipher: Cipher, previous?: Cipher): string | undefined {
   const date = new Date(time);
   const prior = previous && sortTimeValue(previous);
   if (prior && new Date(prior).toDateString() === date.toDateString()) return undefined;
-  return date.toLocaleDateString(undefined, { dateStyle: 'medium' });
+  return relativeDayLabel(time, { today: t('txt_today'), yesterday: t('txt_yesterday') });
 }
 
 const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) {
