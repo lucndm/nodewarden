@@ -17,7 +17,7 @@ const ADMIN_TYPE = 1;
 /** The policies this server knows how to enforce. */
 const ENFORCED_POLICIES = new Set<number>([SEND_CONTROLS_POLICY]);
 
-function policyResponse(policy: OrganizationPolicy): Record<string, unknown> {
+export function policyResponse(policy: OrganizationPolicy): Record<string, unknown> {
   let data: unknown = {};
   try {
     data = JSON.parse(policy.data || '{}');

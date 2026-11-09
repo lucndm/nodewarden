@@ -445,10 +445,21 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 - **Master key không bao giờ đi qua mạng:** `/:id/takeover` trả `salt` (là **email** của chủ — đúng như mọi nơi khác trong định dạng) + `keyEncrypted` (khoá **đã bọc sẵn** cho người được mời từ lúc mời). Không có `masterKey` trong câu trả lời.
 - **Mật khẩu mới làm mất các lối vào cũ:** `totpSecret` và 5 khoá YubiKey bị **xoá**, `yubikeyNfc` tắt, `securityStamp` làm mới, và **mọi refresh token + trusted-2FA token của chủ bị thu hồi** — một mật khẩu mà chủ không tự đặt không được giữ những cách vào mà chỉ chủ biết.
 - **UI:** mời được chọn **View** (xem) hoặc **Takeover** (tiếp quản); phía người được mời có nút **bắt đầu chờ**; phía chủ có nút **duyệt** khi lời mời takeover đã vào trạng thái chờ.
+- **Chủ duyệt sớm cũng được (đọc từ upstream):** `approve` của upstream **không** kiểm hạn — chỉ cần trạng thái là "đang chờ". Hạn chờ sinh ra để **lỡ chủ không liên lạc được** thì lời hứa vẫn đứng vững; **chủ trả lời** là ý chủ, nên chủ được duyệt sớm. Trước đây server từ chối (400) nên **nút Approve của client chính thức sẽ báo lỗi** nếu chủ bấm sớm — nay khớp upstream. Người được mời **không** tự duyệt được, và hạn **không** bị rút ngắn bởi bất kỳ ai ngoài chủ.
 
-**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **7 check UI** trong `scripts/local-ui-e2e.mts`: trang nói rõ **server không giữ khoá nào mở được**, **không gửi email**, takeover **chỉ sau khi hạn chờ đã qua và chủ đã duyệt**, và trang **cho cả hai loại** truy cập. Tổng UI e2e: **53/53**.
+**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **8 check UI** trong `scripts/local-ui-e2e.mts`: trang nói rõ **server không giữ khoá nào mở được**, **không gửi email**, takeover **chỉ sau khi hạn chờ đã qua** (trừ khi chủ tự duyệt sớm), **rút được grant bất cứ lúc nào**, và trang **cho cả hai loại** truy cập. Tổng UI e2e: **54/54**.
 
 **Còn lại của lát này (chưa làm):** phần **lời mời tới người nhận ngoài Web Vault** (người được mời chưa nhận được tin nào qua Telegram — chỉ chủ vault được báo).
+
+#### Lát Emergency Access — **chủ duyệt sớm** (2026-11-09)
+
+**Đọc lại upstream, thấy một chỗ lệch:** `approve` của upstream **không** kiểm hạn chờ — chỉ cần grant ở trạng thái "đang chờ". Còn server này từ chối (400) khi hạn chưa hết.
+
+**Vì sao phải sửa:** hạn chờ sinh ra để **lỡ chủ không liên lạc được** thì lời hứa vẫn đứng vững. **Chủ còn trả lời được** ⇒ chủ được phép duyệt sớm: đó là ý chủ, và nó làm cho **nút Approve của client chính thức** chạy được (trước đây bấm sớm là client báo lỗi). Người được mời **không** tự duyệt được, và **hạn không bị rút ngắn bởi ai ngoài chủ** — phần tự duyệt vẫn chỉ chạy khi hạn **thật sự** hết.
+
+**Đã có:** `handleApproveEmergencyAccess` bỏ kiểm hạn; phần tự duyệt (`approveExpiredEmergencyAccess`) **giữ nguyên** kiểm hạn.
+
+**Kiểm chứng:** `scripts/emergency-access-takeover.test.ts` — ca "chủ duyệt sớm được" (200, trạng thái chuyển sang Approved), ca "**người được mời không tự duyệt được**" (404) và "chủ thì được" (200), và ca "hạn tính theo ngày" nay kiểm **phần tự duyệt** (6 ngày chưa đủ → 0 grant, 8 ngày → 1 grant) thay vì kiểm nút duyệt. Trang web nói lại đúng luật, **cả 10 ngôn ngữ**. Tổng `test:emergency-access`: **46/46**; UI e2e **54/54**.
 
 #### Lát Emergency Access — **chủ vault được báo** (2026-11-09)
 
