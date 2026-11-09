@@ -607,6 +607,7 @@ const sv: Record<string, string> = {
   "txt_emergency_access_type_takeover": "De får ta över ditt konto",
   "txt_emergency_access_start_wait": "Starta väntan",
   "txt_emergency_access_confirm": "Lämna över nyckeln",
+  "txt_emergency_access_confirm_no_public_key": "Personen du släppte in har ännu inget nyckelpar, så nyckeln kan inte omslutas för dem.",
   "txt_emergency_access_confirm_failed": "Nyckeln kunde inte lämnas över.",
   "txt_emergency_access_confirm_no_key": "Lås upp valvet först, så att nyckeln kan omslutas för den andra personen.",
   "txt_emergency_access_approve": "Godkänn",

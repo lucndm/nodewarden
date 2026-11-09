@@ -607,6 +607,7 @@ const fi: Record<string, string> = {
   "txt_emergency_access_type_takeover": "Hän voivat ottaa tilisi haltuun",
   "txt_emergency_access_start_wait": "Aloita odotus",
   "txt_emergency_access_confirm": "Luovuta avain",
+  "txt_emergency_access_confirm_no_public_key": "Henkilöllä, jonka päästit sisään, ei ole vielä avainparia, joten avainta ei voi salata hänelle.",
   "txt_emergency_access_confirm_failed": "Avainta ei voitu luovuttaa.",
   "txt_emergency_access_confirm_no_key": "Avaa holtti ensin, jotta avain voidaan salata toiselle henkilölle.",
   "txt_emergency_access_approve": "Hyväksy",

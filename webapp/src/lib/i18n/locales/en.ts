@@ -660,6 +660,7 @@ const en: Record<string, string> = {
   "txt_emergency_access_type_takeover": "They can take over your account",
   "txt_emergency_access_start_wait": "Start the wait",
   "txt_emergency_access_confirm": "Hand over the key",
+  "txt_emergency_access_confirm_no_public_key": "The person you let in has no key pair yet, so the key cannot be wrapped for them.",
   "txt_emergency_access_confirm_failed": "The key could not be handed over.",
   "txt_emergency_access_confirm_no_key": "Unlock the vault first, so the key can be wrapped for the other person.",
   "txt_emergency_access_approve": "Approve",

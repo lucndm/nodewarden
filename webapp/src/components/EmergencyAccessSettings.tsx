@@ -23,6 +23,7 @@ import {
   getGrantedEmergencyAccess,
   getTrustedEmergencyAccess,
   getUserPublicKey,
+  PublicKeyUnavailableError,
   initiateEmergencyAccess,
   inviteEmergencyAccess,
   rejectEmergencyAccess,
@@ -147,7 +148,13 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
       await confirmEmergencyAccess(props.authedFetch, grant.id, wrapped);
       await load();
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : t('txt_emergency_access_confirm_failed'));
+      setError(
+        err instanceof PublicKeyUnavailableError
+          ? t('txt_emergency_access_confirm_no_public_key')
+          : err instanceof Error && err.message
+            ? err.message
+            : t('txt_emergency_access_confirm_failed')
+      );
     } finally {
       setConfirmingId('');
     }

@@ -607,6 +607,7 @@ const it: Record<string, string> = {
   "txt_emergency_access_type_takeover": "Può prendere il controllo del tuo account",
   "txt_emergency_access_start_wait": "Inizia l’attesa",
   "txt_emergency_access_confirm": "Consegnare la chiave",
+  "txt_emergency_access_confirm_no_public_key": "La persona che hai fatto entrare non ha ancora una coppia di chiavi, quindi la chiave non può essere avvolta per lei.",
   "txt_emergency_access_confirm_failed": "Non è stato possibile consegnare la chiave.",
   "txt_emergency_access_confirm_no_key": "Sblocca prima il vault, così la chiave può essere avvolta per l’altra persona.",
   "txt_emergency_access_approve": "Approva",

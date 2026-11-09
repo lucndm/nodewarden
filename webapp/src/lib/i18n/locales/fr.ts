@@ -607,6 +607,7 @@ const fr: Record<string, string> = {
   "txt_emergency_access_type_takeover": "Cette personne peut prendre le contrôle de votre compte",
   "txt_emergency_access_start_wait": "Commencer l’attente",
   "txt_emergency_access_confirm": "Transmettre la clé",
+  "txt_emergency_access_confirm_no_public_key": "La personne que vous avez laissée entrer n’a pas encore de paire de clés, donc la clé ne peut pas être enveloppée pour elle.",
   "txt_emergency_access_confirm_failed": "La clé n’a pas pu être transmise.",
   "txt_emergency_access_confirm_no_key": "Déverrouillez d’abord le coffre-fort pour que la clé puisse être enveloppée pour l’autre personne.",
   "txt_emergency_access_approve": "Approuver",

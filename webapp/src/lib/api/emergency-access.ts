@@ -83,6 +83,17 @@ export async function inviteEmergencyAccess(
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Invite failed'));
 }
 
+/**
+ * The person has no key pair on their account yet, so there is nothing to
+ * wrap the vault key with.
+ */
+export class PublicKeyUnavailableError extends Error {
+  constructor() {
+    super('public_key_unavailable');
+    this.name = 'PublicKeyUnavailableError';
+  }
+}
+
 /** GET /api/users/:id/public-key — the key the vault key is wrapped with. */
 export async function getUserPublicKey(
   authedFetch: AuthedFetch,
@@ -91,6 +102,7 @@ export async function getUserPublicKey(
   const resp = await authedFetch(`/api/users/${encodeURIComponent(userId)}/public-key`, {
     method: 'GET',
   });
+  if (resp.status === 404) throw new PublicKeyUnavailableError();
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'The public key could not be read'));
   const body = await parseJson<{ publicKey?: string }>(resp);
   const publicKey = String(body?.publicKey || '').trim();

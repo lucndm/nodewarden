@@ -660,6 +660,7 @@ const zhTW: Record<string, string> = {
   "txt_emergency_access_type_takeover": "對方可以接管你的帳戶",
   "txt_emergency_access_start_wait": "開始等待",
   "txt_emergency_access_confirm": "移交金鑰",
+  "txt_emergency_access_confirm_no_public_key": "你允許進入的人還沒有金鑰對，因此無法為其加密金鑰。",
   "txt_emergency_access_confirm_failed": "無法移交金鑰。",
   "txt_emergency_access_confirm_no_key": "請先解鎖密碼庫，才能為對方加密金鑰。",
   "txt_emergency_access_approve": "批准",

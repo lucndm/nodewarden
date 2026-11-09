@@ -607,6 +607,7 @@ const de: Record<string, string> = {
   "txt_emergency_access_type_takeover": "Sie können Ihr Konto übernehmen",
   "txt_emergency_access_start_wait": "Wartezeit beginnen",
   "txt_emergency_access_confirm": "Schlüssel übergeben",
+  "txt_emergency_access_confirm_no_public_key": "Die Person, die Sie hereingelassen haben, hat noch kein Schlüsselpaar, deshalb kann der Schlüssel nicht für sie umschlossen werden.",
   "txt_emergency_access_confirm_failed": "Der Schlüssel konnte nicht übergeben werden.",
   "txt_emergency_access_confirm_no_key": "Entsperren Sie zuerst den Tresor, damit der Schlüssel für die andere Person umschlossen werden kann.",
   "txt_emergency_access_approve": "Zustimmen",

@@ -607,6 +607,7 @@ const es: Record<string, string> = {
   "txt_emergency_access_type_takeover": "Puede tomar el control de tu cuenta",
   "txt_emergency_access_start_wait": "Iniciar la espera",
   "txt_emergency_access_confirm": "Entregar la clave",
+  "txt_emergency_access_confirm_no_public_key": "La persona a la que dejaste entrar todavía no tiene un par de claves, así que la clave no se puede cifrar para ella.",
   "txt_emergency_access_confirm_failed": "No se pudo entregar la clave.",
   "txt_emergency_access_confirm_no_key": "Desbloquea la bóveda primero, para poder cifrar la clave para la otra persona.",
   "txt_emergency_access_approve": "Aprobar",
