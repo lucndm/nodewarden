@@ -1120,3 +1120,41 @@ test('a group hands its collections to its members', async () => {
   const remaining = (await afterDelete.json()) as { data: Array<{ id: string }> };
   assert.ok(!remaining.data.some((entry) => entry.id === group.id), 'the group is gone');
 });
+
+test('an item created with its collections beside it lands in them', async () => {
+  // The official clients (the Rust SDK behind them) post
+  // { cipher, collectionIds } to /ciphers/create: the collections sit next to
+  // the item, not inside it.
+  const { env } = await fixture();
+  const { collectionIds, ...item } = sharedItem;
+  // The SDK also names the account it encrypted the item for.
+  const cipher = { ...item, encryptedFor: WRITER };
+  const response = await call(env, 'https://vault.example.test/api/ciphers/create', 'POST', WRITER, {
+    cipher,
+    collectionIds,
+  });
+  assert.equal(response.status, 200, await response.clone().text());
+  const created = (await response.json()) as { id: string };
+
+  const detail = await call(env, `https://vault.example.test/api/ciphers/${created.id}`, 'GET', WRITER);
+  const stored = (await detail.json()) as { organizationId: string; collectionIds: string[] };
+  assert.equal(stored.organizationId, ORG);
+  assert.deepEqual(stored.collectionIds, [COL_SHARED], 'the item sits in the collection named beside it');
+});
+
+test('an item encrypted for another account is refused', async () => {
+  // A client that wrapped the item key for someone else would store an item
+  // its own account cannot open. Vaultwarden refuses it the same way.
+  const { env } = await fixture();
+  const { collectionIds, ...item } = sharedItem;
+  for (const [url, body] of [
+    ['https://vault.example.test/api/ciphers/create', { cipher: { ...item, encryptedFor: OWNER }, collectionIds }],
+    ['https://vault.example.test/api/ciphers', { ...item, collectionIds, encryptedFor: OWNER }],
+  ] as const) {
+    const response = await call(env, url, 'POST', WRITER, body);
+    assert.equal(response.status, 422, `${url}: ${await response.clone().text()}`);
+  }
+  const listed = await call(env, 'https://vault.example.test/api/ciphers', 'GET', WRITER);
+  const ciphers = (await listed.json()) as { data: unknown[] };
+  assert.equal(ciphers.data.length, 0, 'nothing was stored');
+});

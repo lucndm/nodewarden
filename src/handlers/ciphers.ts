@@ -1071,6 +1071,14 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
     return errorResponse('Cipher key encryption is not supported by this server. Resync the client and try again.', 400);
   }
 
+  // The official clients name the account they encrypted the item for. An item
+  // encrypted for someone else could not be opened by the account storing it,
+  // so it is refused, as Vaultwarden does. The web vault does not send the field.
+  const encryptedFor = readCipherProp<string | null>(cipherData, ['encryptedFor', 'EncryptedFor']);
+  if (encryptedFor.present && encryptedFor.value != null && encryptedFor.value !== userId) {
+    return errorResponse('Invalid user cipher', 422);
+  }
+
   const now = new Date().toISOString();
   // Opaque passthrough: spread ALL client fields to preserve unknown/future ones,
   // then override only server-controlled fields.
@@ -1119,7 +1127,13 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
   const incomingOrganizationId = normalizeOptionalId(
     readCipherProp<string | null>(cipherData, ['organizationId', 'OrganizationId']).value
   );
-  const incomingCollectionIds = readCipherProp<string[] | null>(cipherData, ['collectionIds', 'CollectionIds']);
+  // The official clients post `{ cipher: {...}, collectionIds: [...] }` to
+  // /ciphers/create: the collections sit beside the cipher. The web vault puts
+  // them inside it.
+  const besideCollectionIds = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']);
+  const incomingCollectionIds = besideCollectionIds.present && cipherData !== body
+    ? besideCollectionIds
+    : readCipherProp<string[] | null>(cipherData, ['collectionIds', 'CollectionIds']);
   if (incomingOrganizationId) {
     const collectionIds = Array.isArray(incomingCollectionIds.value)
       ? [...new Set(incomingCollectionIds.value.filter((value): value is string => typeof value === 'string'))]
