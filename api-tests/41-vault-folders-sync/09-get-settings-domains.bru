@@ -1,0 +1,27 @@
+meta {
+  name: GET settings/domains
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/settings/domains
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `ApiService.getSettingsDomains`, read as `DomainsResponse`
+  (EquivalentDomains, GlobalEquivalentDomains).
+}
+
+tests {
+  test("the owner reads the equivalent domains", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.globalEquivalentDomains).to.be.an("array");
+  });
+}

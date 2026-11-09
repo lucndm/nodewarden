@@ -39,6 +39,7 @@
     "test:local-cli": "tsx --tsconfig webapp/tsconfig.json scripts/local-cli-e2e.mts",
     "test:local-extension": "tsx --tsconfig webapp/tsconfig.json scripts/local-extension-e2e.mts",
     "test:local-api": "node scripts/local-api-e2e.mjs",
+    "test:api": "node scripts/api-contract.mjs",
     "test:local-shared-items": "node scripts/local-shared-items-e2e.mjs",
     "test:sync-collection-ids": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/sync-collection-ids.test.ts",
     "test:local-ui": "tsx --tsconfig webapp/tsconfig.json scripts/local-ui-e2e.mts",

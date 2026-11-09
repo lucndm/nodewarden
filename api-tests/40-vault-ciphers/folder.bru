@@ -1,0 +1,17 @@
+meta {
+  name: 40-vault-ciphers
+  seq: 40
+}
+
+docs {
+  Items of a personal vault: create, read, change, move, archive, trash,
+  restore, delete, import, attachments.
+
+  Most of these calls are made by the Rust SDK, not by TypeScript, so the
+  coverage report (built from TypeScript calls) missed them. Their list comes
+  from the SDK source; see `plans/261109-2031-official-vault-endpoints/plan.md`.
+
+  The SDK reads every cipher answer with `TryFrom<CipherResponseModel>`
+  (`crates/bitwarden-vault/src/cipher/cipher.rs`): `type`, `creationDate` and
+  `revisionDate` are required, the rest is optional.
+}

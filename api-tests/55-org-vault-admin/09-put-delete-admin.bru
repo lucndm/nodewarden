@@ -1,0 +1,29 @@
+meta {
+  name: PUT ciphers/:id/delete-admin (to the trash)
+  type: http
+  seq: 9
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/{{adminItemId}}/delete-admin
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: the Rust SDK admin cipher client
+  (`crates/bitwarden-vault/src/cipher/cipher_client/admin/`), used by the admin
+  console vault, where an owner or admin acts on any item of the organization.
+
+  `put_delete_admin`, no body.
+}
+
+tests {
+  test("the owner trashes the item from the admin console", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

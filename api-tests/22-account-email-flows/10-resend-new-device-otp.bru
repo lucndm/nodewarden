@@ -1,0 +1,35 @@
+meta {
+  name: POST resend-new-device-otp
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/resend-new-device-otp
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{ownerEmail}}",
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `NewDeviceVerificationComponent`
+  (`libs/auth/src/angular/new-device-verification/new-device-verification.component.ts`),
+  sent without a token, body `{ email, masterPasswordHash }`.
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`). New-device verification itself is refused too (see
+  `20-account-profile`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

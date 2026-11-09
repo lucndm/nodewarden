@@ -1,0 +1,21 @@
+meta {
+  name: POST :id/initiate again
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/initiate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+tests {
+  test("the grantee asks again", function () {
+    expect(res.status).to.equal(200);
+  });
+}

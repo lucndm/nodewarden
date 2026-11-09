@@ -1,0 +1,31 @@
+meta {
+  name: POST folders (a folder to move into)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/folders
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "2.aXYtbW92ZQ==|Y3QtbW92ZQ==|bWFjLWbW92ZQ=="
+  }
+}
+
+script:post-response {
+  bru.setVar("moveFolderId", res.body && res.body.id);
+}
+
+tests {
+  test("the owner creates a folder", function () {
+    expect(res.status).to.equal(200);
+  });
+}

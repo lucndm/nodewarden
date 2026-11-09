@@ -1,0 +1,26 @@
+meta {
+  name: GET :id/policies
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/policies
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+docs {
+  Client: `getEmergencyGrantorPolicies`, read as a list of policies. A takeover
+  must respect the grantor's master password policy.
+}
+
+tests {
+  test("the grantee reads the grantor's policies", function () {
+    expect(res.status).to.equal(200);
+  });
+}

@@ -1,0 +1,26 @@
+meta {
+  name: DELETE groups/:id
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/groups/{{adminGroupId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `GroupApiService`
+  (`apps/web/src/app/admin-console/organizations/core/services/group/group-api.service.ts`). `delete`, no body.
+}
+
+tests {
+  test("the owner deletes the group", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

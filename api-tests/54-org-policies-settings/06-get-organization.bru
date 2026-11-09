@@ -1,0 +1,36 @@
+meta {
+  name: GET organizations/:id
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `OrganizationApiService`
+  (`libs/common/src/admin-console/services/organization/organization-api.service.ts`). `get`, read as `OrganizationResponse`: Id, Name, BillingEmail, Plan,
+  PlanType, Seats, MaxCollections, MaxStorageGb, UseGroups, UseDirectory,
+  UseEvents, UseTotp, UseApi, UseResetPassword, HasPublicAndPrivateKeys,
+  LimitCollectionCreation, LimitCollectionDeletion, LimitItemDeletion, ... The
+  organization settings page opens with it.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner reads the organization", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer has the fields the client reads", function () {
+    const fields = ["id","name","useGroups","usePolicies","hasPublicAndPrivateKeys"];
+    const missing = fields.filter((field) => f(res.body, field) === undefined);
+    expect(missing.length, "missing fields: " + missing.join(", ")).to.equal(0);
+  });
+}

@@ -1,0 +1,35 @@
+meta {
+  name: POST :id/confirm
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/confirm
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "key": "{{wrappedUserKey}}"
+  }
+}
+
+docs {
+  Client: `postEmergencyAccessConfirm`, body `EmergencyAccessConfirmRequest`
+  (`key`: the grantor's user key wrapped with the grantee's public key, read
+  from `GET /users/:id/public-key`).
+
+  Reference: vaultwarden `confirm_emergency_access` needs the access to be accepted first.
+}
+
+tests {
+  test("the grantor confirms the contact", function () {
+    expect(res.status).to.equal(200);
+  });
+}

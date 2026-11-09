@@ -1,0 +1,28 @@
+meta {
+  name: GET collections
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/collections
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `ApiService.getUserCollections`, read as a `ListResponse` of
+  `CollectionResponse` (Id, OrganizationId, Name, ExternalId, ...).
+}
+
+tests {
+  test("the owner lists the collections they can reach", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data).to.be.an("array");
+    expect(res.body.data.length).to.be.above(0);
+  });
+}

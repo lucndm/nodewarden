@@ -1,0 +1,38 @@
+meta {
+  name: POST webauthn/attestation-options
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/webauthn/attestation-options
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `WebAuthnLoginAdminApiService`
+  (`apps/web/src/app/auth/core/services/webauthn-login/webauthn-login-admin-api.service.ts`):
+  the passkeys an account logs in with, managed from the web vault settings. `getCredentialCreateOptions`, body `SecretVerificationRequest`, read as
+  `WebauthnLoginCredentialCreateOptionsResponse` (`options`, `token`). Saving
+  the passkey (`POST /webauthn`, `SaveCredentialRequest`) needs a real
+  authenticator.
+}
+
+tests {
+  test("the owner gets passkey creation options", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.options).to.be.an("object");
+    expect(res.body.token).to.be.a("string");
+  });
+}

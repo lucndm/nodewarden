@@ -1,0 +1,38 @@
+meta {
+  name: identity: a send_access token for the text Send
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/identity/connect/token
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  client_id: send
+  grant_type: send_access
+  scope: api.send.access
+  send_id: {{sendAccessId}}
+}
+
+script:post-response {
+  bru.setVar("sendAccessToken", res.body && res.body.access_token);
+}
+
+docs {
+  Client: `DefaultSendTokenService`
+  (`libs/common/src/auth/send-access/services/default-send-token.service.ts`)
+  asks the SDK, which posts `client_id=send`, `grant_type=send_access`,
+  `scope=api.send.access`, `send_id` (the access id from the link), and
+  `password_hash_b64` when the Send has a password
+  (`crates/bitwarden-auth/src/send_access/api/token_request_payload.rs`).
+}
+
+tests {
+  test("the recipient gets a Send access token", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.access_token).to.be.a("string");
+  });
+}

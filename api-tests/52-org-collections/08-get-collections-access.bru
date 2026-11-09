@@ -1,0 +1,27 @@
+meta {
+  name: GET collections/access
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections/access
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `ApiService` (`libs/common/src/services/api.service.ts`), read as a list
+  of collections with access details.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner reads the access of every collection", function () {
+    expect(res.status).to.equal(200);
+  });
+}

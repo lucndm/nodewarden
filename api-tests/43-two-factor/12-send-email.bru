@@ -1,0 +1,28 @@
+meta {
+  name: POST two-factor/send-email
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/two-factor/send-email
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}",
+    "email": "{{ownerEmail}}"
+  }
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

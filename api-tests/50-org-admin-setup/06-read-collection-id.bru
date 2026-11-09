@@ -1,0 +1,28 @@
+meta {
+  name: Read the default collection id
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+script:post-response {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  const row = (f(res.body, "data") || [])[0];
+  bru.setVar("adminCollectionId", f(row, "id"));
+}
+
+tests {
+  test("the organization has its first collection", function () {
+    expect(res.status).to.equal(200);
+    expect(bru.getVar("adminCollectionId")).to.be.a("string");
+  });
+}

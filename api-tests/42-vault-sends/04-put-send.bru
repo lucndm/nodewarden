@@ -1,0 +1,44 @@
+meta {
+  name: PUT sends/:id
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/sends/{{sendId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 0,
+    "name": "2.aXYtcmVuYW1lZA==|Y3QtcmVuYW1lZA==|bWFjLWcmVuYW1lZA==",
+    "notes": null,
+    "key": "2.aXYtc2VuZC1rZXk=|Y3Qtc2VuZC1rZXk=|bWFjLWc2VuZC1rZXk=",
+    "maxAccessCount": 5,
+    "expirationDate": null,
+    "deletionDate": "{{sendDeletionDate}}",
+    "text": {
+      "text": "2.aXYtdGV4dA==|Y3QtdGV4dA==|bWFjLWdGV4dA==",
+      "hidden": false
+    },
+    "file": null,
+    "password": null,
+    "emails": null,
+    "authType": 2,
+    "disabled": false,
+    "hideEmail": false
+  }
+}
+
+tests {
+  test("the owner changes the Send", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.maxAccessCount).to.equal(5);
+  });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: GET config: the prelogin salt flag stays off
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/config
+  body: none
+  auth: none
+}
+
+docs {
+  Prelogin answers `salt: null`, which the client accepts only while the
+  feature flag `pm-27060-password-prelogin-from-sdk` is off. The client reads
+  the flags from `featureStates` in the server config.
+}
+
+tests {
+  test("the server config does not turn on the prelogin salt flag", function () {
+    expect(res.status).to.equal(200);
+    const flags = res.body.featureStates || {};
+    expect(flags["pm-27060-password-prelogin-from-sdk"] === true).to.equal(false);
+  });
+}

@@ -1,0 +1,28 @@
+meta {
+  name: GET notifications/hub without a WebSocket upgrade
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/notifications/hub?access_token={{ownerToken}}
+  body: none
+  auth: none
+}
+
+docs {
+  Client: `SignalRConnectionService`
+  (`libs/common/src/platform/server-notifications/internal/signalr-connection.service.ts`)
+  connects to `<notificationsUrl>/hub` with `skipNegotiation: true`, the
+  WebSockets transport, the MessagePack hub protocol, and the access token in
+  the `access_token` query parameter. It listens for `ReceiveMessage` (a
+  `NotificationResponse`: Type, Payload, ContextId) and `Heartbeat`.
+
+  A plain GET shows the route exists and asks for an upgrade.
+}
+
+tests {
+  test("the hub asks for a WebSocket upgrade", function () {
+    expect(res.status).to.equal(426);
+  });
+}

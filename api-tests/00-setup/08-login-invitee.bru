@@ -1,0 +1,33 @@
+meta {
+  name: Log in the invitee
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/identity/connect/token
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  grant_type: password
+  username: {{inviteeEmail}}
+  password: {{inviteePasswordHash}}
+  scope: api offline_access
+  client_id: web
+  deviceIdentifier: contract-inviteeToken
+  deviceName: contract check
+  deviceType: 9
+}
+
+script:post-response {
+  bru.setVar("inviteeToken", res.body.access_token);
+}
+
+tests {
+  test("the account gets an access token", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.access_token).to.be.a("string");
+  });
+}

@@ -1,0 +1,34 @@
+meta {
+  name: DELETE groups (bulk)
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/groups
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ids": [
+      "{{adminGroupId}}"
+    ]
+  }
+}
+
+docs {
+  Client: `GroupApiService`
+  (`apps/web/src/app/admin-console/organizations/core/services/group/group-api.service.ts`). `deleteMany`, body `OrganizationGroupBulkRequest` (`ids`).
+}
+
+tests {
+  test("the owner deletes groups in bulk", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

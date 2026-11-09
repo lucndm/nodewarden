@@ -1,0 +1,27 @@
+meta {
+  name: POST :id/reinvite
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/reinvite
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `postEmergencyAccessReinvite`, no body. Resends the invite email.
+
+  Reference: vaultwarden `resend_invite` needs mail.
+}
+
+tests {
+  test("the grantor resends the invitation", function () {
+    expect(res.status).to.equal(200);
+  });
+}

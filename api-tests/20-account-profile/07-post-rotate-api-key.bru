@@ -1,0 +1,38 @@
+meta {
+  name: POST rotate-api-key
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/rotate-api-key
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `ApiService.postUserRotateApiKey`, same request and response as
+  `api-key`.
+
+  Reference: vaultwarden `rotate_api_key`.
+}
+
+tests {
+  test("the owner rotates the API key", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.apiKey).to.be.a("string");
+  });
+  test("the rotated key differs from the old one", function () {
+    expect(res.body.apiKey).to.not.equal(bru.getVar("ownerApiKey"));
+  });
+}

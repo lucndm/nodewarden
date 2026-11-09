@@ -1,0 +1,31 @@
+meta {
+  name: Invite the member and the invitee
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "emails": [
+      "{{memberEmail}}",
+      "{{inviteeEmail}}"
+    ],
+    "type": 2
+  }
+}
+
+tests {
+  test("both accounts are invited", function () {
+    expect(res.status).to.equal(200);
+  });
+}

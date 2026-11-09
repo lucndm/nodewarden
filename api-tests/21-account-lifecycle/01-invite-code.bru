@@ -1,0 +1,36 @@
+meta {
+  name: Create an invite code for the lifecycle account
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/admin/invites
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}",
+    "expiresInHours": 1
+  }
+}
+
+script:pre-request {
+  bru.setVar("lifecycleEmail", "contract-lifecycle@example.test");
+}
+
+script:post-response {
+  bru.setVar("lifecycleInviteCode", res.body.code);
+}
+
+tests {
+  test("the admin hands out an invite code", function () {
+    expect(res.status).to.equal(201);
+  });
+}

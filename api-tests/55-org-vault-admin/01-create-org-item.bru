@@ -1,0 +1,64 @@
+meta {
+  name: POST ciphers/create (an organization item)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/ciphers/create
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "cipher": {
+      "type": 1,
+      "name": "2.aXYtb3JnLWl0ZW0=|Y3Qtb3JnLWl0ZW0=|bWFjLWb3JnLWl0ZW0=",
+      "notes": null,
+      "favorite": false,
+      "reprompt": 0,
+      "folderId": null,
+      "organizationId": "{{adminOrgId}}",
+      "key": null,
+      "login": {
+        "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+        "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+        "uris": [],
+        "totp": null
+      },
+      "fields": [],
+      "passwordHistory": []
+    },
+    "collectionIds": [
+      "{{adminCollectionId}}"
+    ]
+  }
+}
+
+script:post-response {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  bru.setVar("adminItemId", f(res.body, "id"));
+}
+
+docs {
+  Client: the SDK `ciphers_api.post_create`, body `CipherCreateRequestModel`:
+  `cipher` and, beside it, `collectionIds`.
+
+  NodeWarden reads `collectionIds` from inside `cipher` (`readCipherProp(cipherData, ...)`
+  in `src/handlers/ciphers.ts`), so it answers "A shared item must be placed in at
+  least one collection" and an official client cannot create an organization
+  item.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner creates an organization item", function () {
+    expect(res.status).to.equal(200);
+    expect(bru.getVar("adminItemId")).to.be.a("string");
+  });
+}

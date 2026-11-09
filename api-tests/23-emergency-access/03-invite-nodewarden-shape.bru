@@ -1,0 +1,41 @@
+meta {
+  name: POST invite with the key up front (NodeWarden's shape)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/invite
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "email": "{{memberEmail}}",
+    "type": 0,
+    "waitTimeDays": 7,
+    "encryptedUserKey": "{{wrappedUserKey}}"
+  }
+}
+
+script:pre-request {
+  if (bru.getVar("emergencyInvited")) bru.runner.skipRequest();
+}
+
+docs {
+  Not a contract: NodeWarden asks for `encryptedUserKey` with the invite
+  (`handleInviteEmergencyAccess`), which the official client never sends there.
+  This request gives the next steps a grant, and is skipped once the official
+  invite works.
+}
+
+tests {
+  test("the grant exists for the next requests", function () {
+    expect(res.status).to.equal(200);
+  });
+}

@@ -1,0 +1,14 @@
+meta {
+  name: 53-org-groups
+  seq: 53
+}
+
+docs {
+  Groups in the admin console: a set of members that gets a set of
+  collections. Needs `50-org-admin-setup`. The group holds the owner's
+  membership, which no other folder removes.
+
+  `GroupResponse`: Id, OrganizationId, Name, ExternalId. `GroupDetailsResponse`
+  adds Collections. `GroupRequest` sends `name`, `collections` and `users`
+  (membership ids); NodeWarden's own web vault sends `members`.
+}

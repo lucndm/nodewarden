@@ -1,0 +1,42 @@
+meta {
+  name: POST events/collect
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/events/collect
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  [
+    {
+      "type": 1107,
+      "cipherId": "{{orgId}}",
+      "date": "2026-11-09T00:00:00.000Z",
+      "organizationId": "{{orgId}}"
+    }
+  ]
+}
+
+docs {
+  Client: `ApiService.postEventsCollect` (`libs/common/src/services/api.service.ts`)
+  posts batches of `EventRequest` (`type`, `cipherId`, `date`,
+  `organizationId`) to `<eventsUrl>/collect`, and treats any answer but 200
+  as a failure to retry later.
+
+  Reference: vaultwarden `post_events_collect` answers 200 even with organization events off.
+  While NodeWarden keeps `useEvents` off, clients do not send this.
+}
+
+tests {
+  test("the event upload is accepted", function () {
+    expect(res.status).to.equal(200);
+  });
+}

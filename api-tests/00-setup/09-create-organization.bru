@@ -1,0 +1,38 @@
+meta {
+  name: Create the organization
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/organizations
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "Contract Org",
+    "key": "2.aXYtb3JnLWtleQ==|Y3Qtb3JnLWtleQ==|bWFjLW9yZy1rZXk=",
+    "collectionName": "2.aXYtY29sbA==|Y3QtY29sbA==|bWFjLWNvbGw=",
+    "keys": {
+      "publicKey": "{{orgPublicKey}}",
+      "encryptedPrivateKey": "{{orgPrivateKey}}"
+    }
+  }
+}
+
+script:post-response {
+  bru.setVar("orgId", res.body.id);
+}
+
+tests {
+  test("the owner creates the organization", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.id).to.be.a("string");
+  });
+}

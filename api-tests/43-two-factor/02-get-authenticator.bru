@@ -1,0 +1,53 @@
+meta {
+  name: POST two-factor/get-authenticator
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/two-factor/get-authenticator
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+script:post-response {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  // Keep going with whichever shape the server answers, so the next request tests the code check.
+  const nested = f(res.body, "authenticator");
+  bru.setVar("authenticatorKey", f(nested || res.body, "key"));
+  bru.setVar("authenticatorVerificationToken", f(res.body, "userVerificationToken"));
+}
+
+docs {
+  Client: `DefaultTwoFactorApiService`
+  (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `getTwoFactorAuthenticator`, body `SecretVerificationRequest`, read as
+  `TwoFactorAuthenticatorResponse`: Authenticator (Enabled, Key) and
+  UserVerificationToken.
+}
+
+tests {
+  test("the owner reads the authenticator setup", function () {
+    expect(res.status).to.equal(200);
+  });
+  // The client reads property names in either case (BaseResponse.getResponseProperty).
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the answer nests the provider under authenticator", function () {
+    expect(f(res.body, "authenticator")).to.be.an("object");
+  });
+  test("the answer carries a userVerificationToken for the next call", function () {
+    expect(f(res.body, "userVerificationToken")).to.be.a("string");
+  });
+  test("the setup carries a key to scan", function () {
+    expect(f(f(res.body, "authenticator"), "key")).to.be.a("string");
+  });
+}

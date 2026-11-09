@@ -1,0 +1,13 @@
+meta {
+  name: 30-client-notifications
+  seq: 30
+}
+
+docs {
+  What newer official clients expect beyond the vault: the push hub, the
+  notification center and the event upload.
+
+  The push hub itself is a WebSocket speaking SignalR with MessagePack, which
+  Bruno cannot drive. These requests only pin the HTTP side of it; the existing
+  `npm run test:notifications-security` covers the hub.
+}

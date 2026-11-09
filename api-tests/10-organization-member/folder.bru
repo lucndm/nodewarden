@@ -1,0 +1,13 @@
+meta {
+  name: 10-organization-member
+  seq: 10
+}
+
+docs {
+  The organization endpoints an official client calls for a member: read the
+  organization keys, set them, accept an invitation, leave.
+
+  NodeWarden serves these on routes of its own (`/organizations/:id/accept`)
+  and answers the official paths with the 501 catch-all, so these requests
+  fail until the official routes exist.
+}

@@ -1,0 +1,21 @@
+meta {
+  name: A token from before the stamp reset is refused
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/accounts/profile
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{lifecycleStaleToken}}
+}
+
+tests {
+  test("the old access token no longer works", function () {
+    expect(res.status).to.equal(401);
+  });
+}

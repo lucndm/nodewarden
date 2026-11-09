@@ -1,0 +1,26 @@
+meta {
+  name: GET sends/:id
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/sends/{{sendId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+tests {
+  test("the owner reads the Send", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer has the fields SendResponse reads", function () {
+    for (const field of ["id", "accessId", "type", "name", "key", "revisionDate", "deletionDate", "accessCount"]) {
+      expect(res.body, field).to.have.property(field);
+    }
+  });
+}

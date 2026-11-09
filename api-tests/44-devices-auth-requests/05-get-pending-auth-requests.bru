@@ -1,0 +1,31 @@
+meta {
+  name: GET auth-requests/pending
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/auth-requests/pending
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `AuthRequestApiService`
+  (`libs/auth/src/common/services/auth-request/auth-request-api.service.ts`) and
+  `ApiService` auth request calls. Read as a list of pending `AuthRequestResponse`. Logged-in devices poll it
+  and show the approval prompt.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the logged-in device sees the request", function () {
+    expect(res.status).to.equal(200);
+    const ids = (f(res.body, "data") || []).map((row) => f(row, "id"));
+    expect(ids).to.include(bru.getVar("authRequestId"));
+  });
+}

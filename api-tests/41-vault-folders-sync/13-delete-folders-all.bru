@@ -1,0 +1,29 @@
+meta {
+  name: DELETE folders/all
+  type: http
+  seq: 13
+}
+
+delete {
+  url: {{baseUrl}}/api/folders/all
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+docs {
+  Client: `FolderApiService.deleteAll`, no body. Called by the web vault when the
+  user purges the vault.
+
+  NodeWarden answers a path it has no route for with the generic `Not found`
+  from `router.ts`.
+}
+
+tests {
+  test("an account deletes all its folders", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

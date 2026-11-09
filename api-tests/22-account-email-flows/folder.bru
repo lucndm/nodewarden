@@ -1,0 +1,14 @@
+meta {
+  name: 22-account-email-flows
+  seq: 22
+}
+
+docs {
+  Account flows that the official server runs through email: sign-up
+  verification, email change, email verification, one-time codes, deleting an
+  account from a recovery link, the password hint.
+
+  NodeWarden has no email delivery and answers most of them with 501 on purpose.
+  These requests record which paths follow that decision and which ones have no
+  route at all.
+}

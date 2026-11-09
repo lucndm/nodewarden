@@ -1,0 +1,40 @@
+meta {
+  name: POST keys when the organization already has them
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/keys
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "publicKey": "b3RoZXItcHVibGljLWtleQ==",
+    "encryptedPrivateKey": "2.aXYtb3RoZXI=|Y3Qtb3RoZXI=|bWFjLW90aGVy"
+  }
+}
+
+docs {
+  Client: `OrganizationApiService.updateKeys`, body `OrganizationKeysRequest`
+  (`publicKey`, `encryptedPrivateKey`), read as `OrganizationKeysResponse`.
+  The official web vault calls it only from the self-hosted license upload
+  (`organization-self-hosting-license-uploader.component.ts`), for an
+  organization that has no key pair yet.
+
+  Reference: vaultwarden `post_org_keys` is admin only and refuses with
+  "Organization Keys already exist" once both keys are set. Every NodeWarden
+  organization gets its key pair at creation, so this is the expected answer.
+}
+
+tests {
+  test("an organization keeps the key pair it was created with", function () {
+    expect(res.status).to.equal(400);
+  });
+}

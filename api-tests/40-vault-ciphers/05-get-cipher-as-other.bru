@@ -1,0 +1,21 @@
+meta {
+  name: GET ciphers/:id as another account
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/ciphers/{{cipherAId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+tests {
+  test("another account does not see the item", function () {
+    expect(res.status).to.equal(404);
+  });
+}

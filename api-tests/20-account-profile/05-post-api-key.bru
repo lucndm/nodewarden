@@ -1,0 +1,41 @@
+meta {
+  name: POST api-key
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/api-key
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+script:post-response {
+  bru.setVar("ownerApiKey", res.body && res.body.apiKey);
+}
+
+docs {
+  Client: `ApiService.postUserApiKey`, body `SecretVerificationRequest`
+  (`masterPasswordHash`, or `otp`), read as `ApiKeyResponse` (ApiKey,
+  RevisionDate). The CLI logs in with this key.
+
+  Reference: vaultwarden `post_api_key` answers `{ apiKey, revisionDate, object: "apiKey" }`.
+}
+
+tests {
+  test("the owner reads the API key", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.apiKey).to.be.a("string");
+    expect(res.body.revisionDate).to.be.a("string");
+  });
+}

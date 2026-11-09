@@ -1,0 +1,32 @@
+meta {
+  name: DELETE organizations/:id
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `OrganizationApiService`
+  (`libs/common/src/admin-console/services/organization/organization-api.service.ts`). `delete`, body `SecretVerificationRequest`, no response body read.
+}
+
+tests {
+  test("the owner deletes the organization", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

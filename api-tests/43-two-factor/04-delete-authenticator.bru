@@ -1,0 +1,35 @@
+meta {
+  name: DELETE two-factor/authenticator
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/two-factor/authenticator
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "key": "{{authenticatorKey}}",
+    "userVerificationToken": "{{authenticatorVerificationToken}}"
+  }
+}
+
+docs {
+  Client: `DefaultTwoFactorApiService`
+  (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `deleteTwoFactorAuthenticator`, body `TwoFactorAuthenticatorDeleteRequest`
+  (`key`, `userVerificationToken`). The authenticator is off here, so only the
+  route is recorded.
+}
+
+tests {
+  test("NodeWarden has a route for it", function () {
+    expect([404, 501]).to.not.include(res.status);
+  });
+}

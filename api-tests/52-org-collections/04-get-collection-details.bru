@@ -1,0 +1,34 @@
+meta {
+  name: GET collections/:id/details
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections/{{adminCollection2Id}}/details
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultCollectionAdminService`
+  (`libs/admin-console/src/common/collections/services/default-collection-admin.service.ts`)
+  and `ApiService` collection calls (`libs/common/src/services/api.service.ts`). `getCollectionAccessDetails`, read as `CollectionAccessDetailsResponse`.
+  The edit dialog opens with it.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner reads one collection with its access", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer has the fields the client reads", function () {
+    const fields = ["id","name","groups","users"];
+    const missing = fields.filter((field) => f(res.body, field) === undefined);
+    expect(missing.length, "missing fields: " + missing.join(", ")).to.equal(0);
+  });
+}

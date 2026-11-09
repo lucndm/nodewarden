@@ -1,0 +1,68 @@
+meta {
+  name: POST sends (text)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/sends
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 0,
+    "name": "2.aXYtc2VuZA==|Y3Qtc2VuZA==|bWFjLWc2VuZA==",
+    "notes": null,
+    "key": "2.aXYtc2VuZC1rZXk=|Y3Qtc2VuZC1rZXk=|bWFjLWc2VuZC1rZXk=",
+    "maxAccessCount": null,
+    "expirationDate": null,
+    "deletionDate": "{{sendDeletionDate}}",
+    "text": {
+      "text": "2.aXYtdGV4dA==|Y3QtdGV4dA==|bWFjLWdGV4dA==",
+      "hidden": false
+    },
+    "file": null,
+    "password": null,
+    "emails": null,
+    "authType": 2,
+    "disabled": false,
+    "hideEmail": false
+  }
+}
+
+script:pre-request {
+  // The official server refuses a deletion date 31 days or more ahead.
+  bru.setVar("sendDeletionDate", new Date(Date.now() + 7 * 86400000).toISOString());
+}
+
+script:post-response {
+  bru.setVar("sendId", res.body && res.body.id); bru.setVar("sendAccessId", res.body && res.body.accessId);
+}
+
+docs {
+  Client: `SendApiService` (`libs/common/src/tools/send/services/send-api.service.ts`).
+  The SDK has the same calls behind the flag `pm-30110-sdk-sends-api`, off by
+  default and not turned on by NodeWarden.
+
+  Body `SendRequest`: type (0 text, 1 file), name, notes, key, maxAccessCount,
+  expirationDate, deletionDate, text (text, hidden) or file (fileName),
+  fileLength, password, emails, authType, disabled, hideEmail. Read as
+  `SendResponse`.
+}
+
+tests {
+  test("the owner creates a text Send", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer has the fields SendResponse reads", function () {
+    for (const field of ["id", "accessId", "type", "name", "key", "revisionDate", "deletionDate", "accessCount"]) {
+      expect(res.body, field).to.have.property(field);
+    }
+  });
+}

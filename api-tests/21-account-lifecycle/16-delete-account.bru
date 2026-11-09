@@ -1,0 +1,40 @@
+meta {
+  name: DELETE accounts (delete the account)
+  type: http
+  seq: 16
+}
+
+delete {
+  url: {{baseUrl}}/api/accounts
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{lifecycleToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{lifecycleNewPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `AccountApiService.deleteAccount`
+  (`libs/common/src/auth/services/account-api.service.ts`), body
+  `SecretVerificationRequest`, no response body read.
+
+  NodeWarden decision: `router-authenticated.ts` refuses
+  `POST /api/accounts/delete`, `/delete-account` and `/delete-vault` with 501.
+  The official client uses `DELETE /accounts`, which has no route, so the same
+  decision does not reach it.
+
+  Reference: vaultwarden `delete_account` deletes the account after a password check.
+}
+
+tests {
+  test("account deletion gets the same answer as the other deletion paths", function () {
+    expect(res.status).to.equal(501);
+  });
+}

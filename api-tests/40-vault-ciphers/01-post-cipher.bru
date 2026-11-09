@@ -1,0 +1,68 @@
+meta {
+  name: POST ciphers
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/ciphers
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 1,
+    "name": "2.aXYtaXRlbS1h|Y3QtaXRlbS1h|bWFjLWaXRlbS1h",
+    "notes": null,
+    "favorite": false,
+    "reprompt": 0,
+    "folderId": null,
+    "organizationId": null,
+    "key": null,
+    "login": {
+      "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+      "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+      "uris": [],
+      "totp": null
+    },
+    "fields": [],
+    "passwordHistory": []
+  }
+}
+
+script:post-response {
+  bru.setVar("cipherAId", res.body && res.body.id); bru.setVar("cipherARevision", res.body && res.body.revisionDate);
+}
+
+docs {
+  Client: the Rust SDK (`@bitwarden/sdk-internal` 0.2.0-main.1214, source
+  `bitwarden/sdk-internal` at `5b7fbb41`), called from
+  `libs/common/src/vault/services/cipher-sdk.service.ts`. The TypeScript client
+  has no other path for this call.
+
+  Body `CipherRequestModel`: type, name, notes, folderId, organizationId,
+  favorite, reprompt, key, login/card/identity/secureNote/sshKey, fields,
+  passwordHistory, attachments, lastKnownRevisionDate, archivedDate,
+  encryptedFor. Read as `CipherResponseModel`.
+}
+
+tests {
+  test("the owner creates an item", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer is a cipher the SDK can read", function () {
+    expect(res.body.id).to.be.a("string");
+    expect(res.body.type).to.equal(1);
+    expect(res.body.creationDate).to.be.a("string");
+    expect(res.body.revisionDate).to.be.a("string");
+  });
+  test("the server keeps the ciphertext as sent", function () {
+    expect(res.body.name).to.equal(req.getBody().name);
+    expect(res.body.login.username).to.equal(req.getBody().login.username);
+  });
+}

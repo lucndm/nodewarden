@@ -1,0 +1,36 @@
+meta {
+  name: POST verify-otp
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/verify-otp
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "OTP": "000000"
+  }
+}
+
+docs {
+  Client: `UserVerificationApiService.postAccountVerifyOTP`, body
+  `VerifyOTPRequest` (`OTP`).
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

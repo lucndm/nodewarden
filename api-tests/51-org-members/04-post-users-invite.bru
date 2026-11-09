@@ -1,0 +1,50 @@
+meta {
+  name: POST users/invite
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users/invite
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "emails": [
+      "contract-newcomer@example.test"
+    ],
+    "type": 2,
+    "collections": [],
+    "groups": [],
+    "permissions": null,
+    "accessSecretsManager": false
+  }
+}
+
+docs {
+  Client: `DefaultOrganizationUserApiService`
+  (`libs/admin-console/src/common/organization-user/services/default-organization-user-api.service.ts`). `postOrganizationUserInvite`, body `OrganizationUserInviteRequest`:
+  emails, type, collections, groups, permissions, accessSecretsManager. No
+  response body read. The official server invites any email, registered or not,
+  and emails a link.
+
+  NodeWarden invites with `POST /organizations/:id/users`, and only accounts
+  that already exist.
+
+  A fixed segment such as `invite` also matches NodeWarden's
+  `/users/:membershipId` route, which then answers "member not found"; so a
+  404 here can come from that route and still mean the endpoint is missing.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner invites a new email", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

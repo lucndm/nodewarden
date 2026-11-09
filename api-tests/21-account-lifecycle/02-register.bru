@@ -1,0 +1,37 @@
+meta {
+  name: Register the lifecycle account
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/register
+  body: json
+  auth: none
+}
+
+headers {
+  Origin: {{baseUrl}}
+}
+
+body:json {
+  {
+    "email": "{{lifecycleEmail}}",
+    "name": "Contract Lifecycle",
+    "masterPasswordHash": "{{lifecyclePasswordHash}}",
+    "key": "2.aXYtbGlmZQ==|Y3QtbGlmZQ==|bWFjLWxpZmU=",
+    "kdf": 0,
+    "kdfIterations": 600000,
+    "inviteCode": "{{lifecycleInviteCode}}",
+    "keys": {
+      "publicKey": "bGlmZWN5Y2xlLXB1YmxpYy1rZXk=",
+      "encryptedPrivateKey": "2.aXYtbGlmZS1wcml2|Y3QtbGlmZS1wcml2|bWFjLWxpZmUtcHJpdg=="
+    }
+  }
+}
+
+tests {
+  test("the lifecycle account registers", function () {
+    expect(res.status).to.equal(200);
+  });
+}

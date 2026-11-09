@@ -1,0 +1,37 @@
+meta {
+  name: POST webauthn/assertion-options
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/webauthn/assertion-options
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `WebAuthnLoginAdminApiService`
+  (`apps/web/src/app/auth/core/services/webauthn-login/webauthn-login-admin-api.service.ts`):
+  the passkeys an account logs in with, managed from the web vault settings. `getCredentialAssertionOptions`, read as
+  `CredentialAssertionOptionsResponse`. Used before turning on encryption with
+  the passkey's PRF (`PUT /webauthn`).
+}
+
+tests {
+  test("with no login passkey yet, the route says so itself", function () {
+    // The web vault asks only for a passkey it already lists.
+    expect(res.status).to.equal(404);
+    expect(res.body.error).to.not.equal("Not found");
+  });
+}

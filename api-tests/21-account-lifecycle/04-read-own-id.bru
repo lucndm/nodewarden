@@ -1,0 +1,26 @@
+meta {
+  name: Read the lifecycle account id
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/accounts/profile
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{lifecycleToken}}
+}
+
+script:post-response {
+  bru.setVar("lifecycleUserId", res.body.id);
+}
+
+tests {
+  test("the profile gives the account id", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.id).to.be.a("string");
+  });
+}

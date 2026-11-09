@@ -1,0 +1,26 @@
+meta {
+  name: DELETE folders/:id
+  type: http
+  seq: 12
+}
+
+delete {
+  url: {{baseUrl}}/api/folders/{{folderAId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `FolderApiService.delete`, no response body read.
+}
+
+tests {
+  test("the owner deletes the folder", function () {
+    // send() treats 200, 201 and 204 as success when no body is read.
+    expect([200, 204]).to.include(res.status);
+  });
+}

@@ -1,0 +1,27 @@
+meta {
+  name: DELETE users/:id
+  type: http
+  seq: 15
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users/{{adminInviteeMid}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultOrganizationUserApiService`
+  (`libs/admin-console/src/common/organization-user/services/default-organization-user-api.service.ts`). `removeOrganizationUser`, no body.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner removes the invitee", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

@@ -1,0 +1,30 @@
+meta {
+  name: DELETE notifications/:id/delete
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/notifications/{{orgId}}/delete
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `markAsDeleted`, no body, no response body read.
+
+  A 404 alone cannot tell "no route" from "no such notification". NodeWarden
+  answers a path with no route with the generic `Not found` from `router.ts`, so
+  the test also asks for a different message.
+}
+
+tests {
+  test("an unknown notification is not found by a real route", function () {
+    expect(res.status).to.equal(404);
+    expect(res.body.error).to.not.equal("Not found");
+  });
+}

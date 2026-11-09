@@ -1,0 +1,30 @@
+meta {
+  name: Leave as the last owner
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/leave
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `OrganizationApiService.leave`, no body, no response body read.
+  Called from the web vault filter (`organization-options.component.ts`) and
+  the CLI key-connector conversion (`convert-to-key-connector.command.ts`).
+
+  Reference: vaultwarden `leave_organization` refuses "The last owner can't
+  leave", which keeps an organization from losing every owner.
+}
+
+tests {
+  test("the last owner cannot leave", function () {
+    expect(res.status).to.equal(400);
+  });
+}

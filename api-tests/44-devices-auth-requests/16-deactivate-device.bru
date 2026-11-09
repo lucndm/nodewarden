@@ -1,0 +1,27 @@
+meta {
+  name: POST devices/:id/deactivate
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{baseUrl}}/api/devices/contract-inviteeToken/deactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{inviteeToken}}
+}
+
+docs {
+  Client: `DevicesApiServiceImplementation`
+  (`libs/common/src/auth/services/devices-api.service.implementation.ts`). `deactivateDevice`, no body. Logs a device out and removes it. It removes the
+  invitee's device, the account no later folder logs in with.
+}
+
+tests {
+  test("an account removes a device", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

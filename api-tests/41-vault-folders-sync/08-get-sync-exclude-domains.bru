@@ -1,0 +1,24 @@
+meta {
+  name: GET sync?excludeDomains=true
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/sync?excludeDomains=true
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+tests {
+  test("the sync without domains answers", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("it leaves the domains out", function () {
+    expect(res.body.domains == null).to.equal(true);
+  });
+}

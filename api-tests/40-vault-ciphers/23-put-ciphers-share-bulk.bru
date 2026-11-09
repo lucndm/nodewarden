@@ -1,0 +1,42 @@
+meta {
+  name: PUT ciphers/share (bulk into an organization)
+  type: http
+  seq: 23
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/share
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "collectionIds": [],
+    "ciphers": []
+  }
+}
+
+docs {
+  Client: the Rust SDK (`@bitwarden/sdk-internal` 0.2.0-main.1214, source
+  `bitwarden/sdk-internal` at `5b7fbb41`), called from
+  `libs/common/src/vault/services/cipher-sdk.service.ts`. The TypeScript client
+  has no other path for this call.
+
+  Body `CipherBulkShareRequestModel` (`collectionIds`, `ciphers`): moves several
+  items into an organization at once, each re-encrypted with the organization
+  key. NodeWarden has `PUT /ciphers/:id/share` for one item.
+
+  NodeWarden answers a path it has no route for with the generic `Not found`.
+}
+
+tests {
+  test("NodeWarden has a route for it", function () {
+    expect(res.status).to.not.equal(404);
+    expect(res.status).to.not.equal(501);
+  });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Leave as a confirmed member
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/leave
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+tests {
+  test("a confirmed member leaves", function () {
+    expect(res.status).to.equal(200);
+  });
+}

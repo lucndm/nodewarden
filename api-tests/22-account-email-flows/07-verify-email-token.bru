@@ -1,0 +1,33 @@
+meta {
+  name: POST verify-email-token
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/verify-email-token
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "userId": "{{orgId}}",
+    "token": "token"
+  }
+}
+
+docs {
+  Client: `ApiService.postAccountVerifyEmailToken`, body `VerifyEmailRequest`
+  (`userId`, `token`), sent without a token.
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

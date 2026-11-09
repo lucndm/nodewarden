@@ -1,0 +1,51 @@
+meta {
+  name: GET profile
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/accounts/profile
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `ApiService.getProfile` (`libs/common/src/services/api.service.ts`), read as
+  `ProfileResponse`: Id, Name, Email, EmailVerified, Premium, Culture,
+  TwoFactorEnabled, Key, AccountKeys or PrivateKey, AvatarColor, CreationDate,
+  SecurityStamp, ForcePasswordReset, UsesKeyConnector, VerifyDevices,
+  Organizations, Providers, ProviderOrganizations. Property names are read
+  case-insensitively.
+
+  Reference: vaultwarden `profile` in `src/api/core/accounts.rs`.
+}
+
+tests {
+  test("the owner reads the profile", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the profile names the account", function () {
+    expect(res.body.id).to.be.a("string");
+    expect(res.body.email).to.equal(bru.getEnvVar("ownerEmail"));
+  });
+  test("the profile carries the wrapped user key", function () {
+    expect(res.body.key).to.be.a("string");
+  });
+  test("the profile carries the account key pair", function () {
+    const pair = res.body.accountKeys && res.body.accountKeys.publicKeyEncryptionKeyPair;
+    expect(Boolean(pair || res.body.privateKey)).to.equal(true);
+  });
+  test("the profile has the fields the client reads", function () {
+    for (const field of ["securityStamp", "creationDate", "organizations", "providers", "providerOrganizations"]) {
+      expect(res.body, field).to.have.property(field);
+    }
+  });
+  test("the profile says whether new devices need verification", function () {
+    expect(res.body.verifyDevices).to.be.a("boolean");
+  });
+}

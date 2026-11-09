@@ -1,0 +1,36 @@
+meta {
+  name: PUT organizations/:id
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "Contract Admin Org Renamed",
+    "billingEmail": "{{ownerEmail}}"
+  }
+}
+
+docs {
+  Client: `OrganizationApiService`
+  (`libs/common/src/admin-console/services/organization/organization-api.service.ts`). `save`, body `OrganizationUpdateRequest` (name, billingEmail, and the
+  key pair when missing), read as `OrganizationResponse`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner renames the organization", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "name")).to.equal("Contract Admin Org Renamed");
+  });
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Read the membership ids
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+script:post-response {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  const rows = f(res.body, "data") || [];
+  const byEmail = (email) => rows.find((row) => f(row, "email") === email);
+  bru.setVar("adminOwnerMid", f(byEmail(bru.getEnvVar("ownerEmail")), "id"));
+  bru.setVar("adminMemberMid", f(byEmail(bru.getEnvVar("memberEmail")), "id"));
+  bru.setVar("adminInviteeMid", f(byEmail(bru.getEnvVar("inviteeEmail")), "id"));
+}
+
+tests {
+  test("every membership has an id", function () {
+    expect(bru.getVar("adminMemberMid")).to.be.a("string");
+    expect(bru.getVar("adminInviteeMid")).to.be.a("string");
+  });
+}

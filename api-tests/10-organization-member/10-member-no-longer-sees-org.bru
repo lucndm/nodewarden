@@ -1,0 +1,23 @@
+meta {
+  name: After leaving, the member no longer sees the organization
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/organizations
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+tests {
+  test("the organization is gone from the member's list", function () {
+    expect(res.status).to.equal(200);
+    const ids = (res.body.data || res.body || []).map((org) => org.id);
+    expect(ids).to.not.include(bru.getVar("orgId"));
+  });
+}

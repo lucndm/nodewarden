@@ -1,0 +1,31 @@
+meta {
+  name: PUT ciphers/unarchive
+  type: http
+  seq: 13
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/unarchive
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ids": [
+      "{{cipherBId}}"
+    ]
+  }
+}
+
+tests {
+  test("the owner takes the item out of the archive", function () {
+    expect(res.status).to.equal(200);
+    const row = (res.body.data || [])[0];
+    expect(row.archivedDate == null).to.equal(true);
+  });
+}

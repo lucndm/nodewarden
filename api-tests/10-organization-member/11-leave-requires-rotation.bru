@@ -1,0 +1,30 @@
+meta {
+  name: After a member leaves, the owner is told to rotate the key
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/organizations
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  A member who leaves keeps the organization key they already unwrapped, the
+  same as a member who is removed. `removeOrganizationUser` in
+  `src/services/storage-collection-repo.ts` records that with
+  `key_rotation_required`; leaving has to do the same.
+}
+
+tests {
+  test("the organization asks for a key rotation", function () {
+    expect(res.status).to.equal(200);
+    const org = (res.body.data || res.body || []).find((entry) => entry.id === bru.getVar("orgId"));
+    expect(org.keyRotationRequired).to.equal(true);
+  });
+}

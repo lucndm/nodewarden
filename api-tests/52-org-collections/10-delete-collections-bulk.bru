@@ -1,0 +1,35 @@
+meta {
+  name: DELETE collections (bulk)
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ids": [
+      "{{adminCollection2Id}}"
+    ]
+  }
+}
+
+docs {
+  Client: `DefaultCollectionAdminService`
+  (`libs/admin-console/src/common/collections/services/default-collection-admin.service.ts`)
+  and `ApiService` collection calls (`libs/common/src/services/api.service.ts`). `bulkDelete`, body `CollectionBulkDeleteRequest` (`ids`).
+}
+
+tests {
+  test("the owner deletes collections in bulk", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

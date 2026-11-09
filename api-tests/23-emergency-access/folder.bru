@@ -1,0 +1,22 @@
+meta {
+  name: 23-emergency-access
+  seq: 23
+}
+
+docs {
+  Emergency access: an account (the grantor) names a trusted contact (the
+  grantee) who can ask for access; after a wait the grantee can view the vault
+  or take the account over. Only the official web vault calls these endpoints,
+  all from `apps/web/src/app/auth/emergency-access/services/emergency-access-api.service.ts`.
+
+  Here the owner is the grantor and the member is the grantee. Each step needs
+  the one before it; a failed step leaves the rest without the state they need.
+
+  NodeWarden has its own emergency access (merged after this record began):
+  the grantor wraps their user key for the grantee at invite time
+  (`encryptedUserKey`), where the official client sends it later with
+  `confirm`. So the official invite is refused, and a request in NodeWarden's
+  shape creates the grant the later steps need.
+
+  Reference: vaultwarden `src/api/core/emergency_access.rs`.
+}

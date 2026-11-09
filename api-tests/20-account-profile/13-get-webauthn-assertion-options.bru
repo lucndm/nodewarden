@@ -1,0 +1,29 @@
+meta {
+  name: GET webauthn/assertion-options
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/identity/accounts/webauthn/assertion-options
+  body: none
+  auth: none
+}
+
+docs {
+  Client: `WebAuthnLoginApiService.getCredentialAssertionOptions`
+  (`libs/common/src/auth/services/webauthn-login/webauthn-login-api.service.ts`),
+  read as `CredentialAssertionOptionsResponse`: `options` (the WebAuthn
+  challenge) and `token` (sent back with the assertion).
+}
+
+tests {
+  test("the passkey login options are public", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("they carry a challenge and a token", function () {
+    expect(res.body.options).to.be.an("object");
+    expect(res.body.options.challenge).to.be.a("string");
+    expect(res.body.token).to.be.a("string");
+  });
+}

@@ -1,0 +1,28 @@
+meta {
+  name: GET devices/identifier/:identifier
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/devices/identifier/contract-ownerToken
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DevicesApiServiceImplementation`
+  (`libs/common/src/auth/services/devices-api.service.implementation.ts`). `getDeviceByIdentifier`, read as `DeviceResponse`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner reads one device", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "identifier")).to.equal("contract-ownerToken");
+  });
+}

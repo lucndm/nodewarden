@@ -1,0 +1,37 @@
+meta {
+  name: DELETE folders (bulk)
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/api/folders
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ids": [
+      "{{folderBId}}"
+    ]
+  }
+}
+
+docs {
+  Client: `FolderApiService.deleteMany` (`libs/common/src/vault/services/folder/folder-api.service.ts`), body `FolderBulkDeleteRequest`
+  (`ids`), no response body read.
+
+  NodeWarden answers a path it has no route for with the generic `Not found`
+  from `router.ts`.
+}
+
+tests {
+  test("the owner deletes several folders at once", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

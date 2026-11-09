@@ -1,0 +1,30 @@
+meta {
+  name: GET hibp/breach
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/api/hibp/breach?username=contract-owner%40example.test
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `HibpApiService.getHibpBreach` (`libs/common/src/dirt/services/hibp-api.service.ts`),
+  read as a list of `BreachAccountResponse`. The web vault's "Data breach report"
+  calls it.
+
+  NodeWarden has a breach lookup of its own, `GET /api/security/email-breaches`,
+  for its web vault.
+}
+
+tests {
+  test("NodeWarden has a route for it", function () {
+    expect([404, 501]).to.not.include(res.status);
+  });
+}

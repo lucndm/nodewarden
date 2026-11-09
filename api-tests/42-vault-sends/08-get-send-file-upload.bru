@@ -1,0 +1,30 @@
+meta {
+  name: GET sends/:id/file/:fileId (renew the upload)
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/sends/{{fileSendId}}/file/{{fileSendFileId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `SendApiService` (`libs/common/src/tools/send/services/send-api.service.ts`).
+  The SDK has the same calls behind the flag `pm-30110-sdk-sends-api`, off by
+  default and not turned on by NodeWarden.
+
+  Read as `SendFileUploadDataResponse`, when the first upload URL expired.
+}
+
+tests {
+  test("the owner gets a fresh upload URL", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.url).to.be.a("string");
+  });
+}

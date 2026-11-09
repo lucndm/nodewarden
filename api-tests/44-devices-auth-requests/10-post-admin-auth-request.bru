@@ -1,0 +1,38 @@
+meta {
+  name: POST auth-requests/admin-request
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/auth-requests/admin-request
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+body:json {
+  {
+    "email": "{{memberEmail}}",
+    "publicKey": "bWVtYmVyLXB1YmxpYw==",
+    "deviceIdentifier": "contract-memberToken",
+    "accessCode": "x",
+    "type": 2
+  }
+}
+
+docs {
+  Client: `AuthRequestApiService`
+  (`libs/auth/src/common/services/auth-request/auth-request-api.service.ts`) and
+  `ApiService` auth request calls. `postAdminAuthRequest`: asks an organization admin to approve a device,
+  for trusted device encryption. Only the route is recorded.
+}
+
+tests {
+  test("NodeWarden has a route for it", function () {
+    expect([404, 501]).to.not.include(res.status);
+  });
+}

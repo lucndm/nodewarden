@@ -1,0 +1,29 @@
+meta {
+  name: POST :id/takeover on a view-only access
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/takeover
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+docs {
+  Client: `postEmergencyAccessTakeover`, read as
+  `EmergencyAccessTakeoverResponse`: KeyEncrypted, Kdf, KdfIterations,
+  KdfMemory, KdfParallelism, Salt.
+
+  This access is of type 0 (view), so a takeover must be refused.
+}
+
+tests {
+  test("a view-only contact cannot take the account over", function () {
+    expect(res.status).to.equal(400);
+  });
+}

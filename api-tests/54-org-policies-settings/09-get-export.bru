@@ -1,0 +1,31 @@
+meta {
+  name: GET organizations/:id/export
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/export
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultVaultExportApiService`
+  (`libs/tools/export-vault-core/src/services/api/default-vault-export-api.service.ts`),
+  read as `OrganizationExportResponse` (Collections, Ciphers). The organization
+  vault export uses it.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner exports the organization vault", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "collections")).to.not.equal(undefined);
+    expect(f(res.body, "ciphers")).to.not.equal(undefined);
+  });
+}

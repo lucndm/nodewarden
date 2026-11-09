@@ -1,0 +1,36 @@
+meta {
+  name: PUT two-factor/authenticator with a wrong code
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/two-factor/authenticator
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "token": "000000",
+    "key": "{{authenticatorKey}}",
+    "userVerificationToken": "{{authenticatorVerificationToken}}"
+  }
+}
+
+docs {
+  Client: `DefaultTwoFactorApiService`
+  (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `putTwoFactorAuthenticator`, body `TwoFactorAuthenticatorUpdateRequest`
+  (`token`: the code from the app, `key`, `userVerificationToken`), read as
+  `TwoFactorAuthenticatorUpdateResponse`.
+}
+
+tests {
+  test("a wrong code does not turn the authenticator on", function () {
+    expect(res.status).to.equal(400);
+  });
+}

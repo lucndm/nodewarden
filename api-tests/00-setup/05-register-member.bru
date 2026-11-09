@@ -1,0 +1,37 @@
+meta {
+  name: Register the member
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/register
+  body: json
+  auth: none
+}
+
+headers {
+  Origin: {{baseUrl}}
+}
+
+body:json {
+  {
+    "email": "{{memberEmail}}",
+    "name": "Contract Account",
+    "masterPasswordHash": "{{memberPasswordHash}}",
+    "key": "2.aXYtYWNjb3VudA==|Y3QtYWNjb3VudA==|bWFjLWFjY291bnQ=",
+    "kdf": 0,
+    "kdfIterations": 600000,
+    "inviteCode": "{{memberInviteCode}}",
+    "keys": {
+      "publicKey": "YWNjb3VudC1wdWJsaWMta2V5",
+      "encryptedPrivateKey": "2.aXYtYWNjb3VudC1wcml2|Y3QtYWNjb3VudC1wcml2|bWFjLWFjY291bnQtcHJpdg=="
+    }
+  }
+}
+
+tests {
+  test("the account registers with its invite code", function () {
+    expect(res.status).to.equal(200);
+  });
+}

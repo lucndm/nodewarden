@@ -1,0 +1,27 @@
+meta {
+  name: The owner confirms the member
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/users/{{memberMembershipId}}/confirm
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "key": "{{wrappedOrgKey}}"
+  }
+}
+
+tests {
+  test("the member is confirmed", function () {
+    expect(res.status).to.equal(200);
+  });
+}

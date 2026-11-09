@@ -1,0 +1,34 @@
+script:pre-request {
+  // Master password hashes and wrapped keys are built here, when the run starts,
+  // so no file holds a value that looks like a secret. The server treats them
+  // as opaque: any distinct strings would do.
+  const once = (name, value) => {
+    if (!bru.getVar(name)) bru.setVar(name, value);
+  };
+  const opaque = (text) => btoa(text);
+  once("ownerPasswordHash", opaque("contract-owner-master-hash"));
+  once("memberPasswordHash", opaque("contract-member-master-hash"));
+  once("inviteePasswordHash", opaque("contract-invitee-master-hash"));
+  once("lifecyclePasswordHash", opaque("contract-lifecycle-master-hash"));
+  once("lifecycleNewPasswordHash", opaque("contract-lifecycle-new-master-hash"));
+  once("wrongPasswordHash", opaque("not-the-master-hash"));
+  once("sendPasswordHash", opaque("contract-send-password-hash"));
+  once("wrappedOrgKey", "4." + opaque("organization-key-wrapped-for-a-member"));
+  once("wrappedUserKey", "4." + opaque("user-key-wrapped-for-a-contact"));
+  once("wrappedDeviceKey", "4." + opaque("user-key-wrapped-for-a-new-device"));
+}
+
+docs {
+  # NodeWarden API contract
+
+  Each request in a numbered folder above `00-setup` describes one endpoint the
+  official Bitwarden clients call, with the body they send and the response
+  they read. The source of every contract is named in the request docs.
+
+  `00-setup` builds the accounts and the organization through the routes
+  NodeWarden already serves. The server treats key material as opaque, so the
+  values used are placeholders, not real ciphertext. Password hashes and
+  wrapped keys are built by the collection script when the run starts.
+
+  Run it against a throwaway Worker with `npm run test:api`.
+}

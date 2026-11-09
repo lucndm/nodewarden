@@ -1,0 +1,37 @@
+meta {
+  name: Create the admin organization
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/organizations
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "Contract Admin Org",
+    "key": "2.aXYtYWRtaW4tb3JnLWtleQ==|Y3QtYWRtaW4tb3JnLWtleQ==|bWFjLWYWRtaW4tb3JnLWtleQ==",
+    "collectionName": "2.aXYtYWRtaW4tY29sbA==|Y3QtYWRtaW4tY29sbA==|bWFjLWYWRtaW4tY29sbA==",
+    "keys": {
+      "publicKey": "YWRtaW4tb3JnLXB1YmxpYw==",
+      "encryptedPrivateKey": "2.aXYtYWRtaW4tb3JnLXByaXY=|Y3QtYWRtaW4tb3JnLXByaXY=|bWFjLWYWRtaW4tb3JnLXByaXY="
+    }
+  }
+}
+
+script:post-response {
+  bru.setVar("adminOrgId", res.body.id);
+}
+
+tests {
+  test("the owner creates the organization", function () {
+    expect(res.status).to.equal(200);
+  });
+}

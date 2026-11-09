@@ -1,0 +1,61 @@
+meta {
+  name: POST ciphers/create with collectionIds inside cipher (NodeWarden's shape)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/ciphers/create
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "cipher": {
+      "type": 1,
+      "name": "2.aXYtb3JnLWl0ZW0=|Y3Qtb3JnLWl0ZW0=|bWFjLWb3JnLWl0ZW0=",
+      "notes": null,
+      "favorite": false,
+      "reprompt": 0,
+      "folderId": null,
+      "organizationId": "{{adminOrgId}}",
+      "key": null,
+      "login": {
+        "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+        "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+        "uris": [],
+        "totp": null
+      },
+      "fields": [],
+      "passwordHistory": [],
+      "collectionIds": [
+        "{{adminCollectionId}}"
+      ]
+    }
+  }
+}
+
+script:pre-request {
+  if (bru.getVar("adminItemId")) bru.runner.skipRequest();
+}
+
+script:post-response {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  bru.setVar("adminItemId", f(res.body, "id"));
+}
+
+docs {
+  Not a contract: it gives the requests below an item while the official
+  shape above is refused. It is skipped once the official shape works.
+}
+
+tests {
+  test("the item exists for the admin requests", function () {
+    expect(res.status).to.equal(200);
+  });
+}

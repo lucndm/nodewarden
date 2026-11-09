@@ -1,0 +1,23 @@
+meta {
+  name: GET sends
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/sends
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+tests {
+  test("the owner lists the Sends", function () {
+    expect(res.status).to.equal(200);
+    const ids = (res.body.data || []).map((entry) => entry.id);
+    expect(ids).to.include(bru.getVar("sendId"));
+  });
+}

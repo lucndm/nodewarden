@@ -1,0 +1,13 @@
+meta {
+  name: 41-vault-folders-sync
+  seq: 41
+}
+
+docs {
+  The vault read path and folders: server config, sync, equivalent domains,
+  collections and folder changes. Every official client runs these on start.
+
+  `GET /sync` is not in the coverage report: the client builds its path in a
+  variable (`/sync` or `/sync?excludeDomains=true`), which the extraction did
+  not follow.
+}
