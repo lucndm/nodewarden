@@ -244,14 +244,14 @@ export async function listEmergencyAccessAwaitingApproval(
  * A grant that only lets the other person read is not approved by this: it
  * never gives them the account, so there is nothing to wait for.
  *
- * Returns how many grants were approved.
+ * Returns the grants that were approved, so the owner can be told.
  */
 export async function approveExpiredEmergencyAccess(
   db: D1Database,
   now: number = Date.now()
-): Promise<number> {
+): Promise<EmergencyAccessRow[]> {
   const rows = await listEmergencyAccessAwaitingApproval(db);
-  let approved = 0;
+  const approved: EmergencyAccessRow[] = [];
   for (const row of rows) {
     if (row.type !== EMERGENCY_ACCESS_TYPE_TAKEOVER) continue;
     if (!isEmergencyRecoveryAllowed(row, now)) continue;
@@ -259,7 +259,7 @@ export async function approveExpiredEmergencyAccess(
       status: EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
       updatedAt: new Date(now).toISOString(),
     });
-    approved += 1;
+    approved.push(row);
   }
   return approved;
 }

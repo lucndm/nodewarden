@@ -22,6 +22,7 @@
 import { errorResponse, jsonResponse } from '../utils/response';
 import { getUser, getUserById } from '../services/storage-user-repo';
 import { StorageService } from '../services/storage';
+import { sendEmergencyAccessNotice } from '../services/emergency-access-notifier';
 import {
   createEmergencyAccess,
   deleteEmergencyAccess,
@@ -320,7 +321,6 @@ export async function handleInitiateEmergencyAccess(
   userId: string,
   id: string
 ): Promise<Response> {
-  void request;
   const row = await getEmergencyAccess(env.DB, id);
   if (!row || row.granteeId !== userId) {
     return errorResponse('Emergency access not valid.', 404);
@@ -337,6 +337,13 @@ export async function handleInitiateEmergencyAccess(
     recoveryInitiatedAt: now,
     lastNotificationAt: now,
     updatedAt: now,
+  });
+  // The owner should hear about it while they can still refuse it.
+  await sendEmergencyAccessNotice(env, new URL(request.url).hostname, {
+    kind: 'recovery_started',
+    grantorId: row.grantorId,
+    granteeId: userId,
+    waitTimeDays: row.waitTimeDays,
   });
   const updated = await getEmergencyAccess(env.DB, id);
   return jsonResponse({
@@ -360,7 +367,6 @@ export async function handleApproveEmergencyAccess(
   userId: string,
   id: string
 ): Promise<Response> {
-  void request;
   const row = await getEmergencyAccess(env.DB, id);
   if (!row || row.grantorId !== userId) {
     return errorResponse('Emergency access not valid.', 404);
@@ -374,6 +380,15 @@ export async function handleApproveEmergencyAccess(
   await updateEmergencyAccess(env.DB, id, {
     status: EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
     updatedAt: nowIso(),
+  });
+  // The recovery may also have ended on its own, without the owner answering;
+  // either way the owner hears that the account is one step away from being
+  // taken over.
+  await sendEmergencyAccessNotice(env, new URL(request.url).hostname, {
+    kind: 'recovery_approved',
+    grantorId: row.grantorId,
+    granteeId: row.granteeId ?? undefined,
+    waitTimeDays: row.waitTimeDays,
   });
   const updated = await getEmergencyAccess(env.DB, id);
   return jsonResponse({
@@ -492,5 +507,13 @@ export async function handleEmergencyAccessPassword(
   await storage.saveUser(grantor);
   await storage.deleteRefreshTokensByUserId(grantor.id);
   await storage.deleteTrustedTwoFactorTokensByUserId(grantor.id);
+  // The account has changed hands: the owner hears about it, not only the
+  // person who took it over.
+  await sendEmergencyAccessNotice(env, new URL(request.url).hostname, {
+    kind: 'account_taken_over',
+    grantorId: row.grantorId,
+    granteeId: userId,
+    waitTimeDays: row.waitTimeDays,
+  });
   return jsonResponse({ object: 'emergencyAccess' });
 }

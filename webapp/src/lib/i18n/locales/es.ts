@@ -610,7 +610,7 @@ const es: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "No se pudo iniciar la espera.",
   "txt_emergency_access_approve_failed": "No se pudo aprobar la recuperación.",
   "txt_emergency_access_title": "Acceso de emergencia",
-  "txt_emergency_access_intro": "Permite que alguien entre cuando tú no puedes entrar. La clave que entregas está cifrada para esa persona, así que este servidor nunca guarda una clave que pueda abrir. No se envía ningún correo: la invitación aparece aquí y esa persona debe iniciar sesión para verla. Una toma de control le permite reemplazar tu contraseña maestra, pero solo tras la espera que elegiste y tu aprobación.",
+  "txt_emergency_access_intro": "Permite que alguien entre cuando tú no puedes entrar. La clave que entregas está cifrada para esa persona, así que este servidor nunca guarda una clave que pueda abrir. No se envía ningún correo: la invitación aparece aquí y esa persona debe iniciar sesión para verla. Una toma de control le permite reemplazar tu contraseña maestra, pero solo tras la espera que elegiste; a partir de ahí, la autorización se sostiene sola y todavía puedes retirarla aquí. Si esta instancia tiene avisos de Telegram activados, se te avisa allí cuando alguien pide la toma de control.",
   "txt_emergency_access_grants": "Personas a las que dejas entrar",
   "txt_emergency_access_no_grants": "Nadie tiene acceso a esta bóveda.",
   "txt_emergency_access_invite_title": "Dejar entrar a alguien",
