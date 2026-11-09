@@ -1,6 +1,6 @@
 # Organization endpoints for members on the official paths
 
-Status: contract written, implementation not started.
+Status: the member routes are in place — GET and POST `/api/organizations/:orgId/keys`, POST `/api/organizations/:orgId/leave`. `01`, `02`, `03`, `04` and `07` to `11` pass; the accept token (`05`, `06`) is still open.
 
 ## Outcome
 
@@ -30,15 +30,15 @@ Run on 2026-11-09: setup 13/13 passing; the 10 contract requests fail with
 - [x] Contract: client `OrganizationApiService.getKeys`, response `OrganizationKeysResponse`; callers read only `publicKey`.
 - [x] Bruno: a confirmed member gets 200 with the organization's `publicKey` and no `privateKey` (`01`).
 - [x] Bruno: an invited, unconfirmed account gets 404 (`02`).
-- [ ] Route and handler.
-- [ ] `01` and `02` pass.
+- [x] Route and handler.
+- [x] `01` and `02` pass.
 
 ### POST `/api/organizations/:orgId/keys`
 
 - [x] Contract: body `OrganizationKeysRequest` (`publicKey`, `encryptedPrivateKey`), response `OrganizationKeysResponse`. The only official caller is the self-hosted license upload.
 - [x] Bruno: refused with 400 once the key pair exists (`03`); a plain member gets 404 (`04`).
-- [ ] Route and handler. Every NodeWarden organization gets its key pair at creation, so the handler mostly refuses.
-- [ ] `03` and `04` pass.
+- [x] Route and handler. Every NodeWarden organization gets its key pair at creation, so the handler mostly refuses.
+- [x] `03` and `04` pass.
 
 ### POST `/api/organizations/:orgId/users/:membershipId/accept`
 
@@ -54,8 +54,8 @@ Run on 2026-11-09: setup 13/13 passing; the 10 contract requests fail with
 
 - [x] Contract: no body, no response body read. Callers: the web vault filter and the CLI key-connector conversion.
 - [x] Bruno: the last owner gets 400 (`07`); an unconfirmed account gets 400 (`08`); a confirmed member gets 200 (`09`), no longer sees the organization (`10`), and the organization is marked `keyRotationRequired` (`11`).
-- [ ] Route and handler, reusing `removeOrganizationUser` so leaving records the needed key rotation the same way as a removal.
-- [ ] `07` to `11` pass.
+- [x] Route and handler, reusing `removeOrganizationUser` so leaving records the needed key rotation the same way as a removal.
+- [x] `07` to `11` pass.
 
 ### Out of this phase
 
