@@ -1109,6 +1109,44 @@ async function main() {
       JSON.stringify(darkState || {})
     );
 
+    // Emergency access: the place where an account lets somebody in when it
+    // cannot get in itself. The page has to say what it does and does not
+    // do, because a grant here gives another person a key.
+    await evaluate(`(() => {
+      const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/settings');
+      if (!link) return false;
+      link.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.settings-category-tab')`, 'the settings page', 20000);
+    await evaluate(`(() => {
+      const tab = [...document.querySelectorAll('.settings-category-tab')].find((b) => b.textContent.trim() === 'Emergency access');
+      if (!tab) return false;
+      tab.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.emergency-access-list, .settings-submodule')`, 'the emergency access section', 20000);
+    const emergencyText = await evaluate('document.body.textContent');
+    checks.ok(
+      'the settings offer emergency access',
+      emergencyText.includes('Emergency access'),
+      emergencyText.slice(-300)
+    );
+    checks.ok(
+      'and it says the server holds no key it could open',
+      emergencyText.includes('never holds a key it could open'),
+      emergencyText.slice(-300)
+    );
+    checks.ok(
+      'and it says nobody is emailed',
+      emergencyText.includes('Nobody is emailed'),
+      emergencyText.slice(-300)
+    );
+    checks.ok(
+      'and it says a takeover is not offered',
+      emergencyText.includes('Taking over an account is not offered'),
+      emergencyText.slice(-300)
+    );
 
     return checks.finish() ? 0 : 1;
   } finally {

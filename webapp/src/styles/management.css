@@ -669,6 +669,21 @@
   background: transparent;
 }
 
+/* The people an account lets in when it cannot get in itself. */
+.emergency-access-list {
+  @apply m-0 flex list-none flex-col gap-2 p-0;
+}
+
+.emergency-access-row {
+  @apply flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2;
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.emergency-access-row > div {
+  @apply min-w-0;
+}
+
 .settings-vertical-fields {
   @apply grid gap-3;
 }

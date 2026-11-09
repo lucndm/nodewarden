@@ -58,6 +58,15 @@ import {
   handleSetScanExclusion,
 } from './handlers/ciphers';
 import {
+  handleAcceptEmergencyAccess,
+  handleDeleteEmergencyAccess,
+  handleGetEmergencyAccess,
+  handleInviteEmergencyAccess,
+  handleListGrantedEmergencyAccess,
+  handleListTrustedEmergencyAccess,
+  handleRejectEmergencyAccess,
+} from './handlers/emergency-access';
+import {
   handleGetCipherVersion,
   handleGetCipherVersions,
   handleRestoreCipherVersion,
@@ -363,6 +372,36 @@ export async function handleAuthenticatedRoute(
     }
     if (method === 'DELETE') {
       return handleDeleteScanExclusion(request, env, userId, scanExclusionMatch[1]);
+    }
+  }
+
+  // Emergency access: one account lets another person in when they cannot
+  // get in themselves. The key travels wrapped, so the server holds no key
+  // it could open.
+  if (path === '/api/emergency-access/trusted' && method === 'GET') {
+    return handleListTrustedEmergencyAccess(request, env, userId);
+  }
+  if (path === '/api/emergency-access/granted' && method === 'GET') {
+    return handleListGrantedEmergencyAccess(request, env, userId);
+  }
+  if (path === '/api/emergency-access/invite' && method === 'POST') {
+    return handleInviteEmergencyAccess(request, env, userId);
+  }
+  const emergencyAccessMatch = path.match(/^\/api\/emergency-access\/([^/]+)(?:\/([^/]+))?$/i);
+  if (emergencyAccessMatch) {
+    const emergencyId = emergencyAccessMatch[1];
+    const action = emergencyAccessMatch[2]?.toLowerCase();
+    if (!action && method === 'GET') {
+      return handleGetEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'accept' && (method === 'PUT' || method === 'POST')) {
+      return handleAcceptEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'reject' && (method === 'PUT' || method === 'POST')) {
+      return handleRejectEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (!action && method === 'DELETE') {
+      return handleDeleteEmergencyAccess(request, env, userId, emergencyId);
     }
   }
 
