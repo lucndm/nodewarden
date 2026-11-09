@@ -70,7 +70,8 @@
     "test:collection-storage": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/collection-storage.test.ts scripts/collection-sync-filter.test.ts scripts/organization-keys.test.ts scripts/shared-item.test.ts",
     "test:organization-rotation": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/organization-key-rotation.test.ts",
     "test:backup-archive-encryption": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/backup-archive-encryption.test.ts",
-    "test:organization-migration": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/organization-migration.test.ts"
+    "test:organization-migration": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/organization-migration.test.ts",
+    "test:folder-collection-mapping": "tsx --tsconfig webapp/tsconfig.json --import ./scripts/offline-workers-loader.mjs --test scripts/folder-collection-mapping.test.ts"
   },
   "keywords": [
     "bitwarden",

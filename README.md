@@ -51,7 +51,7 @@
 | **Multi-user** | ✅ | ✅ | Invite-code registration |
 | Domain rules | ✅ | ✅ | Equivalent domains, global exclusions |
 | Fill-assist | ✅ | ✅ | `POST /fill-assist`|
-| Organizations / collections / roles | ✅ | ❌ | Not implemented |
+| Organizations / collections / roles | ✅ | ✅ | Owner/admin/user, per-collection rights, groups, policies; item re-encrypted under the organization key |
 | SSO (OIDC) | ✅ | ✅ | Zitadel OIDC; account link required, no SCIM / directory sync |
 
 ---
