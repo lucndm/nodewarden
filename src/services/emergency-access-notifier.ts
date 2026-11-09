@@ -59,6 +59,10 @@ export async function sendEmergencyAccessNotice(
     if (!globalBudget.allowed) return;
 
     const grantee = /^[a-f0-9-]{36}$/i.test(notice.granteeId || '') ? notice.granteeId!.slice(0, 8) : 'unknown';
+    // The host comes from the request, so it is only shown when it looks like
+    // a host name. A crafted one must not be able to write extra lines into
+    // the message the owner reads.
+    const safeHost = host && /^[A-Za-z0-9.:_-]{1,253}$/.test(host) ? host : undefined;
     const headline =
       notice.kind === 'recovery_started'
         ? 'Somebody you let in asked to take over your vault'
@@ -74,7 +78,7 @@ export async function sendEmergencyAccessNotice(
     const lines = [
       'NodeWarden emergency access',
       headline,
-      ...(host ? [`Instance: ${host}`] : []),
+      ...(safeHost ? [`Instance: ${safeHost}`] : []),
       `Vault: ${scope === 'unknown' ? 'unknown' : scope.slice(0, 8)}`,
       `Asked by: ${grantee}`,
       `Wait: ${notice.waitTimeDays} day${notice.waitTimeDays === 1 ? '' : 's'}`,

@@ -1150,8 +1150,13 @@ async function main() {
       emergencyText.slice(-300)
     );
     checks.ok(
-      'and it says a takeover waits for the approval',
-      emergencyText.includes('only after the wait you chose has passed and you have approved it'),
+      'and it says a takeover waits for the wait to pass',
+      emergencyText.includes('only after the wait you chose has passed'),
+      emergencyText.slice(-300)
+    );
+    checks.ok(
+      'and it says the grant stands on its own once the wait is over',
+      emergencyText.includes('you can still withdraw it here'),
       emergencyText.slice(-300)
     );
     checks.ok(

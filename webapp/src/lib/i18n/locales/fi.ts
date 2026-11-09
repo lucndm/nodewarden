@@ -610,7 +610,7 @@ const fi: Record<string, string> = {
   "txt_emergency_access_initiate_failed": "Odotusta ei voitu aloittaa.",
   "txt_emergency_access_approve_failed": "Palautusta ei voitu hyväksyä.",
   "txt_emergency_access_title": "Hätäpääsy",
-  "txt_emergency_access_intro": "Päästä joku sisään, kun et pääse itse sisään. Annettava avain salataan heidän puolestaan, joten tämä palvelin ei koskaan säilytä avainta, jonka voisi avata. Sähköpostia ei lähetetä: kutsu näkyy täällä, ja heidän on kirjauduttava nähdäkseen sen. Työnvaltaus antaa heidän vaihtaa pääsalasanasi, mutta vasta valitsemasi odotusajan kuluttua ja sinun suostumuksellasi.",
+  "txt_emergency_access_intro": "Päästä joku sisään, kun et pääse itse sisään. Annettava avain salataan heidän puolestaan, joten tämä palvelin ei koskaan säilytä avainta, jonka voisi avata. Sähköpostia ei lähetetä: kutsu näkyy täällä, ja heidän on kirjauduttava nähdäkseen sen. Työnvaltaus antaa heidän vaihtaa pääsalasanasi, mutta vasta valitsemasi odotusajan kuluttua; sen jälkeen lupa pysyy pystyssä itsestään, ja voit silti peruuttaa sen täältä. Jos tässä instanssissa on Telegram-hälytykset käytössä, sinulle ilmoitetaan sinne, kun joku pyytää työnvaltausta.",
   "txt_emergency_access_grants": "Henkilöt, joille päästät sisään",
   "txt_emergency_access_no_grants": "Kukaan ei voi käyttää tätä holvia.",
   "txt_emergency_access_invite_title": "Päästä joku sisään",

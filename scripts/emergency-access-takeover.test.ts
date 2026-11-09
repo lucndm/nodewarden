@@ -480,7 +480,7 @@ test('the owner is told that somebody asked to take over', async () => {
   const sent: string[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input).includes('api.telegram.org')) {
+    if (new URL(String(input)).hostname === 'api.telegram.org') {
       sent.push(String(init?.body || ''));
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -525,7 +525,7 @@ test('the owner is told when the account has actually been taken over', async ()
   const sent: string[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input).includes('api.telegram.org')) {
+    if (new URL(String(input)).hostname === 'api.telegram.org') {
       sent.push(String(init?.body || ''));
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }

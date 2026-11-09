@@ -26,8 +26,7 @@ function captureSent(): { sent: string[]; restore: () => void } {
   const sent: string[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    if (url.includes('api.telegram.org')) {
+    if (new URL(String(input)).hostname === 'api.telegram.org') {
       sent.push(String(init?.body || ''));
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -49,8 +48,6 @@ async function fixture(): Promise<Env> {
     TELEGRAM_CHAT_ID: CHAT,
   } as unknown as Env;
 }
-
-const request = new Request('https://vault.example.test/api/emergency-access/x/initiate', { method: 'POST' });
 
 test('the owner is told that somebody asked to take over', async () => {
   const env = await fixture();
@@ -165,7 +162,7 @@ test('a Telegram that refuses the message does not throw', async () => {
   const env = await fixture();
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    if (String(input).includes('api.telegram.org')) {
+    if (new URL(String(input)).hostname === 'api.telegram.org') {
       return new Response(JSON.stringify({ ok: false }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     return original(input);
@@ -180,4 +177,23 @@ test('a Telegram that refuses the message does not throw', async () => {
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test('a crafted host cannot write extra lines into the message', async () => {
+  const env = await fixture();
+  const capture = captureSent();
+  try {
+    await sendEmergencyAccessNotice(env, 'vault.example.test\nNodeWarden: your vault was taken', {
+      kind: 'recovery_started',
+      grantorId: OWNER,
+      granteeId: GRANTEE,
+      waitTimeDays: 7,
+    });
+  } finally {
+    capture.restore();
+  }
+  assert.equal(capture.sent.length, 1);
+  const message = capture.sent[0];
+  assert.ok(!message.includes('your vault was taken'), 'the crafted line is not in the message');
+  assert.ok(!message.includes('vault.example.test\n'), 'the crafted host is dropped whole');
 });
