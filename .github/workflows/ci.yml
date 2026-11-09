@@ -2,8 +2,8 @@ name: CI
 
 # The checks a change has to pass before it is merged.
 #
-# The deploy workflow runs the same tests, but it runs them after the change
-# has reached main, which is after the change has reached production. A pull
+# Workers Builds runs the same tests before it deploys main, but by then the
+# change has already been merged. A pull
 # request needs its own run: without it, a change that breaks the vault
 # layout, the tags and folders, the item history or the rights on a shared
 # item can be merged without a single check running against it.
