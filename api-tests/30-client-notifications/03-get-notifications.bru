@@ -1,0 +1,36 @@
+meta {
+  name: GET notifications
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/notifications?pageSize=50
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultEndUserNotificationService`
+  (`libs/common/src/vault/notifications/services/default-end-user-notification.service.ts`)
+  fetches `/notifications?pageSize=50` when its local state is empty, and reads
+  a `ListResponse` of `NotificationViewResponse`: Id, Priority, Title, Body,
+  Date, TaskId, ReadDate, DeletedDate. The browser extension shows them with the
+  at-risk password tasks.
+
+  NodeWarden has no notifications of this kind, so an empty list is the right
+  answer. vaultwarden has no route either.
+}
+
+tests {
+  test("the account reads its notifications", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer is a list", function () {
+    expect(res.body.data).to.be.an("array");
+  });
+}

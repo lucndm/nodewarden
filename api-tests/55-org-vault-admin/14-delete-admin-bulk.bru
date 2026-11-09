@@ -1,0 +1,38 @@
+meta {
+  name: DELETE ciphers/admin (bulk)
+  type: http
+  seq: 14
+}
+
+delete {
+  url: {{baseUrl}}/api/ciphers/admin
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ids": [
+      "{{adminItem2Id}}"
+    ],
+    "organizationId": "{{adminOrgId}}"
+  }
+}
+
+docs {
+  Client: the Rust SDK admin cipher client
+  (`crates/bitwarden-vault/src/cipher/cipher_client/admin/`), used by the admin
+  console vault, where an owner or admin acts on any item of the organization.
+
+  `delete_many_admin`, body `CipherBulkDeleteRequestModel`.
+}
+
+tests {
+  test("the owner deletes items for good in bulk from the admin console", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

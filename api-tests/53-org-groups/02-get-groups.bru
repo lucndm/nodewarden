@@ -1,0 +1,29 @@
+meta {
+  name: GET groups
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/groups
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `GroupApiService`
+  (`apps/web/src/app/admin-console/organizations/core/services/group/group-api.service.ts`). `getAll`, read as a list of `GroupResponse`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner lists the groups", function () {
+    expect(res.status).to.equal(200);
+    const ids = (f(res.body, "data") || []).map((row) => f(row, "id"));
+    expect(ids).to.include(bru.getVar("adminGroupId"));
+  });
+}

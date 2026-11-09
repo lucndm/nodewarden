@@ -1,0 +1,33 @@
+meta {
+  name: GET users/:id/public-key
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/users/{{lifecycleUserId}}/public-key
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `ApiService.getUserPublicKey` (`libs/common/src/services/api.service.ts`),
+  read as `UserKeyResponse` (UserId, PublicKey). Used to wrap a key for another
+  account: confirming an organization member, granting emergency access.
+
+  Reference: vaultwarden `get_public_keys` answers `{ userId, publicKey, object: "userKey" }`.
+}
+
+tests {
+  test("another account reads the public key", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer names the account and its public key", function () {
+    expect(res.body.userId).to.equal(bru.getVar("lifecycleUserId"));
+    expect(res.body.publicKey).to.equal("bGlmZWN5Y2xlLXB1YmxpYy1rZXk=");
+  });
+}

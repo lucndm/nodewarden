@@ -1,0 +1,46 @@
+meta {
+  name: POST ciphers/:id/attachment/v2
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{baseUrl}}/api/ciphers/{{cipherAId}}/attachment/v2
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "key": "2.aXYtYXR0LWtleQ==|Y3QtYXR0LWtleQ==|bWFjLWYXR0LWtleQ==",
+    "fileName": "2.aXYtZmlsZQ==|Y3QtZmlsZQ==|bWFjLWZmlsZQ==",
+    "fileSize": 16,
+    "adminRequest": false,
+    "lastKnownRevisionDate": "{{cipherARevision2}}"
+  }
+}
+
+docs {
+  Client: the Rust SDK (`@bitwarden/sdk-internal` 0.2.0-main.1214, source
+  `bitwarden/sdk-internal` at `5b7fbb41`), called from
+  `libs/common/src/vault/services/cipher-sdk.service.ts`. The TypeScript client
+  has no other path for this call.
+
+  Body `AttachmentRequestModel` (`key`, `fileName`, `fileSize`, `adminRequest`,
+  `lastKnownRevisionDate`), read as `AttachmentUploadDataResponseModel`:
+  `attachmentId`, `url`, `fileUploadType`, `cipherResponse`. The client then
+  uploads the file to `url`.
+}
+
+tests {
+  test("the owner opens an attachment upload", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.attachmentId).to.be.a("string");
+    expect(res.body.url).to.be.a("string");
+    expect(res.body.fileUploadType).to.be.a("number");
+  });
+}

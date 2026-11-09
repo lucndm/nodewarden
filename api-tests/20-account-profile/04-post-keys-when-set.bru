@@ -1,0 +1,36 @@
+meta {
+  name: POST keys when the account has a key pair
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/keys
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "publicKey": "b3RoZXItcHVibGljLWtleQ==",
+    "encryptedPrivateKey": "2.aXYtb3RoZXI=|Y3Qtb3RoZXI=|bWFjLW90aGVy"
+  }
+}
+
+docs {
+  Client: `ApiService.postAccountKeys`, body `KeysRequest` (`publicKey`,
+  `encryptedPrivateKey`), no response body read. Sent when an account has no
+  key pair yet.
+
+  Reference: vaultwarden `post_keys` refuses "User has existing keypair".
+}
+
+tests {
+  test("an account keeps the key pair it has", function () {
+    expect(res.status).to.equal(400);
+  });
+}

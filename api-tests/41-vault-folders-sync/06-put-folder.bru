@@ -1,0 +1,32 @@
+meta {
+  name: PUT folders/:id
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/folders/{{folderAId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "2.aXYtcmVuYW1lZA==|Y3QtcmVuYW1lZA==|bWFjLXJlbmFtZWQ="
+  }
+}
+
+docs {
+  Client: `FolderApiService.putFolder`, body `FolderRequest`, read as `FolderResponse`.
+}
+
+tests {
+  test("the owner renames the folder", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.name).to.equal("2.aXYtcmVuYW1lZA==|Y3QtcmVuYW1lZA==|bWFjLXJlbmFtZWQ=");
+  });
+}

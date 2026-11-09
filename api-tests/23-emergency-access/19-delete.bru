@@ -1,0 +1,25 @@
+meta {
+  name: DELETE :id
+  type: http
+  seq: 19
+}
+
+delete {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `deleteEmergencyAccess`, no body.
+}
+
+tests {
+  test("the grantor removes the contact", function () {
+    expect(res.status).to.equal(200);
+  });
+}

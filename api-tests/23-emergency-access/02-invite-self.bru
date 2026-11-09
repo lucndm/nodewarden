@@ -1,0 +1,29 @@
+meta {
+  name: POST invite naming yourself
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/invite
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "email": "{{ownerEmail}}",
+    "type": 0,
+    "waitTimeDays": 7
+  }
+}
+
+tests {
+  test("an account cannot be its own emergency contact", function () {
+    expect(res.status).to.equal(400);
+  });
+}

@@ -1,0 +1,37 @@
+meta {
+  name: GET users
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultOrganizationUserApiService`
+  (`libs/admin-console/src/common/organization-user/services/default-organization-user-api.service.ts`). `getAllUsers` reads a `ListResponse` of
+  `OrganizationUserUserDetailsResponse`: Id, UserId, Type, Status, Email, Name,
+  AvatarColor, TwoFactorEnabled, UsesKeyConnector, ResetPasswordEnrolled,
+  HasMasterPassword, Permissions, Collections, Groups, AccessSecretsManager,
+  ClaimedByOrganization.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner lists the members", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("each member has the fields the members page reads", function () {
+    const row = (f(res.body, "data") || []).find((r) => f(r, "id") === bru.getVar("adminMemberMid"));
+    const fields = ["id", "userId", "type", "status", "email", "name", "twoFactorEnabled", "hasMasterPassword", "resetPasswordEnrolled", "groups", "collections"];
+    const missing = fields.filter((field) => f(row, field) === undefined);
+    expect(missing.length, "missing fields: " + missing.join(", ")).to.equal(0);
+  });
+}

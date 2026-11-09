@@ -1,0 +1,39 @@
+meta {
+  name: PUT collections/:id
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections/{{adminCollection2Id}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "2.aXYtcmVuYW1lZA==|Y3QtcmVuYW1lZA==|bWFjLWcmVuYW1lZA==",
+    "externalId": null,
+    "groups": [],
+    "users": []
+  }
+}
+
+docs {
+  Client: `DefaultCollectionAdminService`
+  (`libs/admin-console/src/common/collections/services/default-collection-admin.service.ts`)
+  and `ApiService` collection calls (`libs/common/src/services/api.service.ts`). `save` for an existing collection, body `UpdateCollectionRequest`, read as
+  `CollectionAccessDetailsResponse`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner renames the collection and clears its access", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "name")).to.equal(req.getBody().name);
+  });
+}

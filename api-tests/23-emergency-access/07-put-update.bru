@@ -1,0 +1,33 @@
+meta {
+  name: PUT :id
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 0,
+    "waitTimeDays": 3
+  }
+}
+
+docs {
+  Client: `putEmergencyAccess`, body `EmergencyAccessUpdateRequest` (`type`,
+  `waitTimeDays`, `keyEncrypted` once confirmed).
+}
+
+tests {
+  test("the grantor changes the wait", function () {
+    expect(res.status).to.equal(200);
+  });
+}

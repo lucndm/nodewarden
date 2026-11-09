@@ -1,0 +1,61 @@
+meta {
+  name: PUT ciphers/:id
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/{{cipherAId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 1,
+    "name": "2.aXYtZWRpdGVk|Y3QtZWRpdGVk|bWFjLWZWRpdGVk",
+    "notes": null,
+    "favorite": false,
+    "reprompt": 0,
+    "folderId": null,
+    "organizationId": null,
+    "key": null,
+    "login": {
+      "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+      "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+      "uris": [],
+      "totp": null
+    },
+    "fields": [],
+    "passwordHistory": [],
+    "lastKnownRevisionDate": "{{cipherARevision}}"
+  }
+}
+
+script:post-response {
+  bru.setVar("cipherARevision2", res.body && res.body.revisionDate);
+}
+
+docs {
+  Client: the Rust SDK (`@bitwarden/sdk-internal` 0.2.0-main.1214, source
+  `bitwarden/sdk-internal` at `5b7fbb41`), called from
+  `libs/common/src/vault/services/cipher-sdk.service.ts`. The TypeScript client
+  has no other path for this call.
+
+  Body `CipherRequestModel` with `lastKnownRevisionDate`; read as
+  `CipherResponseModel`.
+}
+
+tests {
+  test("the owner changes the item", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.name).to.equal(req.getBody().name);
+  });
+  test("the revision date moves forward", function () {
+    expect(res.body.revisionDate).to.not.equal(bru.getVar("cipherARevision"));
+  });
+}

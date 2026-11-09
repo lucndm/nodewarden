@@ -1,0 +1,41 @@
+meta {
+  name: POST two-factor/get-yubikey
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/two-factor/get-yubikey
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `DefaultTwoFactorApiService`
+  (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `getTwoFactorYubiKey`, read as `TwoFactorYubiKeyResponse`: YubiKey (Enabled,
+  Key1..Key5, Nfc) and UserVerificationToken.
+}
+
+tests {
+  test("the owner reads the YubiKey setup", function () {
+    expect(res.status).to.equal(200);
+  });
+  // The client reads property names in either case (BaseResponse.getResponseProperty).
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the answer nests the provider under yubiKey", function () {
+    expect(f(res.body, "yubiKey")).to.be.an("object");
+  });
+  test("the answer carries a userVerificationToken for the next call", function () {
+    expect(f(res.body, "userVerificationToken")).to.be.a("string");
+  });
+}

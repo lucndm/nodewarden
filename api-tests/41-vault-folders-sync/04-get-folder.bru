@@ -1,0 +1,26 @@
+meta {
+  name: GET folders/:id
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/folders/{{folderAId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `FolderApiService.get`, read as `FolderResponse`.
+}
+
+tests {
+  test("the owner reads the folder", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.id).to.equal(bru.getVar("folderAId"));
+  });
+}

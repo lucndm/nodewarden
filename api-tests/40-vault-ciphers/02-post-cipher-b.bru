@@ -1,0 +1,46 @@
+meta {
+  name: POST ciphers (a second item)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/ciphers
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 1,
+    "name": "2.aXYtaXRlbS1i|Y3QtaXRlbS1i|bWFjLWaXRlbS1i",
+    "notes": null,
+    "favorite": false,
+    "reprompt": 0,
+    "folderId": null,
+    "organizationId": null,
+    "key": null,
+    "login": {
+      "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+      "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+      "uris": [],
+      "totp": null
+    },
+    "fields": [],
+    "passwordHistory": []
+  }
+}
+
+script:post-response {
+  bru.setVar("cipherBId", res.body && res.body.id);
+}
+
+tests {
+  test("the owner creates a second item", function () {
+    expect(res.status).to.equal(200);
+  });
+}

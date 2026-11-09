@@ -1,0 +1,27 @@
+meta {
+  name: GET keys as an invited, unconfirmed account
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/keys
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{inviteeToken}}
+}
+
+docs {
+  An account that is not a confirmed member gets no answer about the
+  organization. NodeWarden answers such reads with 404 elsewhere in the
+  organization routes.
+}
+
+tests {
+  test("an unconfirmed account does not see the organization", function () {
+    expect(res.status).to.equal(404);
+  });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: GET folders/:id as another account
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/folders/{{folderAId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+tests {
+  test("another account does not see the folder", function () {
+    expect(res.status).to.equal(404);
+  });
+}

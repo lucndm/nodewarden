@@ -1,0 +1,45 @@
+meta {
+  name: PUT groups/:id
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/groups/{{adminGroupId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "Contract Group Renamed",
+    "collections": [
+      {
+        "id": "{{adminCollectionId}}",
+        "readOnly": true,
+        "hidePasswords": false,
+        "manage": false
+      }
+    ],
+    "users": [
+      "{{adminOwnerMid}}"
+    ]
+  }
+}
+
+docs {
+  Client: `GroupApiService`
+  (`apps/web/src/app/admin-console/organizations/core/services/group/group-api.service.ts`). `save` for an existing group, body `GroupRequest`, read as `GroupResponse`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner renames the group", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "name")).to.equal("Contract Group Renamed");
+  });
+}

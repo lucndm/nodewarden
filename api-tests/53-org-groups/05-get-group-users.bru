@@ -1,0 +1,27 @@
+meta {
+  name: GET groups/:id/users
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/groups/{{adminGroupId}}/users
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `GroupApiService`
+  (`apps/web/src/app/admin-console/organizations/core/services/group/group-api.service.ts`). `getUsers`, read as a bare array of membership ids.
+}
+
+tests {
+  test("the owner lists the group's members", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body).to.include(bru.getVar("adminOwnerMid"));
+  });
+}

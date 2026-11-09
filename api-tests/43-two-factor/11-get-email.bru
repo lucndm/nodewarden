@@ -1,0 +1,36 @@
+meta {
+  name: POST two-factor/get-email
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/two-factor/get-email
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `DefaultTwoFactorApiService`
+  (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `getTwoFactorEmail`. `send-email`, `PUT /two-factor/email`,
+  `DELETE /two-factor/email` and `send-email-login` take the same decision.
+
+  NodeWarden decision: no email delivery, so email two-step login answers 501
+  (`emailTwoFactorPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

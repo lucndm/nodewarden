@@ -1,0 +1,29 @@
+meta {
+  name: GET two-factor
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/two-factor
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultTwoFactorApiService`
+  (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `getTwoFactorProviders`, read as a `ListResponse` of
+  `TwoFactorProviderResponse` (Enabled, Type).
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner lists the two-step providers", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "data")).to.be.an("array");
+  });
+}

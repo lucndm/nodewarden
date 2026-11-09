@@ -1,0 +1,31 @@
+meta {
+  name: PUT ciphers/:id/restore
+  type: http
+  seq: 16
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/{{cipherBId}}/restore
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: the Rust SDK (`@bitwarden/sdk-internal` 0.2.0-main.1214, source
+  `bitwarden/sdk-internal` at `5b7fbb41`), called from
+  `libs/common/src/vault/services/cipher-sdk.service.ts`. The TypeScript client
+  has no other path for this call.
+
+  No body, read as `CipherResponseModel`.
+}
+
+tests {
+  test("the owner restores the item", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.deletedDate == null).to.equal(true);
+  });
+}

@@ -1,0 +1,44 @@
+meta {
+  name: Accept an invitation with a forged token
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/users/{{inviteeMembershipId}}/accept
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{inviteeToken}}
+}
+
+body:json {
+  {
+    "token": "not-a-real-invite-token"
+  }
+}
+
+docs {
+  Client: `DefaultOrganizationUserApiService.postOrganizationUserAccept` in
+  `libs/admin-console/src/common/organization-user/services/default-organization-user-api.service.ts`.
+  Body `OrganizationUserAcceptRequest`: `token` (required) and
+  `resetPasswordKey` (only when account recovery auto-enrollment is on). No
+  response body is read.
+
+  The client takes `organizationId`, `organizationUserId`, `email` and
+  `token` from the invite link (`DirectOrgInviteUrlParams` in
+  `libs/common/src/auth/organization-invite/models/direct-organization-invite.ts`).
+
+  Reference: vaultwarden `accept_invite` decodes the token as a signed claim
+  and refuses when its email, organization or membership does not match.
+  How NodeWarden issues the token is still open; a forged one must fail
+  whatever the answer is.
+}
+
+tests {
+  test("a forged invite token is refused", function () {
+    expect(res.status).to.equal(400);
+  });
+}

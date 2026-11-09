@@ -1,0 +1,36 @@
+meta {
+  name: Register the owner
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/register
+  body: json
+  auth: none
+}
+
+headers {
+  Origin: {{baseUrl}}
+}
+
+body:json {
+  {
+    "email": "{{ownerEmail}}",
+    "name": "Contract Owner",
+    "masterPasswordHash": "{{ownerPasswordHash}}",
+    "key": "2.aXYtb3duZXI=|Y3Qtb3duZXI=|bWFjLW93bmVy",
+    "kdf": 0,
+    "kdfIterations": 600000,
+    "keys": {
+      "publicKey": "b3duZXItcHVibGljLWtleQ==",
+      "encryptedPrivateKey": "2.aXYtb3duZXItcHJpdg==|Y3Qtb3duZXItcHJpdg==|bWFjLW93bmVyLXByaXY="
+    }
+  }
+}
+
+tests {
+  test("the first account registers without an invite code", function () {
+    expect(res.status).to.equal(200);
+  });
+}

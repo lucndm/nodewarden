@@ -1,0 +1,29 @@
+meta {
+  name: PUT ciphers/:id/restore-admin
+  type: http
+  seq: 10
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/{{adminItemId}}/restore-admin
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: the Rust SDK admin cipher client
+  (`crates/bitwarden-vault/src/cipher/cipher_client/admin/`), used by the admin
+  console vault, where an owner or admin acts on any item of the organization.
+
+  `put_restore_admin`, read as `CipherMiniResponseModel`.
+}
+
+tests {
+  test("the owner restores the item from the admin console", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

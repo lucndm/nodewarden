@@ -1,0 +1,31 @@
+meta {
+  name: POST request-otp
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/request-otp
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `UserVerificationApiService.postAccountRequestOTP`, no body. Emails a
+  one-time code that stands in for the master password, for accounts without
+  one.
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

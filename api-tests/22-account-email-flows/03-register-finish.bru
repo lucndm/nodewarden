@@ -1,0 +1,58 @@
+meta {
+  name: POST register/finish
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/identity/accounts/register/finish
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "contract-signup@example.test",
+    "emailVerificationToken": "token",
+    "masterPasswordHint": "",
+    "userAsymmetricKeys": {
+      "publicKey": "cHVi",
+      "encryptedPrivateKey": "2.aXY=|Y3Q=|bWFj"
+    },
+    "masterPasswordAuthentication": {
+      "salt": "contract-signup@example.test",
+      "kdf": {
+        "kdfType": 0,
+        "iterations": 600000
+      },
+      "masterPasswordAuthenticationHash": "aGFzaA=="
+    },
+    "masterPasswordUnlock": {
+      "salt": "contract-signup@example.test",
+      "kdf": {
+        "kdfType": 0,
+        "iterations": 600000
+      },
+      "masterKeyWrappedUserKey": "2.aXY=|Y3Q=|bWFj"
+    }
+  }
+}
+
+docs {
+  Client: `AccountApiService.registerFinish`, body `RegisterFinishRequest`:
+  `email`, `masterPasswordHint`, `userAsymmetricKeys`,
+  `masterPasswordAuthentication`, `masterPasswordUnlock`, and one of the
+  tokens that proves the right to register (`emailVerificationToken`,
+  `orgInviteToken` with `organizationUserId`,
+  `acceptEmergencyAccessInviteToken`, ...). There is no invite code field.
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: sign-up happens in the NodeWarden web vault", function () {
+    expect(res.status).to.equal(501);
+  });
+}

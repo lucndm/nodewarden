@@ -1,0 +1,30 @@
+meta {
+  name: GET collections/details
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections/details
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultCollectionAdminService`
+  (`libs/admin-console/src/common/collections/services/default-collection-admin.service.ts`)
+  and `ApiService` collection calls (`libs/common/src/services/api.service.ts`). `getManyCollectionsWithAccessDetails`, read as a list of
+  `CollectionAccessDetailsResponse`. The admin console collection list uses it.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner lists the collections with their access", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "data")).to.be.an("array");
+  });
+}

@@ -1,0 +1,34 @@
+meta {
+  name: POST :id/accept with its token
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/accept
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+body:json {
+  {
+    "token": "{{emergencyInviteToken}}"
+  }
+}
+
+script:pre-request {
+  // No token source exists yet; pass one with --env-var emergencyInviteToken=...
+  if (!bru.getEnvVar("emergencyInviteToken")) {
+    bru.runner.skipRequest();
+  }
+}
+
+tests {
+  test("the grantee accepts with the token from the invite", function () {
+    expect(res.status).to.equal(200);
+  });
+}

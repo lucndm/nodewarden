@@ -1,0 +1,21 @@
+meta {
+  name: DELETE sends/:id
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/api/sends/{{sendId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+tests {
+  test("the owner deletes the Send", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

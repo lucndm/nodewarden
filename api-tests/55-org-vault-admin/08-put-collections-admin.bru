@@ -1,0 +1,37 @@
+meta {
+  name: PUT ciphers/:id/collections-admin
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/{{adminItemId}}/collections-admin
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "collectionIds": [
+      "{{adminCollectionId}}"
+    ]
+  }
+}
+
+docs {
+  Client: the Rust SDK admin cipher client
+  (`crates/bitwarden-vault/src/cipher/cipher_client/admin/`), used by the admin
+  console vault, where an owner or admin acts on any item of the organization.
+
+  `put_collections_admin`, body `CipherCollectionsRequestModel` (`collectionIds`).
+}
+
+tests {
+  test("the owner sets the item's collections from the admin console", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

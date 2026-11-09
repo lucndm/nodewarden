@@ -1,0 +1,41 @@
+meta {
+  name: POST invite
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/invite
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "email": "{{memberEmail}}",
+    "type": 0,
+    "waitTimeDays": 7
+  }
+}
+
+script:post-response {
+  if (res.status === 200) bru.setVar("emergencyInvited", "yes");
+}
+
+docs {
+  Client: `postEmergencyAccessInvite`, body `EmergencyAccessInviteRequest`
+  (`email`, `type`: 0 view or 1 takeover, `waitTimeDays`). No response body
+  read. The official server emails the grantee a link with an invite token.
+
+  Reference: vaultwarden `send_invite` refuses yourself as the contact and an out-of-range wait.
+}
+
+tests {
+  test("the grantor invites a trusted contact", function () {
+    expect(res.status).to.equal(200);
+  });
+}

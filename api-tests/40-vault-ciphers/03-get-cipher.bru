@@ -1,0 +1,35 @@
+meta {
+  name: GET ciphers/:id
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/ciphers/{{cipherAId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `ApiService.getCipher` (TypeScript) and the SDK `ciphers_api.get`.
+
+  The SDK reads every cipher answer with `TryFrom<CipherResponseModel>`
+  (`crates/bitwarden-vault/src/cipher/cipher.rs`): `type`, `creationDate` and
+  `revisionDate` are required, the rest is optional.
+}
+
+tests {
+  test("the owner reads the item", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer is a cipher the SDK can read", function () {
+    expect(res.body.id).to.be.a("string");
+    expect(res.body.type).to.equal(1);
+    expect(res.body.creationDate).to.be.a("string");
+    expect(res.body.revisionDate).to.be.a("string");
+  });
+}

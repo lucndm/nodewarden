@@ -1,0 +1,50 @@
+meta {
+  name: POST rotate-user-account-keys with a wrong password
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/key-management/rotate-user-account-keys
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{lifecycleToken}}
+}
+
+body:json {
+  {
+    "oldMasterKeyAuthenticationHash": "{{wrongPasswordHash}}",
+    "accountUnlockData": {},
+    "accountKeys": {},
+    "accountData": {
+      "ciphers": [],
+      "folders": [],
+      "sends": []
+    }
+  }
+}
+
+docs {
+  Client: `UserKeyRotationApiService.postUserKeyUpdate`
+  (`libs/common/src/key-management/key-rotation/user-key-rotation-api.service.ts`),
+  body `RotateUserAccountKeysRequest`: `oldMasterKeyAuthenticationHash`,
+  `accountUnlockData` (master password, emergency access, organization account
+  recovery, passkeys, trusted devices), `accountKeys` (the new key pair),
+  `accountData` (every cipher, folder and send re-encrypted). No response body
+  read. The web vault calls it when the user rotates the account encryption
+  key.
+
+  Reference: vaultwarden `post_rotatekey` checks the old hash first, then that every item of the
+  account is in the request.
+
+  The wrong-password case pins the first check without real ciphertext.
+}
+
+tests {
+  test("a wrong current password stops the rotation", function () {
+    expect(res.status).to.equal(400);
+  });
+}

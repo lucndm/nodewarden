@@ -1,0 +1,40 @@
+meta {
+  name: Accept an invitation with its token
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/users/{{inviteeMembershipId}}/accept
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{inviteeToken}}
+}
+
+body:json {
+  {
+    "token": "{{inviteToken}}"
+  }
+}
+
+script:pre-request {
+  // NodeWarden does not issue invite tokens yet. Until it does, the token can
+  // only come from the environment: --env-var inviteToken=...
+  if (!bru.getEnvVar("inviteToken")) {
+    bru.runner.skipRequest();
+  }
+}
+
+docs {
+  The success path of the same contract. It runs once an invite token is
+  available, then checks that the invitee's membership became accepted.
+}
+
+tests {
+  test("the invitee accepts with the token from the invite link", function () {
+    expect(res.status).to.equal(200);
+  });
+}

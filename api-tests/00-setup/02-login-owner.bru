@@ -1,0 +1,33 @@
+meta {
+  name: Log in the owner
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/identity/connect/token
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  grant_type: password
+  username: {{ownerEmail}}
+  password: {{ownerPasswordHash}}
+  scope: api offline_access
+  client_id: web
+  deviceIdentifier: contract-ownerToken
+  deviceName: contract check
+  deviceType: 9
+}
+
+script:post-response {
+  bru.setVar("ownerToken", res.body.access_token);
+}
+
+tests {
+  test("the account gets an access token", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.access_token).to.be.a("string");
+  });
+}

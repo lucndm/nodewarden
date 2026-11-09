@@ -1,0 +1,31 @@
+meta {
+  name: POST two-factor/send-email-login
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/two-factor/send-email-login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{ownerEmail}}",
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Sent without a token, during login, to email a login code.
+
+  NodeWarden decision: no email delivery, so email two-step login answers 501
+  (`emailTwoFactorPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

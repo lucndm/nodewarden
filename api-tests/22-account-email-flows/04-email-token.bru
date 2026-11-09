@@ -1,0 +1,39 @@
+meta {
+  name: POST email-token (start an email change)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/email-token
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}",
+    "newEmail": "contract-owner-new@example.test"
+  }
+}
+
+docs {
+  Client: `DefaultChangeEmailService`
+  (`libs/common/src/auth/services/change-email/default-change-email.service.ts`),
+  body `EmailTokenRequest` (`masterPasswordHash`, `newEmail`). The server
+  emails a code to the new address.
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

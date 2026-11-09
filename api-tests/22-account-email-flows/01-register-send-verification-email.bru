@@ -1,0 +1,41 @@
+meta {
+  name: POST register/send-verification-email
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/identity/accounts/register/send-verification-email
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "contract-signup@example.test",
+    "name": "Contract Signup",
+    "receiveMarketingEmails": false
+  }
+}
+
+docs {
+  Client: `AccountApiService.registerSendVerificationEmail`
+  (`libs/common/src/auth/services/account-api.service.ts`), sent to the identity
+  URL without a token, body `RegisterSendVerificationEmailRequest` (`email`,
+  `name`, `receiveMarketingEmails`). The answer is either empty (an email was
+  sent) or a registration token the client passes to `register/finish`.
+
+  Reference: vaultwarden `register_verification_email`: without mail it returns the token
+  directly, so the official sign-up works with no email at all.
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`). Official clients therefore cannot sign up; NodeWarden accounts are
+  created in its own web vault with an invite code.
+}
+
+tests {
+  test("NodeWarden refuses on purpose: sign-up happens in the NodeWarden web vault", function () {
+    expect(res.status).to.equal(501);
+  });
+}

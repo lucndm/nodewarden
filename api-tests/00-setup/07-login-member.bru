@@ -1,0 +1,33 @@
+meta {
+  name: Log in the member
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/identity/connect/token
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  grant_type: password
+  username: {{memberEmail}}
+  password: {{memberPasswordHash}}
+  scope: api offline_access
+  client_id: web
+  deviceIdentifier: contract-memberToken
+  deviceName: contract check
+  deviceType: 9
+}
+
+script:post-response {
+  bru.setVar("memberToken", res.body.access_token);
+}
+
+tests {
+  test("the account gets an access token", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.access_token).to.be.a("string");
+  });
+}

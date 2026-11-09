@@ -1,0 +1,60 @@
+meta {
+  name: POST sends/file/v2
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/sends/file/v2
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 1,
+    "name": "2.aXYtc2VuZA==|Y3Qtc2VuZA==|bWFjLWc2VuZA==",
+    "notes": null,
+    "key": "2.aXYtc2VuZC1rZXk=|Y3Qtc2VuZC1rZXk=|bWFjLWc2VuZC1rZXk=",
+    "maxAccessCount": null,
+    "expirationDate": null,
+    "deletionDate": "{{sendDeletionDate}}",
+    "text": null,
+    "file": {
+      "fileName": "2.aXYtZmlsZQ==|Y3QtZmlsZQ==|bWFjLWZmlsZQ=="
+    },
+    "password": null,
+    "emails": null,
+    "authType": 2,
+    "disabled": false,
+    "hideEmail": false,
+    "fileLength": 16
+  }
+}
+
+script:post-response {
+  const s = res.body && res.body.sendResponse; if (s) { bru.setVar("fileSendId", s.id); bru.setVar("fileSendFileId", s.file && s.file.id); }
+}
+
+docs {
+  Client: `SendApiService` (`libs/common/src/tools/send/services/send-api.service.ts`).
+  The SDK has the same calls behind the flag `pm-30110-sdk-sends-api`, off by
+  default and not turned on by NodeWarden.
+
+  Body `SendRequest` with `file` and `fileLength`, read as
+  `SendFileUploadDataResponse`: `url`, `fileUploadType`, `sendResponse`. The
+  client then uploads the file to `url`.
+}
+
+tests {
+  test("the owner opens a file Send upload", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.url).to.be.a("string");
+    expect(res.body.fileUploadType).to.be.a("number");
+    expect(res.body.sendResponse.file.id).to.be.a("string");
+  });
+}

@@ -1,0 +1,34 @@
+meta {
+  name: POST keys as a plain member
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/keys
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+body:json {
+  {
+    "publicKey": "b3RoZXItcHVibGljLWtleQ==",
+    "encryptedPrivateKey": "2.aXYtb3RoZXI=|Y3Qtb3RoZXI=|bWFjLW90aGVy"
+  }
+}
+
+docs {
+  Setting the key pair is for an owner or an admin. NodeWarden answers a
+  member who asks for an admin action on an organization with 404, as
+  `handleInviteOrganizationUser` does.
+}
+
+tests {
+  test("a plain member cannot set the organization keys", function () {
+    expect(res.status).to.equal(404);
+  });
+}

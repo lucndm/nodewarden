@@ -1,0 +1,26 @@
+meta {
+  name: Leave as an unconfirmed account
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/leave
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{inviteeToken}}
+}
+
+docs {
+  Reference: vaultwarden refuses with "You need to be a Member of the
+  Organization to call this endpoint" unless the membership is confirmed.
+}
+
+tests {
+  test("an unconfirmed account cannot leave", function () {
+    expect(res.status).to.equal(400);
+  });
+}

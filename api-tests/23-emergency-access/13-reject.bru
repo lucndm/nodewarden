@@ -1,0 +1,26 @@
+meta {
+  name: POST :id/reject
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/reject
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `postEmergencyAccessReject`, no body. The grantor turns the request
+  down.
+}
+
+tests {
+  test("the grantor rejects the request", function () {
+    expect(res.status).to.equal(200);
+  });
+}

@@ -1,0 +1,35 @@
+meta {
+  name: GET devices
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/devices
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DevicesApiServiceImplementation`
+  (`libs/common/src/auth/services/devices-api.service.implementation.ts`). `getDevices`, read as a `ListResponse` of `DeviceResponse`: Id, UserId,
+  Name, Identifier, Type, CreationDate, RevisionDate, IsTrusted,
+  EncryptedUserKey, EncryptedPublicKey, DevicePendingAuthRequest,
+  LastActivityDate.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner lists the devices", function () {
+    expect(res.status).to.equal(200);
+    const rows = f(res.body, "data");
+    expect(rows).to.be.an("array");
+    const row = rows.find((device) => f(device, "identifier") === "contract-ownerToken");
+    expect(row, "the setup device").to.be.an("object");
+    expect(f(row, "isTrusted")).to.be.a("boolean");
+  });
+}

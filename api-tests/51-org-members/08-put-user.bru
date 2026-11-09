@@ -1,0 +1,46 @@
+meta {
+  name: PUT users/:id (role and access)
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users/{{adminMemberMid}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 2,
+    "collections": [
+      {
+        "id": "{{adminCollectionId}}",
+        "readOnly": true,
+        "hidePasswords": false,
+        "manage": false
+      }
+    ],
+    "groups": [],
+    "permissions": null,
+    "accessSecretsManager": false
+  }
+}
+
+docs {
+  Client: `DefaultOrganizationUserApiService`
+  (`libs/admin-console/src/common/organization-user/services/default-organization-user-api.service.ts`). `putOrganizationUser`, body `OrganizationUserUpdateRequest`: type,
+  collections (id, readOnly, hidePasswords, manage), groups, permissions,
+  accessSecretsManager. No response body read.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner changes the member's access", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

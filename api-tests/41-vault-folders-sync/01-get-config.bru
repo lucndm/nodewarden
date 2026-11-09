@@ -1,0 +1,32 @@
+meta {
+  name: GET config
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/config
+  body: none
+  auth: none
+}
+
+docs {
+  Client: `ConfigApiService.get` (`libs/common/src/platform/services/config/config-api.service.ts`),
+  read as `ServerConfigResponse`: Version, GitHash, Server, Environment
+  (Vault, Api, Identity, Notifications, Sso), FeatureStates, Push
+  (PushTechnology, VapidPublicKey), Settings (DisableUserRegistration, ...),
+  Communication. Sent without a token; the client checks `version` against
+  the minimum it supports.
+}
+
+tests {
+  test("the config is public", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the config has the fields the client reads", function () {
+    expect(res.body.version).to.be.a("string");
+    expect(res.body.featureStates).to.be.an("object");
+    expect(res.body.environment).to.be.an("object");
+    expect(res.body.push).to.be.an("object");
+  });
+}

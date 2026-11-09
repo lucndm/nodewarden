@@ -1,0 +1,36 @@
+meta {
+  name: PUT policies/:type for a policy NodeWarden does not enforce
+  type: http
+  seq: 1
+}
+
+put {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/policies/0
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "enabled": true,
+    "data": null
+  }
+}
+
+docs {
+  NodeWarden decision: `handleSetOrganizationPolicy` stores only the policies it
+  enforces (`ENFORCED_POLICIES`: Send controls, 21) and refuses the rest with 400,
+  so an admin is never shown a policy that nothing applies. The body here uses
+  NodeWarden's flat shape, so only the type decides the answer.
+}
+
+tests {
+  test("NodeWarden refuses on purpose: two-step login is not an enforced policy", function () {
+    expect(res.status).to.equal(400);
+    expect(res.body.error).to.equal("This policy is not supported by this server");
+  });
+}

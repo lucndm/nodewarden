@@ -1,0 +1,31 @@
+meta {
+  name: GET policies/:type
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/policies/21
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `PolicyApiService` (`libs/common/src/admin-console/services/policy/policy-api.service.ts`). `getPolicy`, read as `PolicyResponse`. The policy dialog opens with it.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner reads one policy", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer has the fields the client reads", function () {
+    const fields = ["type","enabled","organizationId"];
+    const missing = fields.filter((field) => f(res.body, field) === undefined);
+    expect(missing.length, "missing fields: " + missing.join(", ")).to.equal(0);
+  });
+}

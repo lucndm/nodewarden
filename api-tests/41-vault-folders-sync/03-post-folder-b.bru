@@ -1,0 +1,31 @@
+meta {
+  name: POST folders (a second one)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/folders
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "2.aXYtZm9sZGVyLWI=|Y3QtZm9sZGVyLWI=|bWFjLWZm9sZGVyLWI="
+  }
+}
+
+script:post-response {
+  bru.setVar("folderBId", res.body && res.body.id);
+}
+
+tests {
+  test("the owner creates a second folder", function () {
+    expect(res.status).to.equal(200);
+  });
+}

@@ -1,0 +1,31 @@
+meta {
+  name: GET organizations: events are off
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/organizations
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `EventCollectionService`
+  (`libs/common/src/dirt/event-logs/services/event-collection.service.ts`)
+  records events only for organizations whose `useEvents` is true. NodeWarden
+  answers `useEvents: false` everywhere, so official clients never upload.
+}
+
+tests {
+  test("no organization asks the client to upload events", function () {
+    expect(res.status).to.equal(200);
+    for (const org of res.body.data || []) {
+      expect(org.useEvents).to.equal(false);
+    }
+  });
+}

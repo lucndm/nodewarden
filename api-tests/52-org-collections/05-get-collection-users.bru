@@ -1,0 +1,31 @@
+meta {
+  name: GET collections/:id/users
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections/{{adminCollection2Id}}/users
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultCollectionAdminService`
+  (`libs/admin-console/src/common/collections/services/default-collection-admin.service.ts`)
+  and `ApiService` collection calls (`libs/common/src/services/api.service.ts`). `getCollectionUsers`, read as a list of `SelectionReadOnlyResponse` (Id,
+  ReadOnly, HidePasswords, Manage).
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner lists who reaches the collection", function () {
+    expect(res.status).to.equal(200);
+    const ids = (f(res.body, "data") || res.body || []).map((row) => f(row, "id"));
+    expect(ids).to.include(bru.getVar("adminMemberMid"));
+  });
+}

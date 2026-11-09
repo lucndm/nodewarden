@@ -1,0 +1,49 @@
+meta {
+  name: PUT ciphers/:id with a stale revision date
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/{{cipherAId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 1,
+    "name": "2.aXYtc3RhbGU=|Y3Qtc3RhbGU=|bWFjLWc3RhbGU=",
+    "notes": null,
+    "favorite": false,
+    "reprompt": 0,
+    "folderId": null,
+    "organizationId": null,
+    "key": null,
+    "login": {
+      "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+      "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+      "uris": [],
+      "totp": null
+    },
+    "fields": [],
+    "passwordHistory": [],
+    "lastKnownRevisionDate": "{{cipherARevision}}"
+  }
+}
+
+docs {
+  The client sends the revision date it last saw. The official server and
+  vaultwarden refuse a change made on an older copy ("The client copy of this
+  cipher is out of date"), so two devices cannot silently overwrite each other.
+}
+
+tests {
+  test("a change made on an older copy is refused", function () {
+    expect(res.status).to.equal(400);
+  });
+}

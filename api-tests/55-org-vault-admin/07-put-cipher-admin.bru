@@ -1,0 +1,57 @@
+meta {
+  name: PUT ciphers/:id/admin
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/{{adminItemId}}/admin
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "type": 1,
+    "name": "2.aXYtZWRpdGVk|Y3QtZWRpdGVk|bWFjLWZWRpdGVk",
+    "notes": null,
+    "favorite": false,
+    "reprompt": 0,
+    "folderId": null,
+    "organizationId": "{{adminOrgId}}",
+    "key": null,
+    "login": {
+      "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+      "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+      "uris": [],
+      "totp": null
+    },
+    "fields": [],
+    "passwordHistory": []
+  }
+}
+
+docs {
+  Client: the Rust SDK admin cipher client
+  (`crates/bitwarden-vault/src/cipher/cipher_client/admin/`), used by the admin
+  console vault, where an owner or admin acts on any item of the organization.
+
+  `put_admin`, body `CipherRequestModel`, read as `CipherMiniResponseModel`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner changes the item from the admin console", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer is a cipher the SDK can read", function () {
+    expect(f(res.body, "id")).to.be.a("string");
+    expect(f(res.body, "type")).to.equal(1);
+    expect(f(res.body, "creationDate")).to.be.a("string");
+    expect(f(res.body, "revisionDate")).to.be.a("string");
+  });
+}

@@ -1,0 +1,17 @@
+meta {
+  name: 50-org-admin-setup
+  seq: 50
+}
+
+docs {
+  A second organization for the admin console folders (51 to 55), built with the
+  routes NodeWarden already serves, so those folders do not depend on what
+  `10-organization-member` does to the first one.
+
+  Run it with the folder it prepares, for example
+  `npm run test:api -- 50-org-admin-setup 52-org-groups`.
+
+  State after this folder: `adminOrgId`; the owner; the member confirmed
+  (`adminMemberMid`); the invitee invited and not accepted
+  (`adminInviteeMid`); one collection (`adminCollectionId`).
+}

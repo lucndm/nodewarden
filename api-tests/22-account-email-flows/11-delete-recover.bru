@@ -1,0 +1,33 @@
+meta {
+  name: POST delete-recover
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/delete-recover
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{ownerEmail}}"
+  }
+}
+
+docs {
+  Client: `ApiService.postAccountRecoverDelete`, body `DeleteRecoverRequest`
+  (`email`), sent without a token. Emails a link that deletes the account
+  without the master password.
+
+  Reference: vaultwarden `post_delete_recover` needs mail.
+
+  It is mail-backed like the paths above, but has no route.
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

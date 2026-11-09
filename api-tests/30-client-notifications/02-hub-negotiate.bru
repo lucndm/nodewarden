@@ -1,0 +1,26 @@
+meta {
+  name: POST notifications/hub/negotiate
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/notifications/hub/negotiate?negotiateVersion=1
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  The official client skips negotiation, so this route only serves other
+  SignalR clients. Recorded so its absence is not mistaken for a gap.
+}
+
+tests {
+  test("NodeWarden has a route for it", function () {
+    expect([404, 501]).to.not.include(res.status);
+  });
+}

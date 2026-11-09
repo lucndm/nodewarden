@@ -1,0 +1,35 @@
+meta {
+  name: GET trusted (the grantor's contacts)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/emergency-access/trusted
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+script:post-response {
+  const row = (res.body && res.body.data || [])[0]; if (row) bru.setVar("emergencyAccessId", row.id);
+}
+
+docs {
+  Client: `getEmergencyAccessTrusted`, read as a list of
+  `EmergencyAccessGranteeDetailsResponse`: Id, GranteeId, Name, Email, Type,
+  Status, WaitTimeDays, CreationDate, AvatarColor.
+}
+
+tests {
+  test("the grantor lists the contact", function () {
+    expect(res.status).to.equal(200);
+    const row = (res.body.data || [])[0];
+    expect(row.email).to.equal(bru.getEnvVar("memberEmail"));
+    expect(row.status).to.equal(0);
+    expect(row.waitTimeDays).to.equal(7);
+  });
+}

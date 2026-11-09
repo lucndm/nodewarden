@@ -1,0 +1,32 @@
+meta {
+  name: GET ciphers/organization-details/assigned
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/ciphers/organization-details/assigned?organizationId={{adminOrgId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: the Rust SDK admin cipher client
+  (`crates/bitwarden-vault/src/cipher/cipher_client/admin/`), used by the admin
+  console vault, where an owner or admin acts on any item of the organization.
+
+  `get_assigned_organization_ciphers`: the items in collections the caller is
+  assigned to.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner lists the assigned items", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "data")).to.be.an("array");
+  });
+}

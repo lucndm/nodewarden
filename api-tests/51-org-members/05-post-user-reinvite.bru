@@ -1,0 +1,29 @@
+meta {
+  name: POST users/:id/reinvite
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users/{{adminInviteeMid}}/reinvite
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultOrganizationUserApiService`
+  (`libs/admin-console/src/common/organization-user/services/default-organization-user-api.service.ts`). `postOrganizationUserReinvite`, no body: sends the invite email again.
+  The SDK (`bitwarden-member-administration`) also calls it, and
+  `POST /users/reinvite` for several at once.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner resends an invitation", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

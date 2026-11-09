@@ -1,0 +1,27 @@
+meta {
+  name: GET granted (the grantee's view)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/emergency-access/granted
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+docs {
+  Client: `getEmergencyAccessGranted`, read as a list of
+  `EmergencyAccessGrantorDetailsResponse` (GrantorId in place of GranteeId).
+}
+
+tests {
+  test("the grantee lists who trusts them", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data).to.be.an("array");
+  });
+}

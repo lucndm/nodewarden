@@ -1,0 +1,39 @@
+meta {
+  name: GET keys as a confirmed member
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/keys
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+docs {
+  Client: `OrganizationApiService.getKeys` in
+  `libs/common/src/admin-console/services/organization/organization-api.service.ts`,
+  read as `OrganizationKeysResponse` (`PublicKey`, `PrivateKey`). Callers only
+  use `publicKey`: account recovery enrollment
+  (`enroll-master-password-reset.component.ts`) and the organization settings.
+
+  Reference: vaultwarden `get_organization_keys` answers any member of the
+  organization with `{ "object": "organizationPublicKey", "publicKey": ... }`.
+}
+
+tests {
+  test("a member reads the organization keys", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the public key is the one the organization was created with", function () {
+    expect(res.body.publicKey).to.equal(bru.getEnvVar("orgPublicKey"));
+  });
+  test("the private key is never handed to a member", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.privateKey == null).to.equal(true);
+  });
+}

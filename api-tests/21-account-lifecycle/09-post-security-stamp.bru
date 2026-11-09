@@ -1,0 +1,39 @@
+meta {
+  name: POST security-stamp (log out every session)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/security-stamp
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{lifecycleToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{lifecycleNewPasswordHash}}"
+  }
+}
+
+script:post-response {
+  bru.setVar("lifecycleStaleToken", bru.getVar("lifecycleToken"));
+}
+
+docs {
+  Client: `ApiService.postSecurityStamp`, body `SecretVerificationRequest`, no
+  response body read. The web vault calls it from "Log out of all sessions".
+
+  Reference: vaultwarden `post_sstamp` resets the security stamp, which ends every session and
+  device login.
+}
+
+tests {
+  test("the account ends all its sessions", function () {
+    expect(res.status).to.equal(200);
+  });
+}

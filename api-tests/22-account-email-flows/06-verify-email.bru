@@ -1,0 +1,29 @@
+meta {
+  name: POST verify-email (send a verification link)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/verify-email
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `ApiService.postAccountVerifyEmail`, no body.
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

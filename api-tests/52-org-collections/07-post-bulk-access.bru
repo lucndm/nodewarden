@@ -1,0 +1,45 @@
+meta {
+  name: POST collections/bulk-access
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections/bulk-access
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "collectionIds": [
+      "{{adminCollection2Id}}"
+    ],
+    "users": [
+      {
+        "id": "{{adminMemberMid}}",
+        "readOnly": false,
+        "hidePasswords": false,
+        "manage": true
+      }
+    ],
+    "groups": []
+  }
+}
+
+docs {
+  Client: `DefaultCollectionAdminService`
+  (`libs/admin-console/src/common/collections/services/default-collection-admin.service.ts`)
+  and `ApiService` collection calls (`libs/common/src/services/api.service.ts`). `bulkAssignAccess`, body `BulkCollectionAccessRequest` (collectionIds,
+  users, groups). No response body read.
+}
+
+tests {
+  test("the owner gives access to several collections at once", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

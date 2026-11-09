@@ -1,0 +1,25 @@
+meta {
+  name: GET :id
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `getEmergencyAccess`, read as `EmergencyAccessGranteeDetailsResponse`.
+}
+
+tests {
+  test("the grantor reads one contact", function () {
+    expect(res.status).to.equal(200);
+  });
+}

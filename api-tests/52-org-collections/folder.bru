@@ -1,0 +1,13 @@
+meta {
+  name: 52-org-collections
+  seq: 52
+}
+
+docs {
+  Collections in the admin console: list with access, create, read, change,
+  who has access, bulk access, delete. Needs `50-org-admin-setup`.
+
+  `CollectionAccessDetailsResponse` is `CollectionResponse` (Id, OrganizationId,
+  Name, ExternalId, Type) plus ReadOnly, HidePasswords, Manage, Assigned,
+  Groups, Users, Unmanaged.
+}

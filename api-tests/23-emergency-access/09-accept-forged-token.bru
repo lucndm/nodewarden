@@ -1,0 +1,36 @@
+meta {
+  name: POST :id/accept with a forged token
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/accept
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+body:json {
+  {
+    "token": "not-a-real-invite-token"
+  }
+}
+
+docs {
+  Client: `postEmergencyAccessAccept`, body `EmergencyAccessAcceptRequest`
+  (`token`). The token comes from the invite email, the same problem as the
+  organization invite in `10-organization-member`.
+
+  Reference: vaultwarden `accept_invite` decodes the token and refuses when its email is not
+  the caller's.
+}
+
+tests {
+  test("a forged invite token is refused", function () {
+    expect(res.status).to.equal(400);
+  });
+}

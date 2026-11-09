@@ -1,0 +1,21 @@
+meta {
+  name: GET sends/:id after the delete
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/api/sends/{{sendId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+tests {
+  test("the Send is gone", function () {
+    expect(res.status).to.equal(404);
+  });
+}

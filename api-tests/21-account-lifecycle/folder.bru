@@ -1,0 +1,14 @@
+meta {
+  name: 21-account-lifecycle
+  seq: 21
+}
+
+docs {
+  Account changes that replace secrets or end sessions: master password, avatar,
+  public key lookup, security stamp, user key rotation, SSO unlink, account
+  deletion. The folder works on an account of its own, so nothing it changes
+  reaches the other folders.
+
+  A test named "NodeWarden has a route for it" marks an endpoint whose exact
+  answer is not decided yet; it only records whether a route exists.
+}

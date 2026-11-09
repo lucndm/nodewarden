@@ -1,0 +1,42 @@
+meta {
+  name: DELETE users (bulk)
+  type: http
+  seq: 16
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ids": [
+      "{{adminMemberMid}}"
+    ]
+  }
+}
+
+docs {
+  Client: `DefaultOrganizationUserApiService`
+  (`libs/admin-console/src/common/organization-user/services/default-organization-user-api.service.ts`). `removeManyOrganizationUsers`, body `OrganizationUserBulkRequest`, read
+  as a list of `OrganizationUserBulkResponse`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner removes members in bulk", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer lists one result per member", function () {
+    const rows = f(res.body, "data");
+    expect(rows).to.be.an("array");
+    expect(rows.length).to.be.above(0);
+    expect(f(rows[0], "id")).to.be.a("string");
+  });
+}

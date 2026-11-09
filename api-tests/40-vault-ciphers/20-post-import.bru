@@ -1,0 +1,65 @@
+meta {
+  name: POST ciphers/import
+  type: http
+  seq: 20
+}
+
+post {
+  url: {{baseUrl}}/api/ciphers/import
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+body:json {
+  {
+    "folders": [
+      {
+        "name": "2.aXYtaW1wb3J0|Y3QtaW1wb3J0|bWFjLWaW1wb3J0"
+      }
+    ],
+    "ciphers": [
+      {
+        "type": 1,
+        "name": "2.aXYtaW1wb3J0ZWQ=|Y3QtaW1wb3J0ZWQ=|bWFjLWaW1wb3J0ZWQ=",
+        "notes": null,
+        "favorite": false,
+        "reprompt": 0,
+        "folderId": null,
+        "organizationId": null,
+        "key": null,
+        "login": {
+          "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+          "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+          "uris": [],
+          "totp": null
+        },
+        "fields": [],
+        "passwordHistory": []
+      }
+    ],
+    "folderRelationships": [
+      {
+        "key": 0,
+        "value": 0
+      }
+    ]
+  }
+}
+
+docs {
+  Client: `ImportApiService.postImportCiphers`
+  (`libs/importer/src/services/import-api.service.ts`) and the SDK importer. Body
+  `ImportCiphersRequest`: `folders`, `ciphers`, `folderRelationships` (cipher
+  index to folder index). No response body read.
+}
+
+tests {
+  test("an account imports items into a folder", function () {
+    // send() treats 200, 201 and 204 as success when no body is read.
+    expect([200, 204]).to.include(res.status);
+  });
+}

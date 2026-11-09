@@ -1,0 +1,22 @@
+meta {
+  name: GET ciphers/:id in the trash
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/api/ciphers/{{cipherBId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+tests {
+  test("the item carries a deleted date", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.deletedDate).to.be.a("string");
+  });
+}

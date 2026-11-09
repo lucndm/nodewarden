@@ -1,0 +1,27 @@
+meta {
+  name: POST :id/initiate
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/initiate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+docs {
+  Client: `postEmergencyAccessInitiate`, no body. Starts the wait.
+
+  Reference: vaultwarden `initiate_emergency_access` needs a confirmed access.
+}
+
+tests {
+  test("the grantee asks for access", function () {
+    expect(res.status).to.equal(200);
+  });
+}

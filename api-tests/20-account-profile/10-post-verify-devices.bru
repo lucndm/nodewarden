@@ -1,0 +1,40 @@
+meta {
+  name: POST verify-devices
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/verify-devices
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}",
+    "verifyDevices": false
+  }
+}
+
+docs {
+  Client: `AccountApiService.setVerifyDevices`
+  (`libs/common/src/auth/services/account-api.service.ts`), body
+  `SetVerifyDevicesRequest` (`SecretVerificationRequest` plus
+  `verifyDevices`).
+
+  NodeWarden decision: new-device verification sends a code by email, and
+  NodeWarden has no email delivery, so `handleSetVerifyDevices` refuses with
+  400 and points to TOTP or WebAuthn instead. The profile keeps reporting
+  `verifyDevices: false`.
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery for device codes", function () {
+    expect(res.status).to.equal(400);
+  });
+}

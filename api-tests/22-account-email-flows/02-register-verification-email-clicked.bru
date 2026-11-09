@@ -1,0 +1,33 @@
+meta {
+  name: POST register/verification-email-clicked
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/identity/accounts/register/verification-email-clicked
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "contract-signup@example.test",
+    "emailVerificationToken": "token"
+  }
+}
+
+docs {
+  Client: `AccountApiService.registerVerificationEmailClicked`, body
+  `RegisterVerificationEmailClickedRequest` (`email`, `emailVerificationToken`).
+
+  NodeWarden decision: no email delivery, so every flow that sends a code or a
+  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
+  `mailBackedAccountPaths` in `router-authenticated.ts`).
+}
+
+tests {
+  test("NodeWarden refuses on purpose: sign-up happens in the NodeWarden web vault", function () {
+    expect(res.status).to.equal(501);
+  });
+}

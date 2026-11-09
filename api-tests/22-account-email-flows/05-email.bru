@@ -1,0 +1,41 @@
+meta {
+  name: POST email (finish an email change)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/accounts/email
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}",
+    "newEmail": "contract-owner-new@example.test",
+    "newMasterPasswordHash": "bmV3",
+    "token": "000000",
+    "key": "2.aXY=|Y3Q=|bWFj"
+  }
+}
+
+docs {
+  Client: `DefaultChangeEmailService`, body `EmailRequest`: `newEmail`,
+  `masterPasswordHash`, `newMasterPasswordHash`, `token` (the emailed code),
+  `key`, or `authenticationData` and `unlockData`. The email is the salt, so
+  the client re-derives the master key and sends the rewrapped user key.
+
+  It only works after `email-token`, which NodeWarden refuses, but this path has
+  no route, so the client gets 404 instead of the same 501.
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

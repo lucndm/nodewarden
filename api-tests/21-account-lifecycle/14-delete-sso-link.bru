@@ -1,0 +1,26 @@
+meta {
+  name: DELETE accounts/sso/:organizationId
+  type: http
+  seq: 14
+}
+
+delete {
+  url: {{baseUrl}}/api/accounts/sso/{{orgId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{lifecycleToken}}
+}
+
+docs {
+  Client: `ApiService.deleteSsoUser`, no body, no response body read. Unlinks the
+  account from an organization's SSO.
+}
+
+tests {
+  test("NodeWarden has a route for it", function () {
+    expect([404, 501]).to.not.include(res.status);
+  });
+}

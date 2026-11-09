@@ -1,0 +1,27 @@
+meta {
+  name: DELETE two-factor/email
+  type: http
+  seq: 14
+}
+
+delete {
+  url: {{baseUrl}}/api/two-factor/email
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "userVerificationToken": "x"
+  }
+}
+
+tests {
+  test("NodeWarden refuses on purpose: no email delivery", function () {
+    expect(res.status).to.equal(501);
+  });
+}

@@ -1,0 +1,31 @@
+meta {
+  name: GET webauthn (passkeys to log in with)
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/webauthn
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `WebAuthnLoginAdminApiService`
+  (`apps/web/src/app/auth/core/services/webauthn-login/webauthn-login-admin-api.service.ts`):
+  the passkeys an account logs in with, managed from the web vault settings. `getCredentials`, read as a `ListResponse` of
+  `WebauthnLoginCredentialResponse` (Id, Name, PrfStatus, EncryptedUserKey,
+  EncryptedPublicKey).
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner lists the login passkeys", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "data")).to.be.an("array");
+  });
+}

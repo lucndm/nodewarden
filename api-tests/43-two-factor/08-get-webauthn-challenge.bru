@@ -1,0 +1,36 @@
+meta {
+  name: POST two-factor/get-webauthn-challenge
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/two-factor/get-webauthn-challenge
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "userVerificationToken": "{{webauthnVerificationToken}}"
+  }
+}
+
+docs {
+  Client: `DefaultTwoFactorApiService`
+  (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `getTwoFactorWebAuthnChallenge`, body `TwoFactorWebAuthnChallengeRequest`
+  (`userVerificationToken` from `get-webauthn`), read as `TwoFactorWebAuthnChallengeResponse`: the WebAuthn creation options
+  (`challenge`, `rp`, `user`, ...).
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner gets a registration challenge", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "challenge")).to.be.a("string");
+  });
+}

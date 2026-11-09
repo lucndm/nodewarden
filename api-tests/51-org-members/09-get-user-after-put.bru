@@ -1,0 +1,24 @@
+meta {
+  name: GET users/:id after the change
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/users/{{adminMemberMid}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the member reads only the collection now", function () {
+    expect(res.status).to.equal(200);
+    const access = (f(res.body, "collections") || []).find((c) => f(c, "id") === bru.getVar("adminCollectionId"));
+    expect(f(access, "readOnly")).to.equal(true);
+  });
+}

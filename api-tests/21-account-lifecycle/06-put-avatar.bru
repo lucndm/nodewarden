@@ -1,0 +1,35 @@
+meta {
+  name: PUT avatar
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/accounts/avatar
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{lifecycleToken}}
+}
+
+body:json {
+  {
+    "avatarColor": "#2f6fdb"
+  }
+}
+
+docs {
+  Client: `ApiService.putAvatar`, body `UpdateAvatarRequest` (`avatarColor`), read
+  as `ProfileResponse`.
+
+  Reference: vaultwarden `put_avatar` accepts a `#rrggbb` color or null.
+}
+
+tests {
+  test("the account sets its avatar color", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.avatarColor).to.equal("#2f6fdb");
+  });
+}

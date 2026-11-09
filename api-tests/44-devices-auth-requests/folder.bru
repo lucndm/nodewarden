@@ -1,0 +1,14 @@
+meta {
+  name: 44-devices-auth-requests
+  seq: 44
+}
+
+docs {
+  Devices, login with another device (auth requests), the passkeys an account
+  logs in with, and the breach lookup.
+
+  Saving a passkey or trusting a device needs real WebAuthn and key material,
+  so those requests only record the route. The device each account logged in
+  with in `00-setup` is `contract-<token name>`, for example
+  `contract-ownerToken`.
+}

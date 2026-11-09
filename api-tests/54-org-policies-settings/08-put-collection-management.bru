@@ -1,0 +1,38 @@
+meta {
+  name: PUT organizations/:id/collection-management
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collection-management
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "limitCollectionCreation": true,
+    "limitCollectionDeletion": true,
+    "limitItemDeletion": false,
+    "allowAdminAccessToAllCollectionItems": true
+  }
+}
+
+docs {
+  Client: `OrganizationApiService`
+  (`libs/common/src/admin-console/services/organization/organization-api.service.ts`). `updateCollectionManagement`, body
+  `OrganizationCollectionManagementUpdateRequest`, read as `OrganizationResponse`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner limits who creates and deletes collections", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "limitCollectionCreation")).to.equal(true);
+  });
+}

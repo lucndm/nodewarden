@@ -1,0 +1,42 @@
+meta {
+  name: PUT policies/:type
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/policies/21
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "policy": {
+      "enabled": true,
+      "data": {
+        "DisableSend": false
+      }
+    },
+    "metadata": null
+  }
+}
+
+docs {
+  Client: `PolicyApiService` (`libs/common/src/admin-console/services/policy/policy-api.service.ts`). `putPolicyVNext`, body `SavePolicyRequest`: `policy` (`enabled`, `data`)
+  and `metadata`, read as `PolicyResponse`.
+
+  NodeWarden's route reads `enabled` and `data` at the top level.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner turns the Send controls policy on", function () {
+    expect(res.status).to.equal(200);
+    expect(f(res.body, "enabled")).to.equal(true);
+  });
+}

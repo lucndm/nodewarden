@@ -1,0 +1,37 @@
+meta {
+  name: POST two-factor/get-duo
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/two-factor/get-duo
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}"
+  }
+}
+
+docs {
+  Client: `DefaultTwoFactorApiService`
+  (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `getTwoFactorDuo`, read as `TwoFactorDuoResponse` (Enabled, ClientId,
+  ClientSecret, Host) and UserVerificationToken. `PUT /two-factor/duo`
+  (`TwoFactorDuoUpdateRequest`: clientId, clientSecret, host,
+  userVerificationToken) and `DELETE /two-factor/duo` complete it.
+
+  Duo needs a Duo account and its API. vaultwarden supports it.
+}
+
+tests {
+  test("NodeWarden has a route for it", function () {
+    expect([404, 501]).to.not.include(res.status);
+  });
+}

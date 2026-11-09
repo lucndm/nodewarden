@@ -1,0 +1,17 @@
+meta {
+  name: GET auth-requests/:id/response with a wrong code
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/auth-requests/{{authRequestId}}/response?code=wrong
+  body: none
+  auth: none
+}
+
+tests {
+  test("a wrong access code does not reveal the key", function () {
+    expect(res.status).to.not.equal(200);
+  });
+}

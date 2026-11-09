@@ -1,0 +1,29 @@
+meta {
+  name: GET accounts/sso/user-identifier
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/accounts/sso/user-identifier
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{lifecycleToken}}
+}
+
+docs {
+  Client: `ApiService.getSsoUserIdentifier`, read as a string. The web vault calls
+  it to link an existing account to an organization's SSO.
+
+  NodeWarden links SSO on routes of its own (`/api/settings/sso`,
+  `/api/settings/sso/link`); vaultwarden has no such route either.
+}
+
+tests {
+  test("NodeWarden has a route for it", function () {
+    expect([404, 501]).to.not.include(res.status);
+  });
+}

@@ -1,0 +1,56 @@
+meta {
+  name: POST collections
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "name": "2.aXYtY29sbC1i|Y3QtY29sbC1i|bWFjLWY29sbC1i",
+    "externalId": null,
+    "groups": [],
+    "users": [
+      {
+        "id": "{{adminMemberMid}}",
+        "readOnly": false,
+        "hidePasswords": false,
+        "manage": true
+      }
+    ]
+  }
+}
+
+script:post-response {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  bru.setVar("adminCollection2Id", f(res.body, "id"));
+}
+
+docs {
+  Client: `DefaultCollectionAdminService`
+  (`libs/admin-console/src/common/collections/services/default-collection-admin.service.ts`)
+  and `ApiService` collection calls (`libs/common/src/services/api.service.ts`). `save` for a new collection, body `CreateCollectionRequest` (name,
+  externalId, groups, users: id, readOnly, hidePasswords, manage), read as
+  `CollectionAccessDetailsResponse`.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the owner creates a collection with a member's access", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the answer has the fields the client reads", function () {
+    const fields = ["id","organizationId","name","groups","users"];
+    const missing = fields.filter((field) => f(res.body, field) === undefined);
+    expect(missing.length, "missing fields: " + missing.join(", ")).to.equal(0);
+  });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: The member accepts on the NodeWarden route
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/accept
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+tests {
+  test("the member accepts", function () {
+    expect(res.status).to.equal(200);
+  });
+}

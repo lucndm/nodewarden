@@ -1,0 +1,27 @@
+meta {
+  name: DELETE collections/:id
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/collections/{{adminCollection2Id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `DefaultCollectionAdminService`
+  (`libs/admin-console/src/common/collections/services/default-collection-admin.service.ts`)
+  and `ApiService` collection calls (`libs/common/src/services/api.service.ts`). `delete`, no body.
+}
+
+tests {
+  test("the owner deletes the collection", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}

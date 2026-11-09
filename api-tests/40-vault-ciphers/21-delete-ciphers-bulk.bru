@@ -1,0 +1,40 @@
+meta {
+  name: DELETE ciphers (bulk, for good)
+  type: http
+  seq: 21
+}
+
+delete {
+  url: {{baseUrl}}/api/ciphers
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ids": [
+      "{{cipherBId}}"
+    ],
+    "organizationId": null
+  }
+}
+
+docs {
+  Client: the Rust SDK (`@bitwarden/sdk-internal` 0.2.0-main.1214, source
+  `bitwarden/sdk-internal` at `5b7fbb41`), called from
+  `libs/common/src/vault/services/cipher-sdk.service.ts`. The TypeScript client
+  has no other path for this call.
+
+  Body `CipherBulkDeleteRequestModel`, no response body read.
+}
+
+tests {
+  test("the owner deletes items for good in bulk", function () {
+    // send() treats 200, 201 and 204 as success when no body is read.
+    expect([200, 204]).to.include(res.status);
+  });
+}

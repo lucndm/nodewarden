@@ -1,0 +1,41 @@
+meta {
+  name: PUT ciphers/restore (bulk)
+  type: http
+  seq: 18
+}
+
+put {
+  url: {{baseUrl}}/api/ciphers/restore
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ids": [
+      "{{cipherBId}}"
+    ],
+    "organizationId": null
+  }
+}
+
+docs {
+  Client: the Rust SDK (`@bitwarden/sdk-internal` 0.2.0-main.1214, source
+  `bitwarden/sdk-internal` at `5b7fbb41`), called from
+  `libs/common/src/vault/services/cipher-sdk.service.ts`. The TypeScript client
+  has no other path for this call.
+
+  Body `CipherBulkRestoreRequestModel` (`ids`, `organizationId`), read as a list
+  of ciphers.
+}
+
+tests {
+  test("the owner restores items in bulk", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data).to.be.an("array");
+  });
+}

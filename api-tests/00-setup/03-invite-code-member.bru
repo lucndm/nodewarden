@@ -1,0 +1,32 @@
+meta {
+  name: Create an invite code (memberInviteCode)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/admin/invites
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "masterPasswordHash": "{{ownerPasswordHash}}",
+    "expiresInHours": 1
+  }
+}
+
+script:post-response {
+  bru.setVar("memberInviteCode", res.body.code);
+}
+
+tests {
+  test("the admin hands out an invite code", function () {
+    expect(res.status).to.equal(201);
+  });
+}

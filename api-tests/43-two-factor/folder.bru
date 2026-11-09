@@ -1,0 +1,15 @@
+meta {
+  name: 43-two-factor
+  seq: 43
+}
+
+docs {
+  Two-step login settings. Current official clients read each provider nested
+  (`{ authenticator: {...}, userVerificationToken }`) and send the
+  `userVerificationToken` back when they change it, instead of the master
+  password.
+
+  No request here turns a provider on, so later folders keep logging in with a
+  password only. Turning one on needs a real code (a TOTP, a YubiKey OTP, a
+  WebAuthn assertion), which belongs in a browser test.
+}

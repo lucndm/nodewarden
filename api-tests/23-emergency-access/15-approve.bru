@@ -1,0 +1,26 @@
+meta {
+  name: POST :id/approve
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/approve
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `postEmergencyAccessApprove`, no body. The grantor approves before the
+  wait ends.
+}
+
+tests {
+  test("the grantor approves the request", function () {
+    expect(res.status).to.equal(200);
+  });
+}

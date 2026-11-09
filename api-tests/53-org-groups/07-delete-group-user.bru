@@ -1,0 +1,26 @@
+meta {
+  name: DELETE groups/:id/user/:membershipId
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/api/organizations/{{adminOrgId}}/groups/{{adminGroupId}}/user/{{adminOwnerMid}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+docs {
+  Client: `ApiService.deleteGroupUser` (`libs/common/src/services/api.service.ts`):
+  takes one member out of a group.
+}
+
+tests {
+  test("the owner takes a member out of the group", function () {
+    expect([200, 204]).to.include(res.status);
+  });
+}
