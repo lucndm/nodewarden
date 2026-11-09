@@ -451,6 +451,34 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 
 **Còn lại của lát này (chưa làm):** phần **lời mời tới người nhận ngoài Web Vault** (người được mời chưa nhận được tin nào qua Telegram — chỉ chủ vault được báo).
 
+#### Lát Emergency Access — **client chính thức đi trọn đường** (2026-11-09)
+
+**Đọc source client chính thức (`clients/` trong workspace) và thấy luồng thật của nó:**
+
+1. `invite(email, type, waitTimeDays)` — **không** có khoá.
+2. Người được mời `accept`.
+3. Chủ `confirm(id, key)` — chủ **bọc vault key** bằng **public key của người được mời** rồi gửi lên.
+4. Người được mời `initiate` → chủ `approve` → `takeover` / `view`.
+
+**Server của tôi hỏng ở chỗ đó:** `invite` **bắt buộc** có khoá (client không gửi ⇒ 400), và **không có route `confirm`** ⇒ grant không bao giờ sang trạng thái *confirmed* ⇒ `initiate` luôn 404. Nghĩa là **client chính thức không dùng được emergency access với server này**.
+
+**Đã có:**
+
+| Route | Việc |
+|---|---|
+| `PUT /:id/confirm` | Chủ xác nhận + gửi khoá đã bọc (chỉ chủ, chỉ khi grant đang *accepted*) |
+| `PUT /:id/view` | Người được mời đọc **danh sách item của chủ** + `keyEncrypted` (chỉ sau khi hết hạn và được duyệt) |
+| `PUT /:id` | Chủ đổi loại truy cập / số ngày chờ / khoá đã bọc |
+| `POST /:id/reinvite` | Chủ gọi lại; không có kênh mail nên nó **chỉ trỏ lời mời vào tài khoản** sẵn có |
+| `GET /:id/policies` | Luật của tổ chức chủ, đi kèm takeover |
+| `GET /api/users/:id/public-key` | Public key của một người — chủ cần nó để bọc khoá (client chính thức gọi đúng URL này) |
+
+**Một chỗ tôi đã làm sai và đã sửa:** grant chỉ **xem** (View) trước đây **không phải chờ hạn**. Đọc upstream thì thấy `view` cũng đòi `RecoveryApproved` — và đúng vậy: đọc vault là **đưa cả danh sách item** ra, nên hạn chờ chính là thứ đứng giữa grant và các item. Nay grant View **chờ đúng như grant takeover**.
+
+**Còn lại của lát này (chưa làm):** **Web Vault của tôi** mới chỉ làm được tới bước mời — nó **chưa** bọc khoá được (chưa có UI nhập public key của người được mời), nên lời mời từ Web Vault của tôi **chưa hoàn chỉnh**. Client chính thức thì đi trọn đường.
+
+**Kiểm chứng:** `scripts/emergency-access-flow.test.ts` (**10/10**, qua router thật) — đi trọn luồng client chính thức, hạn không bắt đầu được trước khi chủ xác nhận, chỉ chủ mới xác nhận được và chỉ một lần, grant View mở ra item của chủ **sau khi hết hạn**, grant takeover không xem được item, chủ đổi được grant, chủ gọi lại được, luật của chủ đi kèm takeover, và public key lấy được / không có thì 404. Tổng `test:emergency-access`: **56/56**.
+
 #### Lát Emergency Access — **chủ duyệt sớm** (2026-11-09)
 
 **Đọc lại upstream, thấy một chỗ lệch:** `approve` của upstream **không** kiểm hạn chờ — chỉ cần grant ở trạng thái "đang chờ". Còn server này từ chối (400) khi hạn chưa hết.
