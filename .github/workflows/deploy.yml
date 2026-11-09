@@ -18,7 +18,6 @@ on:
 # docker-compose repo.
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: deploy-nodewarden
@@ -28,6 +27,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    # Lets this job ask GitHub for the OIDC token it trades at Infisical.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
