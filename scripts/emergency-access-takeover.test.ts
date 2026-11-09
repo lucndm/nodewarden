@@ -23,6 +23,8 @@ import { handleAuthenticatedRoute } from '../src/router-authenticated';
 import { ensureStorageSchema } from '../src/services/storage-schema';
 import { StorageService } from '../src/services/storage';
 import {
+  approveExpiredEmergencyAccess,
+  getEmergencyAccess,
   EMERGENCY_ACCESS_STATUS_CONFIRMED,
   EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
   EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED,
@@ -300,6 +302,44 @@ test('a password change without the new key is refused', async () => {
   assert.equal(refused.status, 400);
 });
 
+test('a grant that only lets the other person read never gives them the account', async () => {
+  const { env, storage } = await fixture();
+  // A view grant, walked through the whole recovery.
+  const id = 'view-grant';
+  await createEmergencyAccess(env.DB, {
+    id,
+    grantorId: GRANTOR,
+    granteeId: GRANTEE,
+    email: 'grantee@example.test',
+    wrappedKey: '4.placeholder-not-a-real-key',
+    type: 0,
+    status: EMERGENCY_ACCESS_STATUS_CONFIRMED,
+    waitTimeDays: 1,
+    recoveryInitiatedAt: null,
+    lastNotificationAt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  await updateEmergencyAccess(env.DB, id, {
+    recoveryInitiatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    status: EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
+    updatedAt: NOW,
+  });
+
+  const refused = await call(env, 'POST', `/api/emergency-access/${id}/takeover`, GRANTEE);
+  assert.equal(refused.status, 404, 'a view grant is not a takeover');
+
+  const changed = await call(env, 'POST', `/api/emergency-access/${id}/password`, GRANTEE, {
+    newMasterPasswordHash: 'new-hash',
+    key: '2.bmV3|dmV3|bmV3',
+  });
+  assert.equal(changed.status, 404, 'and it does not change the password');
+
+  const grantor = await storage.getUserById(GRANTOR);
+  assert.equal(grantor?.masterPasswordHash, 'hash', 'the old password still stands');
+});
+
 test('the sessions of the account are thrown out when its password is replaced', async () => {
   const { env, storage } = await fixture();
   const id = await confirmedGrant(env);
@@ -349,4 +389,63 @@ test('the sessions of the account are thrown out when its password is replaced',
   // not open anything.
   const grantor = await storage.getUserById(GRANTOR);
   assert.notEqual(grantor?.securityStamp, 'stamp', 'the security stamp is renewed');
+});
+
+test('the wait ends on its own, without the account holder answering', async () => {
+  const { env } = await fixture();
+  const id = 'sweep-grant';
+  await createEmergencyAccess(env.DB, {
+    id,
+    grantorId: GRANTOR,
+    granteeId: GRANTEE,
+    email: 'grantee@example.test',
+    wrappedKey: '4.placeholder-not-a-real-key',
+    type: EMERGENCY_ACCESS_TYPE_TAKEOVER,
+    status: EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED,
+    waitTimeDays: 7,
+    // The wait started six days ago, so a day is still to go.
+    recoveryInitiatedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
+    lastNotificationAt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+
+  const approvedTooEarly = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(approvedTooEarly, 0, 'the wait is still running');
+  const still = await getEmergencyAccess(env.DB, id);
+  assert.equal(still?.status, EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED);
+
+  // A day later the wait is over and the grant stands on its own.
+  await updateEmergencyAccess(env.DB, id, {
+    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: NOW,
+  });
+  const approved = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(approved, 1);
+  const row = await getEmergencyAccess(env.DB, id);
+  assert.equal(row?.status, EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED);
+});
+
+test('the wait does not end early for a grant that only lets the other person read', async () => {
+  const { env } = await fixture();
+  const id = 'sweep-view-grant';
+  await createEmergencyAccess(env.DB, {
+    id,
+    grantorId: GRANTOR,
+    granteeId: GRANTEE,
+    email: 'grantee@example.test',
+    wrappedKey: '4.placeholder-not-a-real-key',
+    type: 0,
+    status: EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED,
+    waitTimeDays: 1,
+    recoveryInitiatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    lastNotificationAt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+
+  const approved = await approveExpiredEmergencyAccess(env.DB);
+  assert.equal(approved, 0, 'a view grant is never approved by the sweep');
+  const row = await getEmergencyAccess(env.DB, id);
+  assert.equal(row?.status, EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED);
 });

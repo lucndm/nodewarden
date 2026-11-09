@@ -36,6 +36,7 @@ import {
   EMERGENCY_ACCESS_STATUS_INVITED,
   EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
   EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED,
+  EMERGENCY_ACCESS_TYPE_TAKEOVER,
   type EmergencyAccessRow,
 } from '../services/storage-emergency-access-repo';
 import type { Env } from '../types';
@@ -405,6 +406,11 @@ export async function handleTakeoverEmergencyAccess(
   if (row.status !== EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED) {
     return errorResponse('Emergency access not valid.', 404);
   }
+  // A grant that only lets the other person read never gives them the account,
+  // however far the recovery went.
+  if (row.type !== EMERGENCY_ACCESS_TYPE_TAKEOVER) {
+    return errorResponse('Emergency access not valid.', 404);
+  }
   const grantor = await getUserById(env.DB, row.grantorId);
   if (!grantor) {
     return errorResponse('Grantor user not found.', 404);
@@ -453,6 +459,11 @@ export async function handleEmergencyAccessPassword(
     return errorResponse('Emergency access not valid.', 404);
   }
   if (row.status !== EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED) {
+    return errorResponse('Emergency access not valid.', 404);
+  }
+  // A grant that only lets the other person read never gives them the
+  // account, however far the recovery went.
+  if (row.type !== EMERGENCY_ACCESS_TYPE_TAKEOVER) {
     return errorResponse('Emergency access not valid.', 404);
   }
   const newMasterPasswordHash = String(body.newMasterPasswordHash || '').trim();
