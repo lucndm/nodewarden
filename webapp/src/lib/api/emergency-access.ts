@@ -89,6 +89,18 @@ export async function acceptEmergencyAccess(authedFetch: AuthedFetch, id: string
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Accept failed'));
 }
 
+/** POST /api/emergency-access/:id/initiate — the grantee starts the wait. */
+export async function initiateEmergencyAccess(authedFetch: AuthedFetch, id: string): Promise<void> {
+  const resp = await authedFetch(`/api/emergency-access/${encodeURIComponent(id)}/initiate`, { method: 'POST' });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Start the wait failed'));
+}
+
+/** POST /api/emergency-access/:id/approve — the grantor approves the recovery. */
+export async function approveEmergencyAccess(authedFetch: AuthedFetch, id: string): Promise<void> {
+  const resp = await authedFetch(`/api/emergency-access/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Approve failed'));
+}
+
 /** PUT /api/emergency-access/:id/reject */
 export async function rejectEmergencyAccess(authedFetch: AuthedFetch, id: string): Promise<void> {
   const resp = await authedFetch(`/api/emergency-access/${encodeURIComponent(id)}/reject`, { method: 'PUT' });

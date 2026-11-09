@@ -202,13 +202,16 @@ test('a wait time the format does not allow is refused', async () => {
   }
 });
 
-test('a takeover is refused, because there is no path to re-encrypt the whole vault', async () => {
+test('a takeover is invited, and the wait and the approval still stand between it and the account', async () => {
   const { env } = await fixture();
-  const refused = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
     ...INVITE,
     type: 1,
   });
-  assert.equal(refused.status, 400);
+  assert.equal(invited.status, 200);
+  assert.equal((await invited.json()).type, 1);
+  // A takeover cannot be taken before the wait has passed and the grantor
+  // has approved it; that is proved in emergency-access-takeover.test.ts.
 });
 
 test('the same person cannot be invited twice while a grant is pending', async () => {

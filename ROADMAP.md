@@ -387,7 +387,7 @@ Lập **plan riêng cho từng lát**; không biến Pass Monitor thành tập h
 | **Inactive 2FA** | **Chưa có gì**: không nơi nào kết luận website có hỗ trợ 2FA hay không; mọi TOTP/2FA hiện có là 2FA **đăng nhập tài khoản**. Dữ liệu trong vault chỉ chứng minh **người dùng có** TOTP/passkey cho site đó — thiếu TOTP **không** chứng minh site không hỗ trợ. | Chỉ làm được phần vault nói thật: trạng thái `twoFactorState` = `enabled` (có TOTP **hoặc** passkey) | `unknown`; **không** có nhãn "site không hỗ trợ" (chưa có nguồn đáng tin). "Inactive" cần **cột last-used mới** cho TOTP (migration) — chưa có. |
 | **Credential monitoring** | Có **hai đường khác nhau**, không được lẫn: (1) Password Health — **trình duyệt** băm SHA-1 và chỉ gửi **5 ký tự tiền tố** tới `api.pwnedpasswords.com`, kết quả **chỉ trong RAM trình duyệt**; (2) Email breach — **server** gửi **email tài khoản** của người dùng tới HIBP (cần `HIBP_API_KEY`) hoặc XposedOrNot (miễn phí), cache `email_breach_cache` 5 phút quét cron. | Chốt rõ: email tài khoản **không** phải Dark Web Monitoring cả vault. Muốn theo dõi **từng credential** thì phải chọn corpus, dữ liệu gửi đi, sự đồng ý, tần suất và định nghĩa kết quả — chưa làm gì cả. |
 | **Account protection** | ✅ xong (trên): hai lỗ hổng đã đóng, mọi biện pháp có test chứng minh được thực thi. Xác minh thiết bị mới **giữ là từ chối trung thực** (cần kênh email mà server không có). | — |
-| **Emergency Access** | **Phần View đã làm (2026-11-09)** — bảng, route và UI có; xem mục "Lát Emergency Access" bên dưới. **Chưa có**: takeover, thông báo email, thu khoá tự động, và phần nhận lời mời ở phía người được mời. | Cần threat model riêng (người nhận, thời gian chờ, hủy, xác thực, thông báo, cấp/thu khoá, audit) và **không** gửi master password/secret thô. Lớn nhất trong P4. |
+| **Emergency Access** | **Đã làm phần View + Takeover (2026-11-09)** — bảng, route, UI, có test; xem mục "Lát Emergency Access" bên dưới. **Chưa có:** thông báo email, thu khoá tự động khi hết hạn, lời mời tới người nhận ngoài Web Vault. | Cần threat model riêng (người nhận, thời gian chờ, hủy, xác thực, thông báo, cấp/thu khoá, audit) và **không** gửi master password/secret thô. Lớn nhất trong P4. |
 | **Passkey / 2FA / zero-knowledge** | Passkey **tài khoản** có (`account-passkeys.ts`, `purpose: login | twoFactor`); `cipher.login.fido2Credentials` là passkey **website** (người dùng tự lưu) — hai thứ khác nhau. Mã hoá: server giữ payload mã hoá + khoá bọc, khoá tổ chức bọc theo RSA cho từng thành viên, xoay khoá mã hoá lại từng item. | Không cần gì mới về mã hoá; chỉ cần **rà lại** và **không tuyên bố tương đương Proton** khi chưa đo. Autofill thuộc client Bitwarden, không thuộc server. |
 
 Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi log/export, và review bảo mật trước phát hành. Card giáo dục F-56 là nội dung tùy chọn sau khi luồng thật ổn định.
@@ -431,10 +431,26 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 **Ba giới hạn đã nói rõ (không hứa quá):**
 
 1. **Không gửi email.** Server không có kênh email (chỉ có Telegram cho cảnh báo bảo mật) ⇒ lời mời **hiện trong Web Vault** và người được mời phải đăng nhập mới thấy. Trang ghi rõ điều này.
-2. **Không làm takeover.** Takeover nghĩa là đổi master key của chủ ⇒ phải **re-encrypt toàn vault**, mà hiện chưa có đường đó (`reencryptPayload` chỉ chạy được cho **một item** và **một tổ chức**). Lời mời takeover bị **từ chối** (400) chứ không nhận rồi không thực hiện được.
-3. **Không hứa thu khoá tức thì.** Thời gian chờ được lưu và hạn được tính, nhưng việc **thu khoá** khi hết hạn cần một lần quét; server không tự chạy việc đó.
+2. **Không hứa thu khoá tức thì.** Thời gian chờ được lưu và hạn được tính, nhưng việc **thu khoá** khi hết hạn cần một lần quét; server không tự chạy việc đó.
 
-**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **6 check UI** trong `scripts/local-ui-e2e.mts`: trang có mục Emergency access, nói rõ server **không giữ khoá nào mở được**, nói rõ **không gửi email**, nói rõ **không có takeover**, và phía người được mời thấy **lời mời của mình** (kèm dòng "chưa có ai cho bạn vào"). Tổng UI e2e: **52/52**.
+#### Lát Emergency Access — phần **Takeover** đã làm (2026-11-09)
+
+**Sửa lại một chỗ đã ghi sai trước đó:** ROADMAP bảo takeover "phải re-encrypt toàn vault". Đọc `vaultwarden` (upstream) cho thấy **không phải vậy** — takeover của upstream **không** re-encrypt vault: nó trả `salt` + `keyEncrypted` để người được mời tự suy ra master key, rồi gọi `PUT /emergency-access/:id/password`, và server chỉ đổi master hash + `user.key` của chủ. **Vault key giữ nguyên ⇒ item không cần mã hoá lại.** Đường đổi master password NodeWarden **đã có sẵn** (`handleChangePassword` gán `user.masterPasswordHash` và `user.key`). Phần còn thiếu là thao tác trên **hàng người dùng**, không đụng payload của item.
+
+**Đã có, mỗi bước có test:**
+
+- **Bốn route** (`src/handlers/emergency-access.ts`): `POST /:id/initiate` (người được mời bắt đầu chờ), `POST /:id/approve` (chủ duyệt), `POST /:id/takeover` (trả salt + khoá đã bọc), `POST /:id/password` (đặt master password mới).
+- **Cổng chờ tính theo ngày, không đổi được:** duyệt sớm hơn hạn thì **400**; hạn là 7 ngày thì 6 ngày **chưa đủ**, 8 ngày thì đủ.
+- **Ai được làm gì:** người được mời bắt đầu chờ và xin takeover; **chỉ chủ duyệt**; người được mời **không tự duyệt**; người lạ **không** bắt đầu, không duyệt, không đổi mật khẩu.
+- **Master key không bao giờ đi qua mạng:** `/:id/takeover` trả `salt` (là **email** của chủ — đúng như mọi nơi khác trong định dạng) + `keyEncrypted` (khoá **đã bọc sẵn** cho người được mời từ lúc mời). Không có `masterKey` trong câu trả lời.
+- **Mật khẩu mới làm mất các lối vào cũ:** `totpSecret` và 5 khoá YubiKey bị **xoá**, `yubikeyNfc` tắt, `securityStamp` làm mới, và **mọi refresh token + trusted-2FA token của chủ bị thu hồi** — một mật khẩu mà chủ không tự đặt không được giữ những cách vào mà chỉ chủ biết.
+- **UI:** mời được chọn **View** (xem) hoặc **Takeover** (tiếp quản); phía người được mời có nút **bắt đầu chờ**; phía chủ có nút **duyệt** khi lời mời takeover đã vào trạng thái chờ.
+
+**Kiểm chứng:** `scripts/emergency-access-takeover.test.ts` (**11/11**, qua router thật) — có trong `test:unit` (cùng `test:emergency-access`, tổng **31** check cho cả lát). Thêm **7 check UI** trong `scripts/local-ui-e2e.mts`: trang nói rõ **server không giữ khoá nào mở được**, **không gửi email**, takeover **chỉ sau khi hạn chờ đã qua và chủ đã duyệt**, và trang **cho cả hai loại** truy cập. Tổng UI e2e: **53/53**.
+
+**Còn lại của lát này (chưa làm):** thông báo email (cần kênh mail), thu khoá tự động khi hết hạn (cần một lần quét), và phần **lời mời tới người nhận ngoài Web Vault**.
+
+**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **6 check UI** trong `scripts/local-ui-e2e.mts`: trang có mục Emergency access, nói rõ server **không giữ khoá nào mở được**, nói rõ **không gửi email**, và phía người được mời thấy **lời mời của mình** (kèm dòng "chưa có ai cho bạn vào"). Tổng UI e2e: **53/53** (sau khi thêm phần takeover).
 
 **Ba lỗi thật do test bắt được trong lúc làm:**
 

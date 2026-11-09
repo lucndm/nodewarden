@@ -59,12 +59,16 @@ import {
 } from './handlers/ciphers';
 import {
   handleAcceptEmergencyAccess,
+  handleApproveEmergencyAccess,
   handleDeleteEmergencyAccess,
+  handleEmergencyAccessPassword,
   handleGetEmergencyAccess,
+  handleInitiateEmergencyAccess,
   handleInviteEmergencyAccess,
   handleListGrantedEmergencyAccess,
   handleListTrustedEmergencyAccess,
   handleRejectEmergencyAccess,
+  handleTakeoverEmergencyAccess,
 } from './handlers/emergency-access';
 import {
   handleGetCipherVersion,
@@ -399,6 +403,18 @@ export async function handleAuthenticatedRoute(
     }
     if (action === 'reject' && (method === 'PUT' || method === 'POST')) {
       return handleRejectEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'initiate' && (method === 'PUT' || method === 'POST')) {
+      return handleInitiateEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'approve' && (method === 'PUT' || method === 'POST')) {
+      return handleApproveEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'takeover' && (method === 'PUT' || method === 'POST')) {
+      return handleTakeoverEmergencyAccess(request, env, userId, emergencyId);
+    }
+    if (action === 'password' && (method === 'PUT' || method === 'POST')) {
+      return handleEmergencyAccessPassword(request, env, userId, emergencyId);
     }
     if (!action && method === 'DELETE') {
       return handleDeleteEmergencyAccess(request, env, userId, emergencyId);

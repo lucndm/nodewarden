@@ -1150,8 +1150,13 @@ async function main() {
       emergencyText.slice(-300)
     );
     checks.ok(
-      'and it says a takeover is not offered',
-      emergencyText.includes('Taking over an account is not offered'),
+      'and it says a takeover waits for the approval',
+      emergencyText.includes('only after the wait you chose has passed and you have approved it'),
+      emergencyText.slice(-300)
+    );
+    checks.ok(
+      'and it offers both kinds of access',
+      emergencyText.includes('They can read your vault') && emergencyText.includes('They can take over your account'),
       emergencyText.slice(-300)
     );
     // The page also shows the invitations this account was given, so the
