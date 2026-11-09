@@ -219,3 +219,47 @@ export async function updateEmergencyAccess(
 export async function deleteEmergencyAccess(db: D1Database, id: string): Promise<void> {
   await db.prepare('DELETE FROM emergency_access WHERE id = ?').bind(id).run();
 }
+
+/** The grants whose recovery has been started and is waiting out its time. */
+export async function listEmergencyAccessAwaitingApproval(
+  db: D1Database
+): Promise<EmergencyAccessRow[]> {
+  const res = await db
+    .prepare(
+      `SELECT ${COLUMNS} FROM emergency_access WHERE status = ? ORDER BY created_at ASC`
+    )
+    .bind(EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED)
+    .all<RawRow>();
+  return (res.results || []).map(mapRow);
+}
+
+/**
+ * Approves the recoveries whose wait has passed.
+ *
+ * The grantor said "after this many days you may take over", so once the
+ * days are up the grant stands on its own: the person who was let in is not
+ * left waiting for an account holder who may never answer. This is the same
+ * rule the upstream applies.
+ *
+ * A grant that only lets the other person read is not approved by this: it
+ * never gives them the account, so there is nothing to wait for.
+ *
+ * Returns how many grants were approved.
+ */
+export async function approveExpiredEmergencyAccess(
+  db: D1Database,
+  now: number = Date.now()
+): Promise<number> {
+  const rows = await listEmergencyAccessAwaitingApproval(db);
+  let approved = 0;
+  for (const row of rows) {
+    if (row.type !== EMERGENCY_ACCESS_TYPE_TAKEOVER) continue;
+    if (!isEmergencyRecoveryAllowed(row, now)) continue;
+    await updateEmergencyAccess(db, row.id, {
+      status: EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED,
+      updatedAt: new Date(now).toISOString(),
+    });
+    approved += 1;
+  }
+  return approved;
+}

@@ -431,7 +431,7 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 **Ba giới hạn đã nói rõ (không hứa quá):**
 
 1. **Không gửi email.** Server không có kênh email (chỉ có Telegram cho cảnh báo bảo mật) ⇒ lời mời **hiện trong Web Vault** và người được mời phải đăng nhập mới thấy. Trang ghi rõ điều này.
-2. **Không hứa thu khoá tức thì.** Thời gian chờ được lưu và hạn được tính, nhưng việc **thu khoá** khi hết hạn cần một lần quét; server không tự chạy việc đó.
+2. **Không thu khoá — mà tự duyệt khi hết hạn.** Chủ đã nói "sau N ngày thì bạn có thể tiếp quản", nên khi N ngày trôi qua thì **lời hứa đó tự đứng**, không cần chủ trả lời (người được mời không bị kẹt vì một chủ vault không liên lạc được). Cron `*/5` đang có sẵn chạy việc này. **Sửa lại chỗ đã ghi sai trước đó:** ROADMAP từng nói "không hứa thu khoá tức thì" — đó là **sai**: upstream làm đúng như vậy (`emergency_request_timeout_job` chuyển `RecoveryInitiated` → `RecoveryApproved` khi hết hạn), và giữ luật đó thì hợp với client chính thức.
 
 #### Lát Emergency Access — phần **Takeover** đã làm (2026-11-09)
 
@@ -446,11 +446,22 @@ Mọi lát phải kiểm tra trạng thái unknown/error, không lộ secret khi
 - **Mật khẩu mới làm mất các lối vào cũ:** `totpSecret` và 5 khoá YubiKey bị **xoá**, `yubikeyNfc` tắt, `securityStamp` làm mới, và **mọi refresh token + trusted-2FA token của chủ bị thu hồi** — một mật khẩu mà chủ không tự đặt không được giữ những cách vào mà chỉ chủ biết.
 - **UI:** mời được chọn **View** (xem) hoặc **Takeover** (tiếp quản); phía người được mời có nút **bắt đầu chờ**; phía chủ có nút **duyệt** khi lời mời takeover đã vào trạng thái chờ.
 
-**Kiểm chứng:** `scripts/emergency-access-takeover.test.ts` (**11/11**, qua router thật) — có trong `test:unit` (cùng `test:emergency-access`, tổng **31** check cho cả lát). Thêm **7 check UI** trong `scripts/local-ui-e2e.mts`: trang nói rõ **server không giữ khoá nào mở được**, **không gửi email**, takeover **chỉ sau khi hạn chờ đã qua và chủ đã duyệt**, và trang **cho cả hai loại** truy cập. Tổng UI e2e: **53/53**.
+**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **7 check UI** trong `scripts/local-ui-e2e.mts`: trang nói rõ **server không giữ khoá nào mở được**, **không gửi email**, takeover **chỉ sau khi hạn chờ đã qua và chủ đã duyệt**, và trang **cho cả hai loại** truy cập. Tổng UI e2e: **53/53**.
 
-**Còn lại của lát này (chưa làm):** thông báo email (cần kênh mail), thu khoá tự động khi hết hạn (cần một lần quét), và phần **lời mời tới người nhận ngoài Web Vault**.
+**Còn lại của lát này (chưa làm):** thông báo email (cần kênh mail) và phần **lời mời tới người nhận ngoài Web Vault**.
 
-**Kiểm chứng:** `scripts/emergency-access-storage.test.ts` (**8/8**) và `scripts/emergency-access.test.ts` (**12/12**, qua router thật) — có trong `test:unit`. Thêm **6 check UI** trong `scripts/local-ui-e2e.mts`: trang có mục Emergency access, nói rõ server **không giữ khoá nào mở được**, nói rõ **không gửi email**, và phía người được mời thấy **lời mời của mình** (kèm dòng "chưa có ai cho bạn vào"). Tổng UI e2e: **53/53** (sau khi thêm phần takeover).
+#### Lát Emergency Access — phần **chờ tự kết thúc** đã làm (2026-11-09)
+
+**Luật đã chốt (đọc từ `vaultwarden` — upstream):** khi hạn chờ trôi qua, lời hứa của chủ **tự đứng** ⇒ grant chuyển `RecoveryInitiated` → `RecoveryApproved` mà không cần chủ trả lời. Như vậy người được mời không bị kẹt khi chủ vault không liên lạc được — đó là mục đích của cả cơ chế chờ lẫn cơ chế duyệt.
+
+**Đã có:**
+
+- `approveExpiredEmergencyAccess` (`src/services/storage-emergency-access-repo.ts`): duyệt các grant **đang chờ** mà hạn đã qua; grant **chỉ xem** (View) **không** được duyệt bởi việc này — nó vốn không bao giờ cho tài khoản.
+- Nối vào cron `*/5` đang có sẵn (`src/index.ts`, `scheduled()`).
+
+**Một lỗ hổng thật tìm được khi đọc lại upstream — đã đóng:** `/:id/takeover` và `/:id/password` **chưa** kiểm grant có phải **Takeover** hay không. Một grant **View** đã đi qua phục hồi và được duyệt có thể bị dùng để **lấy tài khoản**. Upstream kiểm đúng điều đó (`is_valid_request` so sánh `atype` với loại được yêu cầu). Nay cả hai route đều **từ chối** grant không phải Takeover (404), và có test chứng minh: grant View đi trọn đường vẫn **không** đổi được mật khẩu.
+
+**Kiểm chứng:** `scripts/emergency-access-takeover.test.ts` (**15/15**) — gồm ca "hạn chờ tự kết thúc" (6 ngày chưa đủ, 8 ngày thì đủ, sweep duyệt **1** grant) và ca "grant View không bao giờ được sweep duyệt". Tổng `test:emergency-access`: **34/34**, có trong `test:unit`.
 
 **Ba lỗi thật do test bắt được trong lúc làm:**
 

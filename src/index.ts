@@ -6,6 +6,7 @@ import { StorageService } from './services/storage';
 import { applyCors, jsonResponse } from './utils/response';
 import { runScheduledBackupIfDue } from './handlers/backup';
 import { sweepEmailBreachCaches } from './services/email-breach-monitor';
+import { approveExpiredEmergencyAccess } from './services/storage-emergency-access-repo';
 import {
   isBackendRequestPath,
   isWebVaultHidden,
@@ -125,6 +126,9 @@ export default {
     }));
     ctx.waitUntil(sweepEmailBreachCaches(env).catch((error) => {
       console.error('Scheduled email breach sweep failed:', error);
+    }));
+    ctx.waitUntil(approveExpiredEmergencyAccess(env.DB).catch((error) => {
+      console.error('Scheduled emergency access approval failed:', error);
     }));
   },
 };
