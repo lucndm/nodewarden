@@ -316,7 +316,7 @@ Danh sách organization trước đây được tải riêng với `staleTime` 6
 
 **Public page đã có check tự động trong trình duyệt (2026-11-09):** `scripts/local-send-public-e2e.mts` (chạy bằng `npm run test:local-send-public`, có trong `test:local`) mở link Send thật trong Chromium và kiểm **8** điều: link mở ra nội dung và tên của Send; **khoá sai trong link** thì không lộ nội dung và trang báo lỗi thay vì trắng; **link không có khoá** thì không lộ nội dung; **Send đã xoá** thì không mở được; **Send hết lượt xem** thì không mở được (lần mở đầu vẫn được). Check chạy với khoá thật của client (16 byte seed, HKDF ra enc/mac) nên nó bắt được lỗi thật — đã thử cố tình làm sai khoá và check báo fail.
 
-**Còn mở:** chưa kiểm chứng Send **tải file** với extension (mới kiểm chứng dạng text).
+**Send tải file đã có check (2026-11-09):** `scripts/local-extension-e2e.mts` (chạy bằng `npm run test:local-extension`, có trong `test:local`) thêm **6 check** cho Send mang file: server giữ Send file (type 1) và giữ **tên file đã mã hoá**; link mở được bản sao (`send-access`) mà **không** có khoá; **file tải được** qua đường `api/sends/:id/access/file/:fileId` và trả về **file đã niêm phong**, không phải chữ của file. Tổng extension e2e: **19/19**. Đã thử làm hỏng để chắc check bắt được: để tên file không mã hoá thì check "giữ tên file đã mã hoá" báo fail; để tải file sai kích thước thì server trả 400.
 
 ## P4 — bảo mật sản phẩm (F-50–56, F-60–64)
 
