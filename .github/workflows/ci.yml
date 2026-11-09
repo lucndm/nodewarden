@@ -1,0 +1,53 @@
+name: CI
+
+# The checks a change has to pass before it is merged.
+#
+# The deploy workflow runs the same tests, but it runs them after the change
+# has reached main, which is after the change has reached production. A pull
+# request needs its own run: without it, a change that breaks the vault
+# layout, the tags and folders, the item history or the rights on a shared
+# item can be merged without a single check running against it.
+#
+# This workflow holds no secret and writes nothing: it reads the repository,
+# builds it and runs the offline contract tests.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push makes the older run pointless, so it is cancelled.
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # The vault layout, the tags and folders, the item history, the rights
+      # on a shared item and the move into an organization. These are the
+      # contracts the official clients depend on.
+      - name: Test
+        run: npm run test:unit
