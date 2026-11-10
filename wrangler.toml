@@ -20,9 +20,18 @@ run_worker_first = true
 [triggers]
 crons = [ "*/5 * * * *" ]
 
+[observability]
+# The notifications hub takes its access token in the query string (browsers
+# cannot set headers on a WebSocket), and SSO callbacks carry a code there:
+# neither belongs in logs or traces.
+redact_query_string = true
+
 [observability.logs]
 enabled = true
 invocation_logs = true
+
+[observability.traces]
+enabled = true
 
 [[d1_databases]]
 binding = "DB"
