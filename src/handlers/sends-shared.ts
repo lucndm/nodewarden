@@ -409,7 +409,9 @@ export function sendToResponse(send: Send): SendResponse {
     emails: send.emails,
     authType: send.authType,
     disabled: send.disabled,
-    hideEmail: send.hideEmail,
+    // A Send saved without the flag stores null; the Android app requires a
+    // boolean and drops the whole sync on null.
+    hideEmail: send.hideEmail ?? false,
     revisionDate: send.updatedAt,
     expirationDate: send.expirationDate,
     deletionDate: send.deletionDate,

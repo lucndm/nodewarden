@@ -316,3 +316,11 @@ test('a Send that hides its creator says nothing about them', async () => {
   const body = (await opened.json()) as Record<string, unknown>;
   assert.equal(body.creatorIdentifier, null, 'the sender stays anonymous');
 });
+
+test('a Send saved without hideEmail answers false, which the Android app requires', async () => {
+  const { env } = await fixture();
+  await createSend(env, OWNER, { hideEmail: undefined });
+  const sync = await call(env, 'https://vault.example.test/api/sync', 'GET', OWNER);
+  const synced = (await sync.json()) as { sends: Array<{ hideEmail: unknown }> };
+  assert.equal(synced.sends[0].hideEmail, false);
+});

@@ -13,6 +13,7 @@
 import { StorageService } from '../services/storage';
 import { notifyVaultSyncForRequest } from './ciphers';
 import { errorResponse, jsonResponse } from '../utils/response';
+import { officialProfileOrganizationFields } from '../utils/profile-response';
 import type { Env } from '../types';
 
 const OWNER_TYPE = 0;
@@ -116,6 +117,7 @@ export async function handleCreateOrganization(
       use2fa: true,
       useApi: true,
       usersGetPremium: true,
+      ...officialProfileOrganizationFields(),
       object: 'profileOrganization',
     },
     200
@@ -692,6 +694,7 @@ export async function handleGetOrganizations(request: Request, env: Env, userId:
       use2fa: true,
       useApi: true,
       usersGetPremium: true,
+      ...officialProfileOrganizationFields(),
       object: 'profileOrganization',
       };
     })

@@ -455,3 +455,29 @@ test('the official clients accept with the membership in the path, and only thei
   assert.equal(accepted?.status, 200);
   assert.equal((await storage.getOrganizationUserForUser(organization.id, MEMBER))?.status, 1);
 });
+
+test('every profile organization carries the fields the Android app requires', async () => {
+  const { env, ownerKeys, organizationKey } = await fixture();
+  const ownerWrapped = await wrapFor(ownerKeys.publicKey, organizationKey);
+  const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
+    name: 'Acme',
+    billingEmail: 'billing@example.test',
+    collectionName: 'Default',
+    key: ownerWrapped.wrapped,
+    keys: { publicKey: ownerKeys.publicKeyB64, encryptedPrivateKey: '2.a|b|c' },
+  });
+  const answers = [
+    (await created!.json()) as Record<string, unknown>,
+    ((await (await call(env, 'https://vault.example.test/api/sync', 'GET', OWNER))!.json()) as { profile: { organizations: Record<string, unknown>[] } }).profile.organizations[0],
+    ((await (await call(env, 'https://vault.example.test/api/organizations', 'GET', OWNER))!.json()) as { data: Record<string, unknown>[] }).data[0],
+  ];
+  // The Android app drops the whole sync when one of these is missing.
+  for (const organization of answers) {
+    assert.equal(organization.object, 'profileOrganization');
+    assert.equal(organization.keyConnectorEnabled, false);
+    assert.equal(organization.selfHost, true);
+    const permissions = organization.permissions as Record<string, unknown>;
+    assert.equal(typeof permissions, 'object');
+    assert.ok(Object.values(permissions).length >= 12 && Object.values(permissions).every((value) => value === false));
+  }
+});
