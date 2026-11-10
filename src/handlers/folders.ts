@@ -234,6 +234,27 @@ export async function handleBulkDeleteFolders(request: Request, env: Env, userId
     return errorResponse('Folder ids are required', 400);
   }
 
+  return deleteFolders(request, env, storage, userId, ids);
+}
+
+// DELETE /api/folders/all — the official web vault calls it when the vault is
+// purged.
+export async function handleDeleteAllFolders(request: Request, env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const ids = (await storage.getAllFolders(userId)).map((folder) => folder.id);
+  if (!ids.length) return new Response(null, { status: 204 });
+  return deleteFolders(request, env, storage, userId, ids);
+}
+
+// Deletes the account's folders among ids, removes their tags from every
+// item, and tells the other devices.
+async function deleteFolders(
+  request: Request,
+  env: Env,
+  storage: StorageService,
+  userId: string,
+  ids: string[]
+): Promise<Response> {
   const folders = (
     await Promise.all(ids.map(async (id) => {
       const folder = await storage.getFolderForUser(id, userId);

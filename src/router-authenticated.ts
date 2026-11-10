@@ -3,7 +3,7 @@ import { errorResponse, unsupportedResponse } from './utils/response';
 import { handleGetGeneratorSettings, handleUpdateGeneratorSettings } from './handlers/generator-settings';
 import { handleCollectEvents, handleListNotifications, handleNotificationNotFound } from './handlers/client-notifications';
 import { handleSsoLinkStart, handleSsoStatus, handleSsoUnlink } from './handlers/identity';
-import { handleGetEmailBreaches } from './handlers/email-breach';
+import { handleGetEmailBreaches, handleGetHibpBreach } from './handlers/email-breach';
 import { handleGetUserPolicies, handleGetOrganizationPolicies, handleSetOrganizationPolicy } from './handlers/policies';
 import {
   handleGetProfile,
@@ -44,6 +44,7 @@ import {
   handleDeleteCipherCompat,
   handleSetCipherCollections,
   handleShareCipher,
+  handleBulkShareCiphers,
   handlePermanentDeleteCipher,
   handleRestoreCipher,
   handleBulkArchiveCiphers,
@@ -91,6 +92,7 @@ import {
   handleUpdateFolder,
   handleDeleteFolder,
   handleBulkDeleteFolders,
+  handleDeleteAllFolders,
 } from './handlers/folders';
 import {
     handleGetSends,
@@ -163,6 +165,7 @@ import {
 
 const TWO_FACTOR_TYPE_AUTHENTICATOR = 0;
 const TWO_FACTOR_TYPE_YUBIKEY = 3;
+const TWO_FACTOR_TYPE_WEBAUTHN = 7;
 
 export async function handleAuthenticatedRoute(
   request: Request,
@@ -328,6 +331,20 @@ export async function handleAuthenticatedRoute(
     // turn the authenticator off instead of the YubiKey.
     if (method === 'DELETE') return handleDisableTwoFactorProvider(request, env, userId, TWO_FACTOR_TYPE_YUBIKEY);
     return errorResponse('Method not allowed', 405);
+  }
+
+  // Every WebAuthn key at once, behind the same check as turning WebAuthn off.
+  if (path === '/api/two-factor/webauthn/all' && method === 'DELETE') {
+    return handleDisableTwoFactorProvider(request, env, userId, TWO_FACTOR_TYPE_WEBAUTHN);
+  }
+
+  // Duo needs a Duo account and Duo's API at every login; NodeWarden offers
+  // an authenticator app, YubiKey and WebAuthn instead.
+  if (
+    (path === '/api/two-factor/get-duo' && method === 'POST') ||
+    (path === '/api/two-factor/duo' && (method === 'PUT' || method === 'POST' || method === 'DELETE'))
+  ) {
+    return unsupportedResponse('Duo two-step login is not supported by this server.');
   }
 
   if (path === '/api/two-factor/webauthn') {
@@ -527,6 +544,10 @@ export async function handleAuthenticatedRoute(
     return handleBulkMoveCiphers(request, env, userId);
   }
 
+  if (path === '/api/ciphers/share' && (method === 'PUT' || method === 'POST')) {
+    return handleBulkShareCiphers(request, env, userId);
+  }
+
   const cipherMatch = path.match(/^\/api\/ciphers\/([a-f0-9-]+)(\/.*)?$/i);
   if (cipherMatch) {
     const cipherId = cipherMatch[1];
@@ -586,7 +607,12 @@ export async function handleAuthenticatedRoute(
   if (path === '/api/folders') {
     if (method === 'GET') return handleGetFolders(request, env, userId);
     if (method === 'POST') return handleCreateFolder(request, env, userId);
+    if (method === 'DELETE') return handleBulkDeleteFolders(request, env, userId);
     return null;
+  }
+
+  if (path === '/api/folders/all' && method === 'DELETE') {
+    return handleDeleteAllFolders(request, env, userId);
   }
 
   if (path === '/api/folders/delete' && method === 'POST') {
@@ -833,6 +859,10 @@ export async function handleAuthenticatedRoute(
     if (method === 'GET') return handleSsoStatus(env, userId);
     if (method === 'DELETE') return handleSsoUnlink(request, env, userId);
     return null;
+  }
+
+  if (path === '/api/hibp/breach' && method === 'GET') {
+    return handleGetHibpBreach(request, env, userId);
   }
 
   if (path === '/api/security/email-breaches' && method === 'GET') {

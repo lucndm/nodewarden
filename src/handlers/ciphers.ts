@@ -1557,6 +1557,52 @@ export async function handleShareCipher(request: Request, env: Env, userId: stri
   );
 }
 
+// PUT /api/ciphers/share
+//
+// The official clients move several items into an organization at once, each
+// re-encrypted with the organization key: `{ ciphers: [...], collectionIds }`.
+// Every item goes through the same checks as a single share. The request is
+// checked as a whole first, so a malformed one changes nothing; as upstream,
+// an item that fails later stops the run.
+export async function handleBulkShareCiphers(request: Request, env: Env, userId: string): Promise<Response> {
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+  const ciphers = readCipherProp<any[] | null>(body, ['ciphers', 'Ciphers']).value;
+  const collectionIds = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']).value;
+  if (!Array.isArray(ciphers) || !ciphers.length) {
+    return errorResponse('You must select at least one cipher.', 400);
+  }
+  if (!Array.isArray(collectionIds) || !collectionIds.length) {
+    return errorResponse('You must select at least one collection.', 400);
+  }
+  for (const cipher of ciphers) {
+    if (!normalizeOptionalId(readCipherProp<string | null>(cipher, ['id', 'Id']).value)) {
+      return errorResponse('Request missing ids field', 400);
+    }
+    if (!normalizeOptionalId(readCipherProp<string | null>(cipher, ['organizationId', 'OrganizationId']).value)) {
+      return errorResponse('Cipher OrganizationId is required.', 400);
+    }
+  }
+
+  const shared: unknown[] = [];
+  for (const cipher of ciphers) {
+    const id = normalizeOptionalId(readCipherProp<string | null>(cipher, ['id', 'Id']).value) as string;
+    const single = new Request(request.url, {
+      method: 'PUT',
+      headers: request.headers,
+      body: JSON.stringify({ cipher, collectionIds }),
+    });
+    const response = await handleShareCipher(single, env, userId, id);
+    if (!response.ok) return response;
+    shared.push(await response.json());
+  }
+  return jsonResponse({ data: shared, object: 'list', continuationToken: null });
+}
+
 // PUT /api/ciphers/:id/collections_v2
 //
 // The newer clients assign the collections of an organization item here,

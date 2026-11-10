@@ -1,6 +1,6 @@
 # Vault, Send, two-step login and device endpoints: current state
 
-Status: state recorded, no implementation planned in this phase.
+Status: the routes recorded here answer since 2026-11-10; Duo is refused with 501 by decision.
 
 ## Outcome
 
@@ -40,7 +40,7 @@ Create, read, details, change, the stale-copy refusal (400 when
 move, archive and unarchive, trash and restore (one and bulk), attachment
 upload v2, import, and delete (one and bulk) all work as the clients expect.
 
-- [ ] `PUT /ciphers/share`: moving several items into an organization at once has no route; NodeWarden has `PUT /ciphers/:id/share` for one item.
+- [x] `PUT /ciphers/share` (2026-11-10): each item goes through the single share; a malformed request changes nothing; answers a list of the shared items.
 - Not recorded here, for group 1b: the `admin` variants and `organization-details`.
 - Not recorded: `POST /ciphers/bulk-collections`, `POST /ciphers/import-organization`, attachment `renew` and attachment `share`, all without a route.
 
@@ -49,7 +49,7 @@ upload v2, import, and delete (one and bulk) all work as the clients expect.
 Config, folder create, read, rename and delete, sync with and without
 domains, equivalent domains and the collection list work as expected.
 
-- [ ] `DELETE /folders` (bulk, body `{ ids }`) and `DELETE /folders/all` (used when the web vault purges the vault) have no route.
+- [x] `DELETE /folders` (bulk, body `{ ids }`) and `DELETE /folders/all` (2026-11-10): the same delete as `POST /folders/delete`, tags removed from the items.
 
 ### Sends (`42-vault-sends`)
 
@@ -67,8 +67,8 @@ work. Email two-step login answers 501 on purpose (no email delivery).
 - [ ] `POST /two-factor/get-authenticator` answers flat (`{ Enabled, Key, UserVerificationToken }`). Current clients read `Authenticator` nested (`TwoFactorAuthenticatorResponse`), so the official web vault finds no key to show.
 - [ ] `POST /two-factor/get-yubikey` and `/get-webauthn` answer flat and without `UserVerificationToken`; clients read `YubiKey` and `WebAuthn` nested and send the token back on every change.
 - [ ] `POST /two-factor/get-webauthn-challenge` needs that token, so it fails after `get-webauthn`.
-- [ ] `DELETE /two-factor/webauthn/all` has no route.
-- [ ] Duo (`get-duo`, `PUT`/`DELETE /two-factor/duo`) has no route; vaultwarden supports it.
+- [x] `DELETE /two-factor/webauthn/all` (2026-11-10): the same check and removal as turning WebAuthn off.
+- [x] Duo (`get-duo`, `PUT`/`DELETE /two-factor/duo`): 501 (decided 2026-11-10); vaultwarden supports it.
 
 No request turns a provider on: that needs a real code and belongs in a
 browser test.
@@ -82,9 +82,4 @@ code refused), the admin approval request route, login passkey list,
 creation options, unknown passkey delete, and device removal work.
 
 - `POST /webauthn/assertion-options` answers 404 "No account passkeys registered" when the account has none; the web vault asks only for a passkey it lists, so this is recorded as expected.
-- [ ] `GET /hibp/breach` has no route; NodeWarden's web vault uses its own `GET /api/security/email-breaches`.
-
-## Open questions
-
-- Two-step login answers in the older flat shape. Is the official web vault a target for two-step setup, or only NodeWarden's own web vault?
-- Should the bulk endpoints (`PUT /ciphers/share`, `DELETE /folders`, `DELETE /folders/all`) join the scope of the personal vault?
+- [x] `GET /hibp/breach` (2026-11-10): the same check and cache as `GET /api/security/email-breaches`, the account's own address only (decided); another address gets 400, a provider failure 503.

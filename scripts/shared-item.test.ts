@@ -1160,3 +1160,49 @@ test('an item encrypted for another account is refused', async () => {
   const ciphers = (await listed.json()) as { data: unknown[] };
   assert.equal(ciphers.data.length, 0, 'nothing was stored');
 });
+
+test('several personal items are shared into a collection at once', async () => {
+  const { env, storage } = await fixture();
+  const bulk = (userId: string, body: unknown) =>
+    call(env, 'https://vault.example.test/api/ciphers/share', 'PUT', userId, body);
+  const ids: string[] = [];
+  for (const name of ['First login', 'Second login']) {
+    const created = await call(env, 'https://vault.example.test/api/ciphers', 'POST', WRITER, {
+      type: 1,
+      name: ENC(name),
+      login: { username: ENC('me'), password: ENC('pw') },
+    });
+    ids.push(((await created.json()) as { id: string }).id);
+  }
+  const ciphers = ids.map((id) => ({
+    id,
+    type: 1,
+    name: ENC('Shared now'),
+    login: { username: ENC('me') },
+    organizationId: ORG,
+    key: ENC('org-item-key'),
+  }));
+
+  // A malformed request changes nothing.
+  assert.equal((await bulk(WRITER, { ciphers: [], collectionIds: [COL_SHARED] })).status, 400);
+  assert.equal((await bulk(WRITER, { ciphers, collectionIds: [] })).status, 400);
+  assert.equal(
+    (await bulk(WRITER, { ciphers: ciphers.map(({ organizationId: _org, ...rest }) => rest), collectionIds: [COL_SHARED] })).status,
+    400
+  );
+  // The reader may not write the collection, and may not share the writer's items.
+  assert.equal((await bulk(READER, { ciphers, collectionIds: [COL_SHARED] })).status, 404);
+  for (const id of ids) {
+    assert.equal((await storage.getCipherForUser(id, WRITER))?.organizationId ?? null, null);
+  }
+
+  const shared = await bulk(WRITER, { ciphers, collectionIds: [COL_SHARED] });
+  assert.equal(shared.status, 200, await shared.clone().text());
+  const body = (await shared.json()) as { object: string; data: Array<{ id: string; organizationId: string }> };
+  assert.equal(body.object, 'list');
+  assert.deepEqual(body.data.map((row) => row.id).sort(), [...ids].sort());
+  for (const id of ids) {
+    const stored = await storage.getCipherForUser(id, WRITER);
+    assert.equal(stored?.organizationId, ORG);
+  }
+});
