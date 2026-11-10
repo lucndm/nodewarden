@@ -27,11 +27,13 @@ docs {
   (`TwoFactorDuoUpdateRequest`: clientId, clientSecret, host,
   userVerificationToken) and `DELETE /two-factor/duo` complete it.
 
-  Duo needs a Duo account and its API. vaultwarden supports it.
+  Duo needs a Duo account and its API. vaultwarden supports it; NodeWarden
+  answers 501 (decided 2026-11-10) and offers an authenticator app, YubiKey and
+  WebAuthn instead.
 }
 
 tests {
-  test("NodeWarden has a route for it", function () {
-    expect([404, 501]).to.not.include(res.status);
+  test("Duo is refused as not supported", function () {
+    expect(res.status).to.equal(501);
   });
 }

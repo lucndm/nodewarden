@@ -20,7 +20,9 @@ docs {
   calls it.
 
   NodeWarden has a breach lookup of its own, `GET /api/security/email-breaches`,
-  for its web vault.
+  for its web vault, and answers this one from the same check and cache. Only
+  the account's own address is checked (decided 2026-11-10); another address
+  gets 400. Without network access to the breach provider the answer is 503.
 }
 
 tests {
