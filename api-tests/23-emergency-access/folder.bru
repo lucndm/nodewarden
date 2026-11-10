@@ -12,11 +12,13 @@ docs {
   Here the owner is the grantor and the member is the grantee. Each step needs
   the one before it; a failed step leaves the rest without the state they need.
 
-  NodeWarden has its own emergency access (merged after this record began):
-  the grantor wraps their user key for the grantee at invite time
-  (`encryptedUserKey`), where the official client sends it later with
-  `confirm`. So the official invite is refused, and a request in NodeWarden's
-  shape creates the grant the later steps need.
+  NodeWarden takes both invite shapes: the official one, where the key comes
+  later with `confirm`, and its own, where the grantor wraps the key at invite
+  time (`encryptedUserKey`). `03` sends NodeWarden's shape only when the
+  official invite in `01` failed.
+
+  NodeWarden sends no email, so an invitation is accepted by the account it
+  is addressed to; the token the official client sends is not checked.
 
   Reference: vaultwarden `src/api/core/emergency_access.rs`.
 }

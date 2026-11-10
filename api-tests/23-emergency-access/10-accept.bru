@@ -1,0 +1,38 @@
+meta {
+  name: POST :id/accept
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/accept
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{memberToken}}
+}
+
+body:json {
+  {
+    "token": "token-from-the-invitation-link"
+  }
+}
+
+docs {
+  Client: `postEmergencyAccessAccept`, body `EmergencyAccessAcceptRequest`
+  (`token`, from the invitation email).
+  NodeWarden sends no email and so issues no token; it does not check the one
+  that comes along. What guards the grant is that it has to be addressed to
+  the caller's account, which is what the token proves in vaultwarden
+  (`claims.email == headers.user.email`). The web vault accepts with `PUT`
+  and no body.
+}
+
+tests {
+  test("the grantee accepts the invitation addressed to them", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.status).to.equal(1);
+  });
+}

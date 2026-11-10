@@ -193,12 +193,12 @@ export async function handleInviteEmergencyAccess(
   if (!isValidEmergencyWaitDays(waitTimeDays)) {
     return errorResponse('Wait time must be between 1 and 90 days.', 400);
   }
-  // A takeover lets the grantee replace the master password of the grantor.
-  // The vault key stays the same, so no item is encrypted again; what changes
-  // is the password that opens it. The wait and the approval still stand
-  // between the grant and the takeover.
-  if (type !== 0 && type !== 1) {
-    return errorResponse('Type must be 0 (view) or 1 (takeover).', 400);
+
+  // Naming yourself would let the account reach its own vault after a wait
+  // nobody else stands behind.
+  const grantor = await getUserById(env.DB, userId);
+  if (grantor && grantor.email.toLowerCase() === email) {
+    return errorResponse('You can not set yourself as an emergency contact.', 400);
   }
 
   const grantee = await getUser(env.DB, email);
@@ -281,7 +281,14 @@ export async function handleAcceptEmergencyAccess(
   return jsonResponse({ id, status: EMERGENCY_ACCESS_STATUS_ACCEPTED, object: 'emergencyAccess' });
 }
 
-/** PUT /api/emergency-access/:id/reject — the grantee declines. */
+/**
+ * PUT /api/emergency-access/:id/reject
+ *
+ * Two callers use it. The grantor turns down a recovery the grantee started:
+ * the grant goes back to confirmed and the wait is reset, as the official
+ * client expects. The grantee declines an invitation they have not answered
+ * yet: the grant is gone, as the web vault expects.
+ */
 export async function handleRejectEmergencyAccess(
   request: Request,
   env: Env,
@@ -292,6 +299,26 @@ export async function handleRejectEmergencyAccess(
   const row = await getEmergencyAccess(env.DB, id);
   if (!row) {
     return errorResponse('Emergency access not valid.', 404);
+  }
+  if (row.grantorId === userId) {
+    if (
+      row.status !== EMERGENCY_ACCESS_STATUS_RECOVERY_INITIATED &&
+      row.status !== EMERGENCY_ACCESS_STATUS_RECOVERY_APPROVED
+    ) {
+      return errorResponse('Emergency access not valid.', 404);
+    }
+    await updateEmergencyAccess(env.DB, id, {
+      status: EMERGENCY_ACCESS_STATUS_CONFIRMED,
+      recoveryInitiatedAt: null,
+      updatedAt: nowIso(),
+    });
+    return jsonResponse({
+      id,
+      status: EMERGENCY_ACCESS_STATUS_CONFIRMED,
+      type: row.type,
+      waitTimeDays: row.waitTimeDays,
+      object: 'emergencyAccess',
+    });
   }
   const user = await getUserById(env.DB, userId);
   const addressedToUser = row.granteeId === userId;
