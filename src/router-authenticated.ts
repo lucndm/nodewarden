@@ -1,6 +1,7 @@
 import type { Env, User } from './types';
 import { errorResponse, unsupportedResponse } from './utils/response';
 import { handleGetGeneratorSettings, handleUpdateGeneratorSettings } from './handlers/generator-settings';
+import { handleCollectEvents, handleListNotifications, handleNotificationNotFound } from './handlers/client-notifications';
 import { handleSsoLinkStart, handleSsoStatus, handleSsoUnlink } from './handlers/identity';
 import { handleGetEmailBreaches } from './handlers/email-breach';
 import { handleGetUserPolicies, handleGetOrganizationPolicies, handleSetOrganizationPolicy } from './handlers/policies';
@@ -200,6 +201,19 @@ export async function handleAuthenticatedRoute(
     (/^\/api\/accounts\/sso\/[^/]+$/i.test(path) && method === 'DELETE')
   ) {
     return unsupportedResponse('Organization SSO is not supported by this server; manage SSO under Settings.');
+  }
+
+  if (path === '/api/notifications' && method === 'GET') {
+    return handleListNotifications();
+  }
+  if (
+    (/^\/api\/notifications\/[^/]+\/read$/i.test(path) && method === 'PATCH') ||
+    (/^\/api\/notifications\/[^/]+\/delete$/i.test(path) && method === 'DELETE')
+  ) {
+    return handleNotificationNotFound();
+  }
+  if (path === '/events/collect' && method === 'POST') {
+    return handleCollectEvents();
   }
 
   // Deleting the account is refused on every path, the official one included.
