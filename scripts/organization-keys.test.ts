@@ -420,3 +420,38 @@ test('only the owner confirms an admin, and the confirmed member is told to sync
   const stillAccepted = await storage.getOrganizationUserForUser(organization.id, OUTSIDER);
   assert.equal(stillAccepted?.status, 1, 'the refused confirm changes nothing');
 });
+
+test('the official clients accept with the membership in the path, and only their own', async () => {
+  const { env, ownerKeys, organizationKey } = await fixture();
+  const ownerWrapped = await wrapFor(ownerKeys.publicKey, organizationKey);
+  const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
+    name: 'Acme',
+    billingEmail: 'billing@example.test',
+    collectionName: 'Default',
+    key: ownerWrapped.wrapped,
+    keys: { publicKey: ownerKeys.publicKeyB64, encryptedPrivateKey: '2.a|b|c' },
+  });
+  const organization = (await created!.json()) as { id: string };
+  await call(env, `https://vault.example.test/api/organizations/${organization.id}/users`, 'POST', OWNER, {
+    emails: ['member@example.test'],
+    type: 2,
+  });
+  const storage = new StorageService(env.DB);
+  const membership = await storage.getOrganizationUserForUser(organization.id, MEMBER);
+  assert.ok(membership);
+  const acceptUrl = `https://vault.example.test/api/organizations/${organization.id}/users/${membership.id}/accept`;
+
+  // The owner holds a membership of their own, not this one.
+  const notTheirs = await call(env, acceptUrl, 'POST', OWNER, { token: 'any-token' });
+  assert.equal(notTheirs?.status, 404);
+  // An account with no membership in the organization at all.
+  const outsider = await call(env, acceptUrl, 'POST', OUTSIDER, { token: 'any-token' });
+  assert.equal(outsider?.status, 404);
+  assert.equal((await storage.getOrganizationUserForUser(organization.id, MEMBER))?.status, 0);
+
+  // NodeWarden sends no email and issues no token, so the one that comes
+  // along is not checked; the membership has to be the caller's.
+  const accepted = await call(env, acceptUrl, 'POST', MEMBER, { token: 'token-from-the-invitation-link' });
+  assert.equal(accepted?.status, 200);
+  assert.equal((await storage.getOrganizationUserForUser(organization.id, MEMBER))?.status, 1);
+});

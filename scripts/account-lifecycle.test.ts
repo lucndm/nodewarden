@@ -158,3 +158,25 @@ test('deleting the account by an emailed link answers 501 without a login', asyn
     assert.equal(response.status, 501, path);
   }
 });
+
+test('the profile changes only what the body carries', async () => {
+  const { env, storage } = await fixture();
+  await storage.saveUser({ ...(await currentUser(storage)), masterPasswordHint: 'the old hint' });
+
+  // The official clients send the name alone; the hint stays.
+  const renamed = await call(env, storage, '/api/accounts/profile', 'PUT', { name: '  New Name  ' });
+  assert.equal(renamed.status, 200, JSON.stringify(renamed.body));
+  assert.equal(renamed.body.name, 'New Name');
+  assert.equal((await currentUser(storage)).masterPasswordHint, 'the old hint');
+
+  // NodeWarden's web vault sends the hint alone; the name stays.
+  const hinted = await call(env, storage, '/api/accounts/profile', 'PUT', { masterPasswordHint: 'a new hint' });
+  assert.equal(hinted.status, 200);
+  const user = await currentUser(storage);
+  assert.equal(user.name, 'New Name');
+  assert.equal(user.masterPasswordHint, 'a new hint');
+
+  const tooLong = await call(env, storage, '/api/accounts/profile', 'PUT', { name: 'x'.repeat(51) });
+  assert.equal(tooLong.status, 400);
+  assert.equal((await currentUser(storage)).name, 'New Name');
+});

@@ -376,6 +376,7 @@ export async function handleUpdateProfile(request: Request, env: Env, userId: st
   if (!user) return errorResponse('User not found', 404);
 
   let body: {
+    name?: unknown;
     masterPasswordHint?: string | null;
   };
   try {
@@ -384,12 +385,29 @@ export async function handleUpdateProfile(request: Request, env: Env, userId: st
     return errorResponse('Invalid JSON', 400);
   }
 
-  const masterPasswordHint = normalizeMasterPasswordHint(body.masterPasswordHint);
-  if (masterPasswordHint && masterPasswordHint.length > 120) {
-    return errorResponse('masterPasswordHint must be 120 characters or fewer', 400);
+  // Only what the body carries changes: the official clients send the name
+  // alone, NodeWarden's web vault the hint alone, and neither clears the other.
+  const updatesName = Object.prototype.hasOwnProperty.call(body, 'name');
+  const updatesHint = Object.prototype.hasOwnProperty.call(body, 'masterPasswordHint');
+  if (updatesName) {
+    if (body.name !== null && typeof body.name !== 'string') {
+      return errorResponse('The field Name must be a string.', 400);
+    }
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    // The same limit as upstream: a long name ends up in every access token.
+    if (name.length > 50) {
+      return errorResponse('The field Name must be a string with a maximum length of 50.', 400);
+    }
+    user.name = name || null;
+  }
+  if (updatesHint) {
+    const masterPasswordHint = normalizeMasterPasswordHint(body.masterPasswordHint);
+    if (masterPasswordHint && masterPasswordHint.length > 120) {
+      return errorResponse('masterPasswordHint must be 120 characters or fewer', 400);
+    }
+    user.masterPasswordHint = masterPasswordHint;
   }
 
-  user.masterPasswordHint = masterPasswordHint;
   user.updatedAt = new Date().toISOString();
   await storage.saveUser(user);
   await writeAuditEvent(storage, {
@@ -400,7 +418,8 @@ export async function handleUpdateProfile(request: Request, env: Env, userId: st
     targetType: 'user',
     targetId: user.id,
     metadata: {
-      updatedMasterPasswordHint: true,
+      updatedName: updatesName,
+      updatedMasterPasswordHint: updatesHint,
       ...auditRequestMetadata(request),
     },
   });

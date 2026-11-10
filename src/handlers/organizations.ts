@@ -283,19 +283,29 @@ export async function handleGetMemberPublicKeys(
 }
 
 // POST /api/organizations/:orgId/accept
+// POST /api/organizations/:orgId/users/:membershipId/accept (official clients)
 //
 // The invited member accepts the invitation. Accepting does not hand over the
 // organization key: that is wrapped with the member's own RSA key, so the
 // owner still has to do it. What accepting says is that the member wants in.
+//
+// The official clients send the token from the invitation email. NodeWarden
+// sends no email and issues no token, so the token is not checked: what
+// guards the membership is that it belongs to the caller, which is what the
+// token proves upstream.
 export async function handleAcceptOrganization(
   request: Request,
   env: Env,
   userId: string,
-  orgId: string
+  orgId: string,
+  membershipId?: string
 ): Promise<Response> {
   const storage = new StorageService(env.DB);
   const membership = await storage.getOrganizationUserForUser(orgId, userId);
   if (!membership) return errorResponse('Organization not found', 404);
+  if (membershipId !== undefined && membership.id !== membershipId) {
+    return errorResponse('Invitation not found', 404);
+  }
   if (membership.status === STATUS_CONFIRMED) {
     return errorResponse('This membership is already confirmed', 400);
   }
