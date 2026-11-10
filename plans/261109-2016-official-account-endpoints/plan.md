@@ -23,7 +23,7 @@ folder match the folders run one by one.
 
 | Folder | Requests | Passing | Failing |
 |---|---|---|---|
-| `20-account-profile` | 14 | 13 | 1 |
+| `20-account-profile` | 14 | 13 | 1; 14/14 on 2026-11-10 |
 | `21-account-lifecycle` | 16 | 8 | 8; 16/16 on 2026-11-10 |
 | `22-account-email-flows` | 13 | 10 | 3; 13/13 on 2026-11-10 |
 | `23-emergency-access` | 18 | 0 | 17 (1 skipped); 18 pass, 1 skipped on 2026-11-10 |
@@ -56,7 +56,7 @@ Paths are the official ones, under `/api` unless marked identity.
   - `:id/reject` serves two callers: the grantor turns a recovery down (back to confirmed, the wait reset), and the grantee declines an invitation (the grant is gone).
   - A refused step answers 404 where vaultwarden answers 400; the client treats both as an error.
 
-- [ ] `PUT /accounts/profile`: the handler reads only `masterPasswordHint`. The name is ignored, and the official body (`name` only) clears the master password hint.
+- [x] `PUT /accounts/profile` (2026-11-10): reads `name` (at most 50 characters, as upstream) and `masterPasswordHint`, and changes only what the body carries.
 
 ### No route (404)
 

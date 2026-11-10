@@ -1,6 +1,6 @@
 # Organization endpoints for members on the official paths
 
-Status: the member routes are in place — GET and POST `/api/organizations/:orgId/keys`, POST `/api/organizations/:orgId/leave`. `01`, `02`, `03`, `04` and `07` to `11` pass; the accept token (`05`, `06`) is still open.
+Status: done on 2026-11-10; all 11 requests of `10-organization-member` pass. The accept token is not checked (decided 2026-11-10, as for emergency access): NodeWarden sends no email and issues none, and the membership in the path has to be the caller's.
 
 ## Outcome
 
@@ -43,12 +43,11 @@ Run on 2026-11-09: setup 13/13 passing; the 10 contract requests fail with
 ### POST `/api/organizations/:orgId/users/:membershipId/accept`
 
 - [x] Contract: body `OrganizationUserAcceptRequest` (`token` required, `resetPasswordKey` only under account recovery auto-enrollment); no response body read. The client gets `organizationId`, `organizationUserId`, `email` and `token` from the invite link.
-- [x] Bruno: a forged token is refused with 400 (`05`).
-- [x] Bruno: the success path (`06`) is written and skipped until a token can be supplied with `--env-var inviteToken=...`.
-- [ ] Decide how NodeWarden issues the invite token and the link, since it sends no email (see open questions).
-- [ ] Have `00-setup` capture the token from the invite response, so `06` runs by default.
-- [ ] Route and handler: verify the token's signature, expiry, email, organization and membership, then move the membership to accepted, as the NodeWarden route `/organizations/:orgId/accept` already does.
-- [ ] `05` and `06` pass.
+- [x] Bruno: an account the invitation was not sent to is refused with 404 (`05`).
+- [x] Bruno: the invitee accepts with a token from the link (`06`), run by default.
+- [x] Decided: no token is issued or checked; the membership has to be the caller's.
+- [x] Route: `POST /organizations/:orgId/users/:membershipId/accept` runs the same accept as `/organizations/:orgId/accept`, for the caller's own membership only.
+- [x] `05` and `06` pass.
 
 ### POST `/api/organizations/:orgId/leave`
 
@@ -69,7 +68,6 @@ Run on 2026-11-09: setup 13/13 passing; the 10 contract requests fail with
 
 ## Open questions
 
-- Invite token: sign one at invite time and return a Bitwarden-format invite link for the admin to pass on, as vaultwarden signs its claims, or something else? The contract only fixes that a forged token fails and a valid one succeeds.
 - Error status for an account that is not allowed to see the organization: the contract follows NodeWarden's existing 404; vaultwarden answers 400. The official server was not checked.
 
 ## References

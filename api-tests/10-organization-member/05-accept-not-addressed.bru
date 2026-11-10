@@ -1,5 +1,5 @@
 meta {
-  name: Accept an invitation with a forged token
+  name: POST users/:id/accept by an account it was not sent to
   type: http
   seq: 5
 }
@@ -11,7 +11,7 @@ post {
 }
 
 auth:bearer {
-  token: {{inviteeToken}}
+  token: {{memberToken}}
 }
 
 body:json {
@@ -33,12 +33,14 @@ docs {
 
   Reference: vaultwarden `accept_invite` decodes the token as a signed claim
   and refuses when its email, organization or membership does not match.
-  How NodeWarden issues the token is still open; a forged one must fail
-  whatever the answer is.
+  NodeWarden sends no email and issues no token, so the token is not checked
+  (decided 2026-11-10, as for emergency access): the membership in the path
+  has to be the caller's. Here the member, who holds another membership of the
+  organization, tries the invitee's.
 }
 
 tests {
-  test("a forged invite token is refused", function () {
-    expect(res.status).to.equal(400);
+  test("only the invitee can accept the invitation", function () {
+    expect(res.status).to.equal(404);
   });
 }

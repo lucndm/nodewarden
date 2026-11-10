@@ -751,6 +751,16 @@ export async function handleAuthenticatedRoute(
       return handleUnsupportedOrganizationAction();
     }
 
+    // POST /api/organizations/:orgId/users/:membershipId/accept — the official
+    // clients' accept, with the membership in the path.
+    const memberAcceptMatch = path.match(/^\/api\/organizations\/([^/]+)\/users\/([^/]+)\/accept$/i);
+    if (memberAcceptMatch) {
+      if (method === 'POST') {
+        return handleAcceptOrganization(request, env, userId, memberAcceptMatch[1], memberAcceptMatch[2]);
+      }
+      return handleUnsupportedOrganizationAction();
+    }
+
     // POST /api/organizations/:orgId/users/:membershipId/confirm — store the
     // organization key wrapped for that member and confirm the membership.
     const confirmMatch = path.match(/^\/api\/organizations\/([^/]+)\/users\/([^/]+)\/confirm$/i);

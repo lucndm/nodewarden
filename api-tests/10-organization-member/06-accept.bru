@@ -1,0 +1,32 @@
+meta {
+  name: POST users/:id/accept
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/{{orgId}}/users/{{inviteeMembershipId}}/accept
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{inviteeToken}}
+}
+
+body:json {
+  {
+    "token": "token-from-the-invite-link"
+  }
+}
+
+docs {
+  The success path of the same contract: the invitee accepts with the token
+  from the invite link, which NodeWarden does not check.
+}
+
+tests {
+  test("the invitee accepts with the token from the invite link", function () {
+    expect(res.status).to.equal(200);
+  });
+}
