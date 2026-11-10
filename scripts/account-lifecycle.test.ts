@@ -7,7 +7,9 @@
 //     writes of the account; a color in another form is refused;
 //   - a new security stamp needs the master password, and replaces the stamp
 //     every access token carries;
-//   - key rotation, organization SSO and deleting the account answer 501.
+//   - key rotation, organization SSO and deleting the account answer 501;
+//   - so do the mail-backed account routes: changing the email, and deleting
+//     the account by an emailed link, which is sent without a login.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
@@ -16,6 +18,7 @@ import { installTestGlobals } from './test-env';
 installTestGlobals();
 
 import { handleAuthenticatedRoute } from '../src/router-authenticated';
+import { handlePublicRoute } from '../src/router-public';
 import { AuthService } from '../src/services/auth';
 import { StorageService } from '../src/services/storage';
 import { ensureStorageSchema } from '../src/services/storage-schema';
@@ -128,15 +131,30 @@ test('a new security stamp needs the master password', async () => {
   assert.notEqual(stamp, 'stamp', 'the stamp every access token carries is replaced');
 });
 
-test('key rotation, organization SSO and deleting the account answer 501', async () => {
+test('key rotation, organization SSO, deleting the account and changing the email answer 501', async () => {
   const { env, storage } = await fixture();
   for (const [path, method] of [
     ['/api/accounts/key-management/rotate-user-account-keys', 'POST'],
     ['/api/accounts/sso/user-identifier', 'GET'],
     ['/api/accounts/sso/00000000-0000-4000-8000-000000000001', 'DELETE'],
     ['/api/accounts', 'DELETE'],
+    ['/api/accounts/email', 'POST'],
   ]) {
     const answer = await call(env, storage, path, method, method === 'GET' ? undefined : {});
     assert.equal(answer.status, 501, `${method} ${path}`);
+  }
+});
+
+test('deleting the account by an emailed link answers 501 without a login', async () => {
+  const { env } = await fixture();
+  for (const path of ['/api/accounts/delete-recover', '/api/accounts/delete-recover-token']) {
+    const request = new Request(`https://vault.example.test${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: EMAIL }),
+    });
+    const response = await handlePublicRoute(request, env, path, 'POST', async () => null);
+    assert.ok(response, `the public router answers ${path}`);
+    assert.equal(response.status, 501, path);
   }
 });
