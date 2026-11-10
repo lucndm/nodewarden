@@ -43,6 +43,8 @@ interface SettingsPageProps {
   onLockTimeoutChange: (minutes: 0 | 1 | 5 | 15 | 30) => void;
   onSessionTimeoutActionChange: (action: 'lock' | 'logout') => void;
   authedFetch?: AuthedFetch | null;
+  /** The unlocked session: emergency access wraps and opens vault keys with it. */
+  session?: SessionState | null;
   onNotify?: (type: 'success' | 'error' | 'warning', text: string) => void;
 }
 
@@ -979,7 +981,12 @@ export default function SettingsPage(props: SettingsPageProps) {
           )}
 
           {activeSection === 'emergencyAccess' && (
-            <EmergencyAccessSettings authedFetch={props.authedFetch} />
+            <EmergencyAccessSettings
+              authedFetch={props.authedFetch}
+              session={props.session}
+              email={props.profile.email}
+              encryptedPrivateKey={props.profile.privateKey ?? null}
+            />
           )}
         </section>
       </div>

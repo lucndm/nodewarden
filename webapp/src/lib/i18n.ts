@@ -167,6 +167,10 @@ export function translateServerError(message: string | null | undefined, fallbac
 
   const key = {
     'Account is disabled': 'txt_server_error_account_disabled',
+    'You can not set yourself as an emergency contact.': 'txt_emergency_access_invite_self',
+    'Emergency access not valid.': 'txt_emergency_access_not_valid',
+    'This person already has a pending grant.': 'txt_emergency_access_already_pending',
+    'Too many emergency access grants.': 'txt_emergency_access_too_many',
     'The client copy of this cipher is out of date. Resync the client and try again.': 'txt_item_changed_elsewhere',
     'Another backup or restore run is already in progress': 'txt_backup_error_another_backup_or_restore_running',
     'Another backup run is already in progress': 'txt_backup_error_another_backup_running',

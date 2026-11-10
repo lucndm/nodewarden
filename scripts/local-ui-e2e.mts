@@ -405,6 +405,10 @@ async function seedVault(baseUrl) {
     token,
     memberEmail,
     memberToken,
+    // Emergency access hands the member's vault key to the owner, wrapped
+    // with the owner's public key, the way the member's client would.
+    memberVaultKey,
+    ownerPublicKey: publicKey,
     organizationId: organization.body.id,
     organizationName: 'UI Team',
     collectionName: 'UI Shared',
@@ -1228,6 +1232,232 @@ async function main() {
       emergencyText.includes('Nobody has let you into their vault.'),
       emergencyText.slice(-300)
     );
+
+    // The whole emergency access path in the web vault. The browser is the
+    // owner; the member's side runs through the API, the way the member's
+    // own client would call it.
+    const memberName = 'Org Member';
+    const asMember = (path, options = {}) => api(worker.baseUrl, path, { token: seeded.memberToken, ...options });
+    const asOwner = (path, options = {}) => api(worker.baseUrl, path, { token: seeded.token, ...options });
+    const wrapForOwner = async (key) => {
+      const imported = await webcrypto.subtle.importKey(
+        'spki',
+        seeded.ownerPublicKey.buffer.slice(
+          seeded.ownerPublicKey.byteOffset,
+          seeded.ownerPublicKey.byteOffset + seeded.ownerPublicKey.byteLength
+        ),
+        { name: 'RSA-OAEP', hash: 'SHA-1' },
+        false,
+        ['encrypt']
+      );
+      const blob = new Uint8Array(await webcrypto.subtle.encrypt({ name: 'RSA-OAEP' }, imported, key));
+      return `4.${bytesToBase64(blob)}`;
+    };
+    const grantStatus = async (asWhom, list, id) => {
+      const listed = await asWhom(`/api/emergency-access/${list}`);
+      return (listed.body?.data || []).find((row) => row.id === id)?.status;
+    };
+    // The page reads the grants when the tab opens, so a change made through
+    // the API shows after the tab is opened again.
+    const reopenEmergency = async () => {
+      await evaluate(`(() => {
+        const tabs = [...document.querySelectorAll('.settings-category-tab')];
+        const other = tabs.find((b) => b.textContent.trim() !== 'Emergency access');
+        if (other) other.click();
+        return true;
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await evaluate(`(() => {
+        const tab = [...document.querySelectorAll('.settings-category-tab')].find((b) => b.textContent.trim() === 'Emergency access');
+        if (!tab) return false;
+        tab.click();
+        return true;
+      })()`);
+      await waitFor(`!!document.querySelector('.emergency-access-row') || document.body.textContent.includes('Nobody has access to this vault.')`, 'the emergency access lists', 20000);
+    };
+    // Clicks a button in the row of a list: the list is found by its heading,
+    // the row by a text it shows, the button by its label.
+    const clickInRow = (heading, rowText, label) =>
+      evaluate(`(() => {
+        const section = [...document.querySelectorAll('.settings-submodule')].find((s) => s.querySelector('h4')?.textContent.trim() === ${JSON.stringify(heading)});
+        if (!section) return 'no section';
+        const rows = [...section.querySelectorAll('.emergency-access-row')].filter((r) => r.textContent.includes(${JSON.stringify(rowText)}));
+        for (const row of rows) {
+          const button = [...row.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled);
+          if (button) { button.click(); return 'clicked'; }
+        }
+        return 'no button';
+      })()`);
+    const typeInto = (selector, value) =>
+      evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(selector)});
+        if (!input) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        setter.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`);
+    const waitForStatus = async (asWhom, list, id, status, label) => {
+      for (let i = 0; i < 40; i += 1) {
+        if ((await grantStatus(asWhom, list, id)) === status) return true;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      throw new Error(`timed out waiting for ${label}`);
+    };
+
+    // The owner cannot name themselves.
+    await typeInto('.settings-submodule input[type=email]', EMAIL);
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.settings-submodule button')].find((b) => b.textContent.trim() === 'Invite');
+      if (button) button.click();
+      return true;
+    })()`);
+    await waitFor(`document.body.textContent.includes('You cannot name yourself as your emergency contact.')`, 'the refusal to invite oneself', 10000);
+    checks.ok('the owner cannot name themselves as their contact', true);
+
+    // The owner lets the member in (view), and hands over the key once the
+    // member accepted.
+    await typeInto('.settings-submodule input[type=email]', seeded.memberEmail);
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.settings-submodule button')].find((b) => b.textContent.trim() === 'Invite');
+      if (button) button.click();
+      return true;
+    })()`);
+    let ownerGrantId = '';
+    for (let i = 0; i < 40 && !ownerGrantId; i += 1) {
+      const trusted = await asOwner('/api/emergency-access/trusted');
+      ownerGrantId = (trusted.body?.data || []).find((row) => row.email === seeded.memberEmail)?.id || '';
+      if (!ownerGrantId) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    checks.ok('the owner invites the member from the page', !!ownerGrantId);
+    const memberAccepted = await asMember(`/api/emergency-access/${ownerGrantId}/accept`, { method: 'PUT' });
+    checks.equal('the member accepts', memberAccepted.status, 200, JSON.stringify(memberAccepted.body));
+    await reopenEmergency();
+    checks.equal('the owner hands over the key', await clickInRow('People you let in', memberName, 'Hand over the key'), 'clicked');
+    await waitForStatus(asOwner, 'trusted', ownerGrantId, 2, 'the grant to be confirmed');
+    checks.ok('and the grant is confirmed', true);
+
+    // The member starts the wait; the owner turns the recovery down, which
+    // keeps the grant, and approves the next one.
+    await asMember(`/api/emergency-access/${ownerGrantId}/initiate`, { method: 'POST' });
+    await reopenEmergency();
+    const waitingText = await evaluate('document.body.textContent');
+    checks.ok('the owner sees when access opens', waitingText.includes('Access opens on'), waitingText.slice(-400));
+    checks.equal('the owner turns the recovery down', await clickInRow('People you let in', memberName, 'Turn down'), 'clicked');
+    await waitForStatus(asOwner, 'trusted', ownerGrantId, 2, 'the grant to be back to confirmed');
+    checks.ok('and the grant is kept, back to confirmed', true);
+    await asMember(`/api/emergency-access/${ownerGrantId}/initiate`, { method: 'POST' });
+    await reopenEmergency();
+    checks.equal('the owner approves the next recovery', await clickInRow('People you let in', memberName, 'Approve'), 'clicked');
+    await waitForStatus(asOwner, 'trusted', ownerGrantId, 4, 'the recovery to be approved');
+    checks.ok('and the recovery is approved', true);
+
+    // The member lets the owner in, to read: the owner accepts, starts the
+    // wait and, once the member approves, reads the member's items here.
+    const memberItemKey = seeded.memberVaultKey;
+    const memberEncrypt = (value) =>
+      encryptBw(new TextEncoder().encode(value), memberItemKey.slice(0, 32), memberItemKey.slice(32, 64));
+    const memberItem = await asMember('/api/ciphers', {
+      method: 'POST',
+      body: {
+        type: 1,
+        name: await memberEncrypt('Member Login'),
+        login: { username: await memberEncrypt('member-user'), password: await memberEncrypt('member-pass') },
+      },
+    });
+    checks.equal('the member has an item of their own', memberItem.status, 200, JSON.stringify(memberItem.body));
+    const viewInvite = await asMember('/api/emergency-access/invite', {
+      method: 'POST',
+      body: { email: EMAIL, type: 0, waitTimeDays: 1 },
+    });
+    checks.equal('the member lets the owner read their vault', viewInvite.status, 200, JSON.stringify(viewInvite.body));
+    const viewGrantId = viewInvite.body?.id;
+    await reopenEmergency();
+    checks.equal('the owner accepts from the page', await clickInRow('Invitations for you', memberName, 'Accept'), 'clicked');
+    await waitForStatus(asMember, 'trusted', viewGrantId, 1, 'the view grant to be accepted');
+    const viewConfirmed = await asMember(`/api/emergency-access/${viewGrantId}/confirm`, {
+      method: 'POST',
+      body: { key: await wrapForOwner(seeded.memberVaultKey) },
+    });
+    checks.equal('the member hands over their key', viewConfirmed.status, 200, JSON.stringify(viewConfirmed.body));
+    await reopenEmergency();
+    checks.equal('the owner starts the wait for a view grant', await clickInRow('Invitations for you', memberName, 'Start the wait'), 'clicked');
+    await waitForStatus(asMember, 'trusted', viewGrantId, 3, 'the view recovery to start');
+    await asMember(`/api/emergency-access/${viewGrantId}/approve`, { method: 'POST' });
+    await reopenEmergency();
+    checks.equal('the owner opens the member vault', await clickInRow('Invitations for you', memberName, 'View vault'), 'clicked');
+    await waitFor(`!!document.querySelector('.emergency-access-view') && document.querySelector('.emergency-access-view').textContent.includes('Member Login')`, 'the member vault', 20000);
+    const viewText = await evaluate(`document.querySelector('.emergency-access-view').textContent`);
+    checks.ok('the member item is shown, read only', viewText.includes('Member Login') && viewText.includes('member-user'), viewText.slice(0, 300));
+    checks.ok('and its password stays hidden until revealed', !viewText.includes('member-pass'), viewText.slice(0, 300));
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.emergency-access-view button')].find((b) => b.textContent.trim() === 'Reveal');
+      if (button) button.click();
+      return true;
+    })()`);
+    await waitFor(`document.querySelector('.emergency-access-view').textContent.includes('member-pass')`, 'the revealed password', 10000);
+    checks.ok('and reveal shows it', true);
+
+    // The member lets the owner take over: the owner sets a new master
+    // password for the member here, and the member's vault key stays the same.
+    const takeoverInvite = await asMember('/api/emergency-access/invite', {
+      method: 'POST',
+      body: { email: EMAIL, type: 1, waitTimeDays: 1 },
+    });
+    checks.equal('the member lets the owner take over', takeoverInvite.status, 200, JSON.stringify(takeoverInvite.body));
+    const takeoverGrantId = takeoverInvite.body?.id;
+    await reopenEmergency();
+    checks.equal('the owner accepts the takeover grant', await clickInRow('Invitations for you', memberName, 'Accept'), 'clicked');
+    await waitForStatus(asMember, 'trusted', takeoverGrantId, 1, 'the takeover grant to be accepted');
+    await asMember(`/api/emergency-access/${takeoverGrantId}/confirm`, {
+      method: 'POST',
+      body: { key: await wrapForOwner(seeded.memberVaultKey) },
+    });
+    await reopenEmergency();
+    checks.equal('the owner starts the wait for the takeover', await clickInRow('Invitations for you', memberName, 'Start the wait'), 'clicked');
+    await waitForStatus(asMember, 'trusted', takeoverGrantId, 3, 'the takeover recovery to start');
+    await asMember(`/api/emergency-access/${takeoverGrantId}/approve`, { method: 'POST' });
+    await reopenEmergency();
+    checks.equal('the owner opens the takeover form', await clickInRow('Invitations for you', memberName, 'Take over'), 'clicked');
+    await waitFor(`!!document.querySelector('.emergency-access-takeover input')`, 'the takeover form', 10000);
+    const newMemberPassword = 'Taken-Over-By-Owner-2026!';
+    await typeInto('.emergency-access-takeover input[placeholder="New Password"]', newMemberPassword);
+    await typeInto('.emergency-access-takeover input[placeholder="Repeat the new password"]', newMemberPassword);
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.emergency-access-takeover button')].find((b) => b.textContent.trim() === 'Set the new password');
+      if (button) button.click();
+      return true;
+    })()`);
+    await waitFor(`document.body.textContent.includes('The new master password is set.')`, 'the takeover to finish', 60000);
+    checks.ok('the owner sets the member a new master password', true);
+
+    const newMasterKey = await pbkdf2(newMemberPassword, seeded.memberEmail, KDF_ITERATIONS, 32);
+    const newLogin = await api(worker.baseUrl, '/identity/connect/token', {
+      method: 'POST',
+      form: {
+        grant_type: 'password',
+        username: seeded.memberEmail,
+        password: bytesToBase64(await pbkdf2(newMasterKey, newMemberPassword, 1, 32)),
+        scope: 'api offline_access',
+        deviceIdentifier: 'local-ui-member-after-takeover',
+        deviceName: 'local ui member after takeover',
+        deviceType: '14',
+      },
+    });
+    checks.ok('the member signs in with the new password', !!newLogin.body?.access_token, JSON.stringify(newLogin.body).slice(0, 200));
+    const memberProfile = await api(worker.baseUrl, '/api/accounts/profile', { token: newLogin.body?.access_token });
+    const { decryptBw } = await import('../webapp/src/lib/crypto.ts');
+    const reopened = await decryptBw(
+      memberProfile.body?.key,
+      await hkdfExpand(newMasterKey, 'enc', 32),
+      await hkdfExpand(newMasterKey, 'mac', 32)
+    );
+    checks.ok(
+      'and the new password opens the same vault key',
+      Buffer.from(reopened).equals(Buffer.from(seeded.memberVaultKey))
+    );
+    const oldSession = await asMember('/api/accounts/profile');
+    checks.equal('and the old session of the member has ended', oldSession.status, 401);
 
     return checks.finish() ? 0 : 1;
   } finally {
