@@ -135,6 +135,46 @@ test('somebody else cannot accept an invitation that was not for them', async ()
   assert.equal(refused.status, 404);
 });
 
+test('an account cannot name itself as its emergency contact', async () => {
+  const { env } = await fixture();
+  const refused = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
+    ...INVITE,
+    email: 'Grantor@Example.test',
+  });
+  assert.equal(refused.status, 400);
+  const trusted = await call(env, 'GET', '/api/emergency-access/trusted', GRANTOR);
+  assert.equal((await trusted.json()).data.length, 0);
+});
+
+test('the grantor turns a recovery down, and the grantee can start it again', async () => {
+  const { env } = await fixture();
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, INVITE);
+  const { id } = await invited.json();
+  await call(env, 'PUT', `/api/emergency-access/${id}/accept`, GRANTEE);
+  await call(env, 'POST', `/api/emergency-access/${id}/confirm`, GRANTOR, { key: '4.wrapped-for-the-grantee' });
+  const started = await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  assert.equal(started.status, 200);
+
+  const rejected = await call(env, 'POST', `/api/emergency-access/${id}/reject`, GRANTOR);
+  assert.equal(rejected.status, 200);
+  assert.equal((await rejected.json()).status, 2);
+  const trusted = await call(env, 'GET', '/api/emergency-access/trusted', GRANTOR);
+  assert.equal((await trusted.json()).data[0].status, 2);
+
+  const again = await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
+  assert.equal(again.status, 200);
+});
+
+test('the grantor cannot reject a grant nobody asked to recover', async () => {
+  const { env } = await fixture();
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, INVITE);
+  const { id } = await invited.json();
+  const refused = await call(env, 'POST', `/api/emergency-access/${id}/reject`, GRANTOR);
+  assert.equal(refused.status, 404);
+  const trusted = await call(env, 'GET', '/api/emergency-access/trusted', GRANTOR);
+  assert.equal((await trusted.json()).data.length, 1);
+});
+
 test('somebody else cannot see or withdraw a grant', async () => {
   const { env } = await fixture();
   const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, INVITE);

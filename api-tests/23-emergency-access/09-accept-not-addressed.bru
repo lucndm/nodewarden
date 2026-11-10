@@ -1,0 +1,34 @@
+meta {
+  name: POST :id/accept by an account it was not sent to
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/emergency-access/{{emergencyAccessId}}/accept
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "token": "any-token"
+  }
+}
+
+docs {
+  Client: `postEmergencyAccessAccept`, body `EmergencyAccessAcceptRequest`
+  (`token`). The grant is addressed to the member, so the grantor cannot
+  accept it, whatever token comes along.
+  Reference: vaultwarden `accept_invite` refuses when the token's email is not the caller's.
+}
+
+tests {
+  test("only the account the invitation went to can accept it", function () {
+    expect(res.status).to.equal(404);
+  });
+}

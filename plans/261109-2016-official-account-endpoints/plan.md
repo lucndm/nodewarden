@@ -26,7 +26,7 @@ folder match the folders run one by one.
 | `20-account-profile` | 14 | 13 | 1 |
 | `21-account-lifecycle` | 16 | 8 | 8 |
 | `22-account-email-flows` | 13 | 10 | 3 |
-| `23-emergency-access` | 18 | 0 | 17 (1 skipped) |
+| `23-emergency-access` | 18 | 0 | 17 (1 skipped); 18 pass, 1 skipped on 2026-11-10 |
 
 Rerun of `23-emergency-access` on `origin/main` at `101016c`, after NodeWarden's
 own emergency access was merged: 19 requests, 6 passing, 12 failing, 1
@@ -50,6 +50,12 @@ Paths are the official ones, under `/api` unless marked identity.
 
 ### Differs from the official client
 
+- [x] Emergency access, whole path, on 2026-11-10: `23-emergency-access` passes 18 requests; `03` is skipped because the official invite in `01` succeeds.
+  - An account cannot name itself (400), as in vaultwarden.
+  - `:id/accept` does not check the token: NodeWarden sends no email, so it issues none. The grant has to be addressed to the caller's account, which is what the token proves in vaultwarden.
+  - `:id/reject` serves two callers: the grantor turns a recovery down (back to confirmed, the wait reset), and the grantee declines an invitation (the grant is gone).
+  - A refused step answers 404 where vaultwarden answers 400; the client treats both as an error.
+
 - [ ] `PUT /accounts/profile`: the handler reads only `masterPasswordHint`. The name is ignored, and the official body (`name` only) clears the master password hint.
 
 ### No route (404)
@@ -59,13 +65,6 @@ Paths are the official ones, under `/api` unless marked identity.
 - [ ] `POST /accounts/security-stamp` ("log out of all sessions"); the old token keeps working.
 - [ ] `POST /accounts/key-management/rotate-user-account-keys` (rotate the account encryption key).
 - [ ] `GET /accounts/sso/user-identifier` and `DELETE /accounts/sso/:organizationId`: NodeWarden links SSO on its own routes (`/api/settings/sso`, `/api/settings/sso/link`). The expected answer is not decided; the tests only record that no route exists.
-- [ ] Emergency access. On `060500c` none of the 15 endpoints existed. On `101016c` NodeWarden has its own emergency access; against the official client:
-  - works: `trusted`, `granted`, `GET :id`, `DELETE :id`, `:id/accept`;
-  - `invite` is refused with 400 "Encrypted user key is required.": NodeWarden takes the grantor's wrapped key at invite time (`encryptedUserKey`), the official client sends it later with `confirm`;
-  - `:id/accept` accepts any token, because NodeWarden's grantee accepts inside the web vault;
-  - no route: `PUT :id`, `:id/reinvite`, `:id/confirm`, `:id/policies`;
-  - after `accept` the grant stays accepted and nothing moves it to confirmed, so `:id/initiate`, `:id/approve`, `:id/takeover` and `:id/password` answer 404 "Emergency access not valid." This holds for NodeWarden's own web vault too, which calls no confirm route.
-
 ### Refused on purpose (501), as decided
 
 - `POST /accounts/set-password`: SSO links existing accounts, so every account has a master password.
@@ -88,5 +87,5 @@ Paths are the official ones, under `/api` unless marked identity.
 ## Open questions
 
 - Official sign-up does not actually need email: vaultwarden answers `register/send-verification-email` with the registration token directly when mail is off. NodeWarden treats it as mail-backed and refuses, which blocks sign-up from every official client. Should official sign-up stay blocked, given NodeWarden registers with invite codes and `RegisterFinishRequest` has no invite code field?
-- Emergency access and the organization invite both need a token that the official server emails. One answer for both would keep the two flows consistent.
+- The organization invite still needs an answer for the token the official server emails; emergency access settled on not checking it (2026-11-10).
 - Expected answers for the SSO link endpoints.

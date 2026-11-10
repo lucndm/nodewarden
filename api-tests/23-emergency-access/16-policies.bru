@@ -16,11 +16,14 @@ auth:bearer {
 
 docs {
   Client: `getEmergencyGrantorPolicies`, read as a list of policies. A takeover
-  must respect the grantor's master password policy.
+  must respect the grantor's master password policy, so the client asks only
+  for a takeover access. This access is of type 0 (view), so it is refused.
+  Reference: vaultwarden `policies_emergency_access` requires a takeover access that was approved.
+  Vaultwarden answers 400, NodeWarden 404; the client treats both as an error.
 }
 
 tests {
-  test("the grantee reads the grantor's policies", function () {
-    expect(res.status).to.equal(200);
+  test("a view-only contact cannot read the grantor's policies", function () {
+    expect(res.status).to.be.oneOf([400, 404]);
   });
 }
