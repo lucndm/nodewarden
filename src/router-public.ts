@@ -515,6 +515,11 @@ export async function handlePublicRoute(
     '/accounts/verify-email-token',
     '/api/two-factor/send-email-login',
     '/two-factor/send-email-login',
+    // Deleting an account by an emailed link, sent without a login.
+    '/api/accounts/delete-recover',
+    '/accounts/delete-recover',
+    '/api/accounts/delete-recover-token',
+    '/accounts/delete-recover-token',
   ]);
   if (publicMailBackedPaths.has(path) && method === 'POST') {
     const blocked = await enforcePublicRateLimit('public-sensitive', LIMITS.rateLimit.sensitivePublicRequestsPerMinute);

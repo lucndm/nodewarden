@@ -224,6 +224,9 @@ export async function handleAuthenticatedRoute(
   const mailBackedAccountPaths = new Set([
     '/api/accounts/email-token',
     '/accounts/email-token',
+    // Changing the email needs the code email-token sends, so it gets the same answer.
+    '/api/accounts/email',
+    '/accounts/email',
     '/api/accounts/verify-email',
     '/accounts/verify-email',
     '/api/accounts/verify-email-token',

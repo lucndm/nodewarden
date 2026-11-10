@@ -25,7 +25,7 @@ folder match the folders run one by one.
 |---|---|---|---|
 | `20-account-profile` | 14 | 13 | 1 |
 | `21-account-lifecycle` | 16 | 8 | 8; 16/16 on 2026-11-10 |
-| `22-account-email-flows` | 13 | 10 | 3 |
+| `22-account-email-flows` | 13 | 10 | 3; 13/13 on 2026-11-10 |
 | `23-emergency-access` | 18 | 0 | 17 (1 skipped); 18 pass, 1 skipped on 2026-11-10 |
 
 Rerun of `23-emergency-access` on `origin/main` at `101016c`, after NodeWarden's
@@ -75,8 +75,8 @@ Paths are the official ones, under `/api` unless marked identity.
 ### The decision does not reach these paths
 
 - [x] `DELETE /accounts`: 501, the same answer as the other deletion paths (2026-11-10).
-- [ ] `POST /accounts/email`: mail-backed like `email-token`, but 404 instead of 501.
-- [ ] `POST /accounts/delete-recover` and `/delete-recover-token`: mail-backed, sent without a token, so they end in 401 instead of 501.
+- [x] `POST /accounts/email`: 501 like `email-token` (2026-11-10).
+- [x] `POST /accounts/delete-recover` and `/delete-recover-token`: 501 on the public router, before the login check (2026-11-10).
 
 ### Not recorded, out of scope
 
