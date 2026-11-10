@@ -1,6 +1,6 @@
 # Push hub, notification center and events: current state
 
-Status: state recorded, no implementation planned in this phase.
+Status: done on 2026-11-10; all 7 requests of `30-client-notifications` pass.
 
 ## Outcome
 
@@ -29,10 +29,6 @@ covers the hub itself.
 
 ### No route (404)
 
-- [ ] `GET /api/notifications?pageSize=50`: the browser extension fetches it when its notification state is empty and shows it with the at-risk password tasks. NodeWarden has no such notifications, so an empty `ListResponse` would be enough. vaultwarden has no route either.
-- [ ] `PATCH /api/notifications/:id/read` and `DELETE /api/notifications/:id/delete`: no body, no response body read. The tests tell a missing route from a missing notification by the error message: the router's no-route answer is the generic `Not found`.
-- [ ] `POST /events/collect`: the client treats anything but 200 as a failure and keeps the events to retry. vaultwarden answers 200 even when organization events are off. Harmless while `useEvents` stays false.
-
-## Open questions
-
-- Should `GET /api/notifications` answer an empty list, so the extension stops logging a failed fetch, or wait until NodeWarden has notifications to show?
+- [x] `GET /api/notifications?pageSize=50` (2026-11-10: an empty list): the browser extension fetches it when its notification state is empty and shows it with the at-risk password tasks. NodeWarden has no such notifications, so an empty `ListResponse` would be enough. vaultwarden has no route either.
+- [x] `PATCH /api/notifications/:id/read` and `DELETE /api/notifications/:id/delete` (2026-11-10: 404 "Notification not found."): no body, no response body read. The tests tell a missing route from a missing notification by the error message: the router's no-route answer is the generic `Not found`.
+- [x] `POST /events/collect` (2026-11-10: 200, the events are dropped): the client treats anything but 200 as a failure and keeps the events to retry. vaultwarden answers 200 even when organization events are off. Harmless while `useEvents` stays false.
