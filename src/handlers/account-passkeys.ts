@@ -30,6 +30,12 @@ import {
 } from '../utils/account-passkeys';
 import { auditRequestMetadata, safeWriteAuditEvent } from '../services/audit-events';
 import { createRecoveryCode } from '../utils/recovery-code';
+import {
+  createTwoFactorVerificationToken,
+  readUserVerificationToken,
+  verifyTwoFactorVerificationToken,
+  webAuthnVerificationBinding,
+} from '../utils/two-factor-verification-token';
 
 const MAX_ACCOUNT_PASSKEYS = 5;
 const MAX_TWO_FACTOR_PASSKEYS = 5;
@@ -83,29 +89,45 @@ function hasCompletePrfKeySet(body: Record<string, any>): boolean {
   return !!(body.encryptedUserKey && body.encryptedPublicKey && body.encryptedPrivateKey);
 }
 
-function twoFactorWebAuthnResponse(credentials: AccountPasskeyCredential[]): Record<string, unknown> {
+function twoFactorWebAuthnResponse(
+  credentials: AccountPasskeyCredential[],
+  userVerificationToken?: string
+): Record<string, unknown> {
+  // The official clients read the keys nested under `webAuthn`, and send the
+  // token back with the next change.
   return {
-    Enabled: credentials.length > 0,
-    enabled: credentials.length > 0,
-    Keys: credentials.map((credential, index) => ({
-      Id: index + 1,
-      id: index + 1,
-      Name: credential.name,
-      name: credential.name,
-      Migrated: false,
-      migrated: false,
-    })),
-    keys: credentials.map((credential, index) => ({
-      Id: index + 1,
-      id: index + 1,
-      Name: credential.name,
-      name: credential.name,
-      Migrated: false,
-      migrated: false,
-    })),
-    Object: 'twoFactorWebAuthn',
+    webAuthn: {
+      enabled: credentials.length > 0,
+      keys: credentials.map((credential, index) => ({
+        id: index + 1,
+        name: credential.name,
+        migrated: false,
+      })),
+    },
+    ...(userVerificationToken !== undefined ? { userVerificationToken } : {}),
     object: 'twoFactorWebAuthn',
   };
+}
+
+function twoFactorWebAuthnBinding(credentials: AccountPasskeyCredential[]): string {
+  return webAuthnVerificationBinding(credentials.map((credential) => credential.id));
+}
+
+/**
+ * A change to the two-step WebAuthn keys is allowed with the master password
+ * (what NodeWarden's web vault sends) or with the token handed out by
+ * get-webauthn for the keys as they are now (what the official clients send).
+ */
+async function verifyTwoFactorWebAuthnChange(
+  env: Env,
+  user: User,
+  body: Record<string, any>,
+  credentials: AccountPasskeyCredential[]
+): Promise<boolean> {
+  if (await verifyUserSecret(env, user, body)) return true;
+  const token = readUserVerificationToken(body);
+  if (!token) return false;
+  return verifyTwoFactorVerificationToken(env, user, twoFactorWebAuthnBinding(credentials), token);
 }
 
 function readRegistrationChallenge(response: ReturnType<typeof normalizeRegistrationResponse>): string | null {
@@ -353,18 +375,19 @@ export async function handleGetTwoFactorWebAuthn(request: Request, env: Env, use
 
   const storage = new StorageService(env.DB);
   const credentials = await storage.getAccountPasskeyCredentialsByUserId(userId, 'twoFactor');
-  return jsonResponse(twoFactorWebAuthnResponse(credentials));
+  const userVerificationToken = await createTwoFactorVerificationToken(env, user, twoFactorWebAuthnBinding(credentials));
+  return jsonResponse(twoFactorWebAuthnResponse(credentials, userVerificationToken));
 }
 
 export async function handleGetTwoFactorWebAuthnChallenge(request: Request, env: Env, userId: string, user: User): Promise<Response> {
   const body = await readJsonBody(request);
   if (!body) return errorResponse('Invalid request payload', 400);
-  if (!(await verifyUserSecret(env, user, body))) {
-    return errorResponse('User verification failed.', 400);
-  }
 
   const storage = new StorageService(env.DB);
   const credentials = await storage.getAccountPasskeyCredentialsByUserId(userId, 'twoFactor');
+  if (!(await verifyTwoFactorWebAuthnChange(env, user, body, credentials))) {
+    return errorResponse('User verification failed.', 400);
+  }
   if (credentials.length >= MAX_TWO_FACTOR_PASSKEYS) {
     return errorResponse('Maximum WebAuthn credential count reached.', 400);
   }
@@ -389,18 +412,21 @@ export async function handleGetTwoFactorWebAuthnChallenge(request: Request, env:
     },
   });
   await saveChallenge(storage, 'TwoFactorCreate', options.challenge, userId);
-  return jsonResponse(options);
+  // The official clients read the options under `options`, with the status
+  // fields Bitwarden's server adds.
+  return jsonResponse({ options: { ...options, status: 'ok', errorMessage: '' } });
 }
 
 export async function handlePutTwoFactorWebAuthn(request: Request, env: Env, userId: string, user: User): Promise<Response> {
   const body = await readJsonBody(request);
   if (!body) return errorResponse('Invalid request payload', 400);
-  if (!(await verifyUserSecret(env, user, body))) {
-    return errorResponse('User verification failed.', 400);
-  }
 
   const storage = new StorageService(env.DB);
-  const currentCount = await storage.countAccountPasskeyCredentialsByUserId(userId, 'twoFactor');
+  const existingCredentials = await storage.getAccountPasskeyCredentialsByUserId(userId, 'twoFactor');
+  if (!(await verifyTwoFactorWebAuthnChange(env, user, body, existingCredentials))) {
+    return errorResponse('User verification failed.', 400);
+  }
+  const currentCount = existingCredentials.length;
   if (currentCount >= MAX_TWO_FACTOR_PASSKEYS) {
     return errorResponse('Maximum WebAuthn credential count reached.', 400);
   }
@@ -492,7 +518,10 @@ export async function handlePutTwoFactorWebAuthn(request: Request, env: Env, use
 export async function handleDeleteTwoFactorWebAuthn(request: Request, env: Env, userId: string, user: User): Promise<Response> {
   const body = await readJsonBody(request);
   if (!body) return errorResponse('Invalid request payload', 400);
-  if (!(await verifyUserSecret(env, user, body))) {
+
+  const storage = new StorageService(env.DB);
+  const credentials = await storage.getAccountPasskeyCredentialsByUserId(userId, 'twoFactor');
+  if (!(await verifyTwoFactorWebAuthnChange(env, user, body, credentials))) {
     return errorResponse('User verification failed.', 400);
   }
 
@@ -501,8 +530,6 @@ export async function handleDeleteTwoFactorWebAuthn(request: Request, env: Env, 
     return errorResponse('Invalid key id', 400);
   }
 
-  const storage = new StorageService(env.DB);
-  const credentials = await storage.getAccountPasskeyCredentialsByUserId(userId, 'twoFactor');
   if (credentials.length < 2) {
     return errorResponse('Unable to delete WebAuthn credential.', 400);
   }

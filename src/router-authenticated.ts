@@ -158,6 +158,9 @@ import {
   handleUnsupportedOrganizationAction,
 } from './handlers/organizations';
 
+const TWO_FACTOR_TYPE_AUTHENTICATOR = 0;
+const TWO_FACTOR_TYPE_YUBIKEY = 3;
+
 export async function handleAuthenticatedRoute(
   request: Request,
   env: Env,
@@ -276,13 +279,15 @@ export async function handleAuthenticatedRoute(
 
   if (path === '/api/two-factor/authenticator') {
     if (method === 'PUT' || method === 'POST') return handlePutTwoFactorAuthenticator(request, env, userId);
-    if (method === 'DELETE') return handleDisableTwoFactorProvider(request, env, userId);
+    if (method === 'DELETE') return handleDisableTwoFactorProvider(request, env, userId, TWO_FACTOR_TYPE_AUTHENTICATOR);
     return errorResponse('Method not allowed', 405);
   }
 
   if ((path === '/api/two-factor/yubikey' || path === '/api/two-factor/yubi-key')) {
     if (method === 'PUT' || method === 'POST') return handlePutTwoFactorYubiKey(request, env, userId);
-    if (method === 'DELETE') return handleDisableTwoFactorProvider(request, env, userId);
+    // The path names the provider; without this a body with no `type` would
+    // turn the authenticator off instead of the YubiKey.
+    if (method === 'DELETE') return handleDisableTwoFactorProvider(request, env, userId, TWO_FACTOR_TYPE_YUBIKEY);
     return errorResponse('Method not allowed', 405);
   }
 

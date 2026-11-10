@@ -23,14 +23,15 @@ body:json {
 docs {
   Client: `DefaultTwoFactorApiService`
   (`libs/common/src/auth/two-factor/services/default-two-factor-api.service.ts`). `getTwoFactorWebAuthnChallenge`, body `TwoFactorWebAuthnChallengeRequest`
-  (`userVerificationToken` from `get-webauthn`), read as `TwoFactorWebAuthnChallengeResponse`: the WebAuthn creation options
-  (`challenge`, `rp`, `user`, ...).
+  (`userVerificationToken` from `get-webauthn`), read as `TwoFactorWebAuthnChallengeResponse`, which takes the WebAuthn
+  creation options (`challenge`, `rp`, `user`, ...) from `Options`. Vaultwarden
+  answers `{ options: {...publicKey, status: "ok", errorMessage: ""} }`.
 }
 
 tests {
   const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
   test("the owner gets a registration challenge", function () {
     expect(res.status).to.equal(200);
-    expect(f(res.body, "challenge")).to.be.a("string");
+    expect(f(f(res.body, "options"), "challenge")).to.be.a("string");
   });
 }

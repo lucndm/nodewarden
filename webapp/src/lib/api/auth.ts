@@ -698,7 +698,10 @@ export async function setTotp(
   }
 }
 
-function normalizeYubiKeySettings(raw: any): YubiKeyOtpSettings {
+function normalizeYubiKeySettings(body: any): YubiKeyOtpSettings {
+  // The server answers with the setup nested under `yubiKey`, the shape the
+  // official clients read.
+  const raw = body?.yubiKey ?? body?.YubiKey ?? body;
   return {
     enabled: !!(raw?.enabled ?? raw?.Enabled),
     keys: [
@@ -803,7 +806,10 @@ export async function disableYubiKeyOtp(
   }
 }
 
-function normalizeTwoFactorPasskeySettings(raw: any): TwoFactorPasskeySettings {
+function normalizeTwoFactorPasskeySettings(body: any): TwoFactorPasskeySettings {
+  // The server answers with the setup nested under `webAuthn`, the shape the
+  // official clients read.
+  const raw = body?.webAuthn ?? body?.WebAuthn ?? body;
   const keys = Array.isArray(raw?.keys) ? raw.keys : Array.isArray(raw?.Keys) ? raw.Keys : [];
   return {
     enabled: !!(raw?.enabled ?? raw?.Enabled),
@@ -846,7 +852,9 @@ export async function getTwoFactorPasskeyChallenge(
     const body = await parseJson<TokenError>(resp);
     throw new Error(translateServerError(body?.error_description || body?.error, t('txt_passkey_setup_failed')));
   }
-  return parseJson<unknown>(resp);
+  // The options come wrapped under `options`, as the official clients expect.
+  const body = await parseJson<any>(resp);
+  return body?.options ?? body?.Options ?? body;
 }
 
 export async function saveTwoFactorPasskey(
