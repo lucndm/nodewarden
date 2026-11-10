@@ -1,4 +1,5 @@
 import type { Device, DevicePendingAuthRequest, DeviceResponse, ProtectedDeviceResponse as ProtectedDeviceWireResponse } from '../types';
+import { waitUntil } from 'cloudflare:workers';
 import { Env } from '../types';
 import { getOnlineUserDevices, notifyUserLogout } from '../durable/notifications-hub';
 import { AuthService } from '../services/auth';
@@ -8,6 +9,19 @@ import { StorageService } from '../services/storage';
 import { errorResponse, jsonResponse } from '../utils/response';
 import { readAuthRequestDeviceInfo, readKnownDeviceProbe } from '../utils/device';
 import { generateUUID } from '../utils/uuid';
+
+// Telling the Bitwarden push relay that a device is gone is a network round
+// trip (and a credentials request on first use) that the answer does not
+// depend on, so it runs after the response instead of holding it.
+function unregisterMobilePushInBackground(env: Env, pushUuid: string | null | undefined): void {
+  if (!String(pushUuid || '').trim()) return;
+  waitUntil(
+    unregisterMobilePushDevice(env, pushUuid).catch((error) => {
+      console.error('Push relay unregister failed:', error);
+      return false;
+    })
+  );
+}
 
 const PERMANENT_TRUST_EXPIRES_AT_MS = Date.UTC(2099, 11, 31, 23, 59, 59);
 
@@ -414,7 +428,7 @@ export async function handleDeleteDevice(
   await storage.deleteRefreshTokensByDevice(userId, normalized);
   const deleted = await storage.deleteDevice(userId, normalized);
   if (deleted) {
-    await unregisterMobilePushDevice(env, device?.pushUuid);
+    unregisterMobilePushInBackground(env, device?.pushUuid);
     AuthService.invalidateDeviceCache(userId, normalized);
     notifyUserLogout(env, userId, normalized);
   }
@@ -643,7 +657,7 @@ export async function handleDeactivateDevice(
   await storage.deleteRefreshTokensByDevice(userId, normalized);
   const deleted = await storage.deleteDevice(userId, normalized);
   if (deleted) {
-    await unregisterMobilePushDevice(env, device?.pushUuid);
+    unregisterMobilePushInBackground(env, device?.pushUuid);
     AuthService.invalidateDeviceCache(userId, normalized);
     notifyUserLogout(env, userId, normalized);
   }
@@ -721,7 +735,7 @@ export async function handleClearDeviceToken(
   const storage = new StorageService(env.DB);
   const cleared = await storage.clearDevicePushToken(userId, normalized);
   if (cleared?.pushUuid) {
-    await unregisterMobilePushDevice(env, cleared.pushUuid);
+    unregisterMobilePushInBackground(env, cleared.pushUuid);
   }
 
   return new Response(null, { status: 200 });
