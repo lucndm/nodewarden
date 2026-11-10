@@ -53,6 +53,11 @@ function findChromium() {
   return null;
 }
 
+function withoutLibraryPath(env) {
+  const { LD_LIBRARY_PATH: _ignored, ...rest } = env;
+  return rest;
+}
+
 async function launchChromium(binary) {
   const port = await findFreePort();
   const profileDir = await mkdtemp(join(tmpdir(), 'nodewarden-ui-'));
@@ -72,7 +77,10 @@ async function launchChromium(binary) {
       '--window-size=1600,1000',
       'about:blank',
     ],
-    { stdio: ['ignore', 'pipe', 'pipe'] }
+    // Chromium finds its own libraries. A LD_LIBRARY_PATH inherited from the
+    // shell can point it at copies built for another glibc, and it then dies
+    // before it opens the debugging port ("GLIBC_2.43 not found").
+    { stdio: ['ignore', 'pipe', 'pipe'], env: withoutLibraryPath(process.env) }
   );
   let log = '';
   child.stdout?.on('data', (chunk) => {
