@@ -1497,28 +1497,7 @@ export default function App() {
       try {
         setVaultDecryptError('');
         let result;
-        // A shared item's key is protected by the organization key, which is
-        // wrapped for this member: the decrypt needs both, and without them a
-        // shared item reads as an item with no name.
-        // The organizations that came with the sync come first: they are
-        // never older than the items, so a shared item can be opened as soon
-        // as it arrives. A separately loaded list can lag behind, and then the
-        // item reads as an item with no name.
-        const syncedOrganizations = encryptedVaultCore?.organizations ?? [];
-        const shareArgs = {
-          organizations: (
-            syncedOrganizations.length
-              ? syncedOrganizations
-              : (organizationsQuery.data ?? []).map((organization) => ({
-                  id: organization.id,
-                  key: organization.key,
-                }))
-          ).map((organization) => ({
-            id: organization.id,
-            key: organization.key,
-          })),
-          encryptedPrivateKey: profileQuery.data?.privateKey ?? null,
-        };
+        const shareArgs = organizationDecryptArgs();
         try {
           result = await decryptVaultCoreInWorker({
             folders: encryptedFolders,
@@ -1774,17 +1753,49 @@ export default function App() {
     setDecryptedSends((current) => removeById(current, id));
   }
 
+  // A shared item's key is protected by the organization key, which is
+  // wrapped for this member: the decrypt needs both, and without them a shared
+  // item reads as an item with no name.
+  // The organizations that came with the sync come first: they are never older
+  // than the items, so a shared item can be opened as soon as it arrives. A
+  // separately loaded list can lag behind, and then the item reads as an item
+  // with no name.
+  function organizationDecryptArgs(): {
+    organizations: Array<{ id: string; key: string | null }>;
+    encryptedPrivateKey: string | null;
+  } {
+    const syncedOrganizations = encryptedVaultCore?.organizations ?? [];
+    return {
+      organizations: (
+        syncedOrganizations.length
+          ? syncedOrganizations
+          : (organizationsQuery.data ?? []).map((organization) => ({
+              id: organization.id,
+              key: organization.key,
+            }))
+      ).map((organization) => ({
+        id: organization.id,
+        key: organization.key,
+      })),
+      encryptedPrivateKey: profileQuery.data?.privateKey ?? null,
+    };
+  }
+
   async function upsertCipherFromNotification(cipherId: string, revisionStamp?: number | null): Promise<void> {
     const id = String(cipherId || '').trim();
     if (!id || !session?.symEncKey || !session?.symMacKey) return;
     try {
       const encrypted = await getCipherById(authedFetch, id);
       upsertEncryptedCipher(encrypted, revisionStamp);
+      // The same keys as the whole-vault decrypt: a shared item pushed without
+      // them would replace its readable copy with one that has no name, and
+      // an edit opened in that moment would start from an empty item.
       const result = await decryptVaultCore({
         folders: encryptedFolders || [],
         ciphers: [encrypted],
         symEncKeyB64: session.symEncKey,
         symMacKeyB64: session.symMacKey,
+        ...organizationDecryptArgs(),
       });
       const decrypted = result.ciphers[0];
       if (decrypted) setDecryptedCiphers((current) => upsertById(current, decrypted));

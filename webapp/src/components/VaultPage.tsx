@@ -153,6 +153,10 @@ export default function VaultPage(props: VaultPageProps) {
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const savingRef = useRef(false);
+  // Each create, edit or cancel starts a new edit session. A save that ends
+  // after the user moved on (the new item already shows in the list, so they
+  // can open another one) must not close the editor they opened since.
+  const editSessionRef = useRef(0);
   const [repromptOpen, setRepromptOpen] = useState(false);
   const [repromptPassword, setRepromptPassword] = useState('');
   const [repromptApprovedCipherId, setRepromptApprovedCipherId] = useState<string | null>(null);
@@ -810,6 +814,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
           }
         : createEmptyDraft(type)
     );
+    editSessionRef.current += 1;
     setIsCreating(true);
     setIsEditing(true);
     setCreateMenuOpen(false);
@@ -830,6 +835,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
       props.onNotify('error', t('txt_decrypt_failed_2'));
       return;
     }
+    editSessionRef.current += 1;
     setDraft(draftFromCipher(selectedCipher));
     setIsCreating(false);
     setIsEditing(true);
@@ -844,6 +850,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
 
   const cancelEdit = useCallback((): void => {
     const returnToDetail = isMobileLayout && !isCreating && !!selectedCipher;
+    editSessionRef.current += 1;
     setDraft(null);
     setIsEditing(false);
     setIsCreating(false);
@@ -984,6 +991,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
     // The ref is set synchronously, the busy state only re-renders later.
     if (!draft || savingRef.current) return;
     savingRef.current = true;
+    const session = editSessionRef.current;
     setBusy(true);
     try {
       let nextDraft = draft;
@@ -1018,6 +1026,8 @@ const folderName = useCallback((id: string | null | undefined): string => {
           removeAttachmentIds,
         });
       }
+      // The user opened another editor while this save ran: leave it open.
+      if (editSessionRef.current !== session) return;
       setIsCreating(false);
       setIsEditing(false);
       setDraft(null);
@@ -1587,6 +1597,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 downloadingAttachmentKey={props.downloadingAttachmentKey}
                 attachmentDownloadPercent={props.attachmentDownloadPercent}
                 onStartEdit={startEdit}
+                busy={busy}
                 onDelete={setPendingDelete}
                 onMoveItem={(cipher) => {
                   setSelectedMap({ [cipher.id]: true });

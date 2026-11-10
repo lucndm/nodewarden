@@ -388,6 +388,20 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
       }
     }
 
+    /**
+     * Decrypts an item the server just answered with. A shared item's key is
+     * wrapped with the organization key, so it is opened with that key; the
+     * personal key would leave the item with no name until the next full sync,
+     * and an edit opened in that moment would start from an empty item.
+     */
+    async function decryptSaved(encrypted: Cipher, encKey: Uint8Array, macKey: Uint8Array): Promise<Cipher> {
+      const organizationId = String((encrypted as Cipher & { organizationId?: string | null }).organizationId || '').trim();
+      const organizationKey = organizationId ? await openOrganizationKeyFor(organizationId) : null;
+      return organizationKey
+        ? decryptSingleCipher(encrypted, organizationKey.enc, organizationKey.mac)
+        : decryptSingleCipher(encrypted, encKey, macKey);
+    }
+
     async function decryptAndPatch(encrypted: Cipher) {
       if (!session?.symEncKey || !session?.symMacKey) {
         await refetchCiphers();
@@ -404,7 +418,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
       });
       const encKey = base64ToBytes(session.symEncKey);
       const macKey = base64ToBytes(session.symMacKey);
-      const decrypted = await decryptSingleCipher(encrypted, encKey, macKey);
+      const decrypted = await decryptSaved(encrypted, encKey, macKey);
       patchDecryptedCiphers((prev) => {
         const idx = prev.findIndex((c) => c.id === decrypted.id);
         if (idx >= 0) {
@@ -424,7 +438,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
       patchEncryptedCiphers((prev) => [encrypted, ...prev.filter((cipher) => cipher.id !== optimisticId && cipher.id !== encrypted.id)]);
       const encKey = base64ToBytes(session.symEncKey);
       const macKey = base64ToBytes(session.symMacKey);
-      const decrypted = await decryptSingleCipher(encrypted, encKey, macKey);
+      const decrypted = await decryptSaved(encrypted, encKey, macKey);
       patchDecryptedCiphers((prev) => {
         const next = prev.filter((cipher) => cipher.id !== optimisticId && cipher.id !== decrypted.id);
         return [decrypted, ...next];
