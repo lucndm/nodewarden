@@ -719,10 +719,16 @@ async function main() {
       target.click();
       return true;
     })()`);
-    await waitFor(`!![...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Edit')`, 'the edit button');
+    // Edit is off while the save of the new item still runs: the item may not
+    // exist on the server yet.
+    await waitFor(`!![...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Edit' && !b.disabled)`, 'the edit button');
     await evaluate(clickText('Edit'));
-    await waitFor(`!![...document.querySelectorAll('label')].find(l => l.textContent.includes('Username'))`, 'the edit form');
-    await evaluate(fill('Username', 'shared-new-user-v2'));
+    // The detail view also has a Username label, so wait for the input itself,
+    // and for the name the edit starts from: an edit opened from an item that
+    // is not decrypted has no name, and its save is refused.
+    await waitFor(`!!(${findInput('Username')}) && (${findInput('Name')})?.value === 'UI Shared New'`, 'the edit form with the item name');
+    checks.ok('the edit form opens on the shared item', await evaluate(fill('Username', 'shared-new-user-v2')));
+    await waitFor(`!![...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Save' && !b.disabled)`, 'the save button');
     await evaluate(clickText('Save'));
     await waitFor(
       `document.body.textContent.includes('shared-new-user-v2')`,
@@ -984,8 +990,9 @@ async function main() {
       link.click();
       return true;
     })()`);
+    // The button is off while the log list loads.
     await waitFor(
-      `!![...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Export CSV')`,
+      `!![...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Export CSV' && !b.disabled)`,
       'the log center',
       20000
     );

@@ -65,6 +65,8 @@ interface VaultDetailViewProps {
   onLoadItemHistoryVersion: (cipherId: string, versionId: string) => Promise<ItemHistoryVersion>;
   onRestoreItemHistoryVersion: (cipherId: string, versionId: string, expectedRevisionDate: string) => Promise<void>;
   onStartEdit: () => void;
+  /** A save is still running; the item may not exist on the server yet, so it cannot be edited. */
+  busy?: boolean;
   onDelete: (cipher: Cipher) => void;
   onMoveItem?: (cipher: Cipher) => void;
   onRestore: (cipher: Cipher) => void | Promise<void>;
@@ -431,7 +433,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </button>
                 ) : (
                   <>
-                    <button type="button" className="btn btn-secondary small" onClick={props.onStartEdit}>
+                    <button type="button" className="btn btn-secondary small" disabled={props.busy} onClick={props.onStartEdit}>
                       <Pencil size={14} className="btn-icon" /> {t('txt_edit')}
                     </button>
                     <div className="sort-menu-wrap" ref={overflowRef}>
