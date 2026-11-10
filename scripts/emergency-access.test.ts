@@ -151,7 +151,7 @@ test('the grantor turns a recovery down, and the grantee can start it again', as
   const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, INVITE);
   const { id } = await invited.json();
   await call(env, 'PUT', `/api/emergency-access/${id}/accept`, GRANTEE);
-  await call(env, 'POST', `/api/emergency-access/${id}/confirm`, GRANTOR, { key: '4.wrapped-for-the-grantee' });
+  await call(env, 'POST', `/api/emergency-access/${id}/confirm`, GRANTOR, { key: INVITE.encryptedUserKey });
   const started = await call(env, 'POST', `/api/emergency-access/${id}/initiate`, GRANTEE);
   assert.equal(started.status, 200);
 
