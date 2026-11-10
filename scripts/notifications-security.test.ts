@@ -108,7 +108,7 @@ async function validAccessToken(): Promise<string> {
   }, secret);
 }
 
-test('query access_token cannot authenticate a websocket', async () => {
+test('the official clients authenticate the websocket with access_token in the query', async () => {
   const { env, forwardedHubUrls } = createTestEnv();
   const token = await validAccessToken();
   const response = await handleNotificationsHub(new Request(
@@ -116,7 +116,24 @@ test('query access_token cannot authenticate a websocket', async () => {
     { headers: { Upgrade: 'websocket' } }
   ), env);
 
-  assert.equal(response.status, 401);
+  assert.equal(response.status, 204);
+  const forwarded = new URL(forwardedHubUrls[0]);
+  assert.equal(forwarded.searchParams.get('nw_uid'), userId);
+  // The token does not travel on to the Durable Object.
+  assert.equal(forwarded.searchParams.has('access_token'), false);
+});
+
+test('a forged or stale access_token in the query is refused', async () => {
+  const { env, forwardedHubUrls } = createTestEnv();
+  const forged = await createJWT({ sub: userId, email: 'user@example.test', name: 'Test User', sstamp: securityStamp }, 'not-the-server-secret-0123456789abcdef');
+  const stale = await createJWT({ sub: userId, email: 'user@example.test', name: 'Test User', sstamp: 'an-old-stamp' }, secret);
+  for (const token of [forged, stale, 'not-a-jwt']) {
+    const response = await handleNotificationsHub(new Request(
+      `https://vault.example.test/notifications/hub?access_token=${encodeURIComponent(token)}`,
+      { headers: { Upgrade: 'websocket' } }
+    ), env);
+    assert.equal(response.status, 401);
+  }
   assert.deepEqual(forwardedHubUrls, []);
 });
 

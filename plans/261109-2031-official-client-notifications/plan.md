@@ -24,6 +24,7 @@ covers the hub itself.
 ### Works as the official client expects
 
 - `GET /notifications/hub`: the official client connects straight over WebSocket (`skipNegotiation: true`, MessagePack, token in `access_token`); a plain GET gets 426 "Expected websocket", so the route is there.
+  - Correction, 2026-11-10: the route was there, but every official connection got 401. The hub refused a token in the URL (#349), and the official client skips negotiate, so it never had the one-time `id` either; production logs showed 52 such 401s between 15:57 and 22:10. Since 2026-11-10 the hub accepts `access_token` in the query, as vaultwarden does (decided), with query strings redacted from Worker logs and traces (#46) and the token dropped before the Durable Object.
 - `POST /notifications/hub/negotiate`: answers 200. The official client never calls it.
 - Organizations answer `useEvents: false`, so official clients never record or upload events.
 
