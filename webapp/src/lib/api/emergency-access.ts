@@ -9,6 +9,7 @@
 
 import type { AuthedFetch } from '@/lib/api/shared';
 import { parseErrorMessage, parseJson } from '@/lib/api/shared';
+import type { Cipher } from '@/lib/types';
 
 export interface EmergencyAccessGranteeDetails {
   id: string;
@@ -18,6 +19,8 @@ export interface EmergencyAccessGranteeDetails {
   granteeId: string | null;
   email: string | null;
   name: string | null;
+  /** When the grantee started the wait, or null. */
+  recoveryInitiatedDate: string | null;
 }
 
 export interface EmergencyAccessGrantorDetails {
@@ -28,6 +31,8 @@ export interface EmergencyAccessGrantorDetails {
   grantorId: string;
   email: string | null;
   name: string | null;
+  /** When this account started the wait, or null. */
+  recoveryInitiatedDate: string | null;
 }
 
 function readRows(body: { data?: unknown } | null): Record<string, unknown>[] {
@@ -49,6 +54,7 @@ export async function getTrustedEmergencyAccess(
     granteeId: row.granteeId ? String(row.granteeId) : null,
     email: row.email ? String(row.email) : null,
     name: row.name ? String(row.name) : null,
+    recoveryInitiatedDate: row.recoveryInitiatedDate ? String(row.recoveryInitiatedDate) : null,
   }));
 }
 
@@ -67,6 +73,7 @@ export async function getGrantedEmergencyAccess(
     grantorId: String(row.grantorId || ''),
     email: row.email ? String(row.email) : null,
     name: row.name ? String(row.name) : null,
+    recoveryInitiatedDate: row.recoveryInitiatedDate ? String(row.recoveryInitiatedDate) : null,
   }));
 }
 
@@ -152,4 +159,60 @@ export async function rejectEmergencyAccess(authedFetch: AuthedFetch, id: string
 export async function withdrawEmergencyAccess(authedFetch: AuthedFetch, id: string): Promise<void> {
   const resp = await authedFetch(`/api/emergency-access/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Withdraw failed'));
+}
+
+/** What a view grant opens: the grantor's items, and the grantor's key wrapped for this account. */
+export interface EmergencyAccessView {
+  ciphers: Cipher[];
+  keyEncrypted: string;
+}
+
+/** POST /api/emergency-access/:id/view — after the wait and the approval, a view grant reads the vault. */
+export async function viewEmergencyAccess(authedFetch: AuthedFetch, id: string): Promise<EmergencyAccessView> {
+  const resp = await authedFetch(`/api/emergency-access/${encodeURIComponent(id)}/view`, { method: 'POST' });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'View failed'));
+  const body = await parseJson<{ ciphers?: unknown; keyEncrypted?: unknown }>(resp);
+  return {
+    ciphers: Array.isArray(body?.ciphers) ? (body.ciphers as Cipher[]) : [],
+    keyEncrypted: String(body?.keyEncrypted || ''),
+  };
+}
+
+/** What a takeover needs to set the grantor's new master password. */
+export interface EmergencyAccessTakeover {
+  kdf: number;
+  kdfIterations: number;
+  keyEncrypted: string;
+  salt: string;
+}
+
+/** POST /api/emergency-access/:id/takeover */
+export async function getEmergencyAccessTakeover(authedFetch: AuthedFetch, id: string): Promise<EmergencyAccessTakeover> {
+  const resp = await authedFetch(`/api/emergency-access/${encodeURIComponent(id)}/takeover`, { method: 'POST' });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Takeover failed'));
+  const body = await parseJson<Record<string, unknown>>(resp);
+  return {
+    kdf: Number(body?.kdf ?? 0) || 0,
+    kdfIterations: Number(body?.kdfIterations) || 0,
+    keyEncrypted: String(body?.keyEncrypted || ''),
+    salt: String(body?.salt || ''),
+  };
+}
+
+/** POST /api/emergency-access/:id/password — the new master password of the grantor. */
+export async function setEmergencyAccessPassword(
+  authedFetch: AuthedFetch,
+  id: string,
+  input: { salt: string; kdfIterations: number; masterPasswordHash: string; key: string }
+): Promise<void> {
+  const kdf = { kdfType: 0, iterations: input.kdfIterations, memory: null, parallelism: null };
+  const resp = await authedFetch(`/api/emergency-access/${encodeURIComponent(id)}/password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      authenticationData: { salt: input.salt, kdf, masterPasswordAuthenticationHash: input.masterPasswordHash },
+      unlockData: { salt: input.salt, kdf, masterKeyWrappedUserKey: input.key },
+    }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Takeover failed'));
 }

@@ -34,6 +34,7 @@ import { cipherResponseOptionsForRequest, cipherToResponse } from './ciphers';
 import { policyResponse } from './policies';
 import { getUser, getUserById } from '../services/storage-user-repo';
 import { StorageService } from '../services/storage';
+import { AuthService } from '../services/auth';
 import { sendEmergencyAccessNotice } from '../services/emergency-access-notifier';
 import {
   createEmergencyAccess,
@@ -71,6 +72,8 @@ function granteeDetails(row: EmergencyAccessRow, email: string | null, name: str
     email: email ?? row.email,
     name: name ?? null,
     avatarColor: null,
+    // When the grantee started the wait; the web vault shows when access opens.
+    recoveryInitiatedDate: row.recoveryInitiatedAt,
     object: 'emergencyAccessGranteeDetails',
   };
 }
@@ -86,6 +89,7 @@ function grantorDetails(row: EmergencyAccessRow, email: string | null, name: str
     email: email ?? null,
     name: name ?? null,
     avatarColor: null,
+    recoveryInitiatedDate: row.recoveryInitiatedAt,
     object: 'emergencyAccessGrantorDetails',
   };
 }
@@ -838,7 +842,9 @@ export async function handleEmergencyAccessPassword(
   }
   const { newMasterPasswordHash, nextKey } = credentials;
   const storage = new StorageService(env.DB);
-  grantor.masterPasswordHash = newMasterPasswordHash;
+  // Stored as a server-side verifier, as a password change does: the client
+  // hash itself would log in to anyone who read the database.
+  grantor.masterPasswordHash = await new AuthService(env).hashPasswordServer(newMasterPasswordHash);
   grantor.key = nextKey;
   // A password the grantor did not choose must not keep the ways to get in
   // that only the grantor knew about.

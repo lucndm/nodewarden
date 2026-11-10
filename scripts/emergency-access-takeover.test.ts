@@ -20,6 +20,7 @@ import { installTestGlobals } from './test-env';
 installTestGlobals();
 
 import { handleAuthenticatedRoute } from '../src/router-authenticated';
+import { verifyPasswordVerifier } from '../src/services/password-verifier';
 import { ensureStorageSchema } from '../src/services/storage-schema';
 import { StorageService } from '../src/services/storage';
 import {
@@ -259,7 +260,9 @@ test('the new master password replaces the old one and drops the ways in the old
   assert.equal(changed.status, 200);
 
   const grantor = await storage.getUserById(GRANTOR);
-  assert.equal(grantor?.masterPasswordHash, 'new-hash');
+  // Stored as a server-side verifier, never as the client hash itself.
+  assert.notEqual(grantor?.masterPasswordHash, 'new-hash');
+  assert.ok(await verifyPasswordVerifier('new-hash', grantor?.masterPasswordHash ?? null, grantor?.email ?? ''));
   assert.equal(grantor?.key, '2.bmV3|dmV3|bmV3');
   // A password the grantor did not choose must not keep the ways to get in
   // that only the grantor knew about.

@@ -16,6 +16,7 @@ import { installTestGlobals } from './test-env';
 installTestGlobals();
 
 import { handleAuthenticatedRoute } from '../src/router-authenticated';
+import { verifyPasswordVerifier } from '../src/services/password-verifier';
 import { ensureStorageSchema } from '../src/services/storage-schema';
 import { StorageService } from '../src/services/storage';
 import {
@@ -295,7 +296,9 @@ test('the current clients can set the new password, and the salt and the key der
   const changed = await call(env, 'PUT', `/api/emergency-access/${id}/password`, GRANTEE, payload);
   assert.equal(changed.status, 200, 'the current shape is accepted');
   const grantor = await storage.getUserById(GRANTOR);
-  assert.equal(grantor?.masterPasswordHash, 'new-authentication-hash');
+  // Stored as a server-side verifier, never as the client hash itself.
+  assert.notEqual(grantor?.masterPasswordHash, 'new-authentication-hash');
+  assert.ok(await verifyPasswordVerifier('new-authentication-hash', grantor?.masterPasswordHash ?? null, grantor?.email ?? ''));
   assert.equal(grantor?.key, '2.bmV3|dmV3|bmV3');
 });
 

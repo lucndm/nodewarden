@@ -337,6 +337,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
               <SettingsPage
                 profile={props.profile}
                 authedFetch={props.authedFetch}
+                session={props.session}
                 totpEnabled={props.totpEnabled}
                 yubikeyEnabled={props.yubikeyEnabled}
                 passkey2faEnabled={props.passkey2faEnabled}
