@@ -12,6 +12,8 @@ import {
     handleGetRevisionDate,
   handleSetUserKeyId,
   handleVerifyPassword,
+  handlePutAvatar,
+  handlePostSecurityStamp,
   handleChangePassword,
   handleSetVerifyDevices,
   handleGetTotpStatus,
@@ -185,6 +187,26 @@ export async function handleAuthenticatedRoute(
     return unsupportedResponse('KDF changes are not supported by this server.');
   }
 
+  // Rotating the user key re-encrypts the whole vault in one request; like a
+  // KDF change, it is not supported.
+  if (path === '/api/accounts/key-management/rotate-user-account-keys' && method === 'POST') {
+    return unsupportedResponse('Rotating the account encryption key is not supported by this server.');
+  }
+
+  // The official clients link SSO per organization. NodeWarden links one SSO
+  // provider for the whole server on its own routes (/api/settings/sso).
+  if (
+    (path === '/api/accounts/sso/user-identifier' && method === 'GET') ||
+    (/^\/api\/accounts\/sso\/[^/]+$/i.test(path) && method === 'DELETE')
+  ) {
+    return unsupportedResponse('Organization SSO is not supported by this server; manage SSO under Settings.');
+  }
+
+  // Deleting the account is refused on every path, the official one included.
+  if (path === '/api/accounts' && method === 'DELETE') {
+    return errorResponse('Not implemented', 501);
+  }
+
   const mailBackedAccountPaths = new Set([
     '/api/accounts/email-token',
     '/accounts/email-token',
@@ -319,6 +341,14 @@ export async function handleAuthenticatedRoute(
 
   if (path === '/api/accounts/verify-password' && method === 'POST') {
     return handleVerifyPassword(request, env, userId);
+  }
+
+  if (path === '/api/accounts/avatar' && method === 'PUT') {
+    return handlePutAvatar(request, env, userId);
+  }
+
+  if (path === '/api/accounts/security-stamp' && method === 'POST') {
+    return handlePostSecurityStamp(request, env, userId);
   }
 
   if (path === '/api/accounts/verify-devices' && (method === 'PUT' || method === 'POST')) {

@@ -16,11 +16,13 @@ auth:bearer {
 
 docs {
   Client: `ApiService.deleteSsoUser`, no body, no response body read. Unlinks the
-  account from an organization's SSO.
+  account from an organization's SSO. NodeWarden links one SSO provider for the
+  whole server (`DELETE /api/settings/sso`) and answers 501 here (decided
+  2026-11-10).
 }
 
 tests {
-  test("NodeWarden has a route for it", function () {
-    expect([404, 501]).to.not.include(res.status);
+  test("organization SSO is refused as not supported", function () {
+    expect(res.status).to.equal(501);
   });
 }

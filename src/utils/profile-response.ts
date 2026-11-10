@@ -85,7 +85,7 @@ export function buildProfileResponse(
     providers: [],
     providerOrganizations: [],
     forcePasswordReset: false,
-    avatarColor: null,
+    avatarColor: user.avatarColor ?? null,
     creationDate: user.createdAt,
     // New-device verification is not supported without an email delivery channel.
     // Always report disabled so clients do not present a false security posture.

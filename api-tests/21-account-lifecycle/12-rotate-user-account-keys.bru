@@ -1,5 +1,5 @@
 meta {
-  name: POST rotate-user-account-keys with a wrong password
+  name: POST rotate-user-account-keys
   type: http
   seq: 12
 }
@@ -40,11 +40,13 @@ docs {
   Reference: vaultwarden `post_rotatekey` checks the old hash first, then that every item of the
   account is in the request.
 
-  The wrong-password case pins the first check without real ciphertext.
+  NodeWarden refuses it with 501, like a KDF change (decided 2026-11-10): the
+  rotation rewrites every item of the account in one request, and a partial
+  write would leave items no key opens.
 }
 
 tests {
-  test("a wrong current password stops the rotation", function () {
-    expect(res.status).to.equal(400);
+  test("key rotation is refused as not supported", function () {
+    expect(res.status).to.equal(501);
   });
 }

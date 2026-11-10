@@ -19,11 +19,12 @@ docs {
   it to link an existing account to an organization's SSO.
 
   NodeWarden links SSO on routes of its own (`/api/settings/sso`,
-  `/api/settings/sso/link`); vaultwarden has no such route either.
+  `/api/settings/sso/link`); vaultwarden has no such route either. NodeWarden answers 501 (decided
+  2026-11-10).
 }
 
 tests {
-  test("NodeWarden has a route for it", function () {
-    expect([404, 501]).to.not.include(res.status);
+  test("organization SSO is refused as not supported", function () {
+    expect(res.status).to.equal(501);
   });
 }
