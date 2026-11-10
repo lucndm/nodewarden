@@ -14,6 +14,17 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createServer as createTlsServer } from 'node:https';
 
+/**
+ * The environment to start Chromium with: this process's environment without
+ * LD_LIBRARY_PATH. Chromium finds its own libraries, and a path inherited
+ * from the shell can point it at copies built for another glibc; it then dies
+ * before it opens the debugging port ("GLIBC_2.43 not found").
+ */
+export function chromiumEnv(overrides = {}) {
+  const { LD_LIBRARY_PATH: _ignored, ...rest } = process.env;
+  return { ...rest, ...overrides };
+}
+
 export function findFreePort() {
   return new Promise((resolve, reject) => {
     const server = createServer();

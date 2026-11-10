@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { webcrypto } from 'node:crypto';
 
 import { bytesToBase64, encryptBw, hkdf, hkdfExpand, pbkdf2 } from '../webapp/src/lib/crypto.ts';
-import { startLocalWorker, startTlsProxy } from './local-worker.mjs';
+import { startLocalWorker, startTlsProxy, chromiumEnv } from './local-worker.mjs';
 
 const EMAIL = 'local-extension@example.test';
 const PASSWORD = 'Local-Extension-Check-2026!';
@@ -325,7 +325,7 @@ async function launchChromium(binary, display) {
       '--window-size=1600,1000',
       'about:blank',
     ],
-    { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, DISPLAY: display } }
+    { stdio: ['ignore', 'pipe', 'pipe'], env: chromiumEnv({ DISPLAY: display }) }
   );
   let log = '';
   child.stdout?.on('data', (chunk) => {

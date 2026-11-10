@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { webcrypto } from 'node:crypto';
 
-import { startLocalWorker, findFreePort, createChecks } from './local-worker.mjs';
+import { startLocalWorker, findFreePort, createChecks, chromiumEnv } from './local-worker.mjs';
 import { startFakeSimpleLogin } from './fake-simple-login.ts';
 import { bytesToBase64, encryptBw, hkdfExpand, pbkdf2 } from '../webapp/src/lib/crypto.ts';
 
@@ -53,11 +53,6 @@ function findChromium() {
   return null;
 }
 
-function withoutLibraryPath(env) {
-  const { LD_LIBRARY_PATH: _ignored, ...rest } = env;
-  return rest;
-}
-
 async function launchChromium(binary) {
   const port = await findFreePort();
   const profileDir = await mkdtemp(join(tmpdir(), 'nodewarden-ui-'));
@@ -77,10 +72,7 @@ async function launchChromium(binary) {
       '--window-size=1600,1000',
       'about:blank',
     ],
-    // Chromium finds its own libraries. A LD_LIBRARY_PATH inherited from the
-    // shell can point it at copies built for another glibc, and it then dies
-    // before it opens the debugging port ("GLIBC_2.43 not found").
-    { stdio: ['ignore', 'pipe', 'pipe'], env: withoutLibraryPath(process.env) }
+    { stdio: ['ignore', 'pipe', 'pipe'], env: chromiumEnv() }
   );
   let log = '';
   child.stdout?.on('data', (chunk) => {

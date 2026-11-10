@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { webcrypto } from 'node:crypto';
 
-import { startLocalWorker, findFreePort, createChecks } from './local-worker.mjs';
+import { startLocalWorker, findFreePort, createChecks, chromiumEnv } from './local-worker.mjs';
 import { bytesToBase64, encryptBw, hkdf, hkdfExpand, pbkdf2 } from '../webapp/src/lib/crypto.ts';
 
 const EMAIL = 'local-send-public@example.test';
@@ -67,7 +67,7 @@ async function launchChromium(binary) {
       `--user-data-dir=${profileDir}`,
       'about:blank',
     ],
-    { stdio: 'ignore' }
+    { stdio: 'ignore', env: chromiumEnv() }
   );
   const deadline = Date.now() + 30000;
   let endpoint = null;
