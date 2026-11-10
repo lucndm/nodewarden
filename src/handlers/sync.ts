@@ -10,7 +10,7 @@ import {
 } from '../utils/user-decryption';
 import { buildDomainsResponse } from '../services/domain-rules';
 import { buildWebAuthnPrfOption } from '../utils/account-passkeys';
-import { buildProfileResponse } from '../utils/profile-response';
+import { buildProfileResponse, officialProfileOrganizationFields } from '../utils/profile-response';
 
 // CONTRACT:
 // /api/sync reuses cipherToResponse() as the single cipher response shaper.
@@ -146,6 +146,7 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     use2fa: true,
     useApi: true,
     usersGetPremium: true,
+    ...officialProfileOrganizationFields(),
     object: 'profileOrganization',
   }));
 

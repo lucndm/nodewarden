@@ -95,3 +95,31 @@ export function buildProfileResponse(
     object: 'profile',
   };
 }
+
+// Fields of a profile organization that the official clients require. The
+// Android app parses the sync strictly and drops the whole sync when one is
+// missing ("Fields [keyConnectorEnabled, selfHost, permissions] are
+// required ... at path: $.profile.organizations[0]"). NodeWarden has no Key
+// Connector and no custom roles, so they are fixed values; the permissions
+// carry every key vaultwarden sends.
+export function officialProfileOrganizationFields(): Record<string, unknown> {
+  return {
+    keyConnectorEnabled: false,
+    keyConnectorUrl: null,
+    selfHost: true,
+    permissions: {
+      accessEventLogs: false,
+      accessImportExport: false,
+      accessReports: false,
+      createNewCollections: false,
+      editAnyCollection: false,
+      deleteAnyCollection: false,
+      manageGroups: false,
+      managePolicies: false,
+      manageSso: false,
+      manageUsers: false,
+      manageResetPassword: false,
+      manageScim: false,
+    },
+  };
+}
