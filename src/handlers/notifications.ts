@@ -73,10 +73,18 @@ async function consumeWebSocketConnectionToken(request: Request, env: Env): Prom
 }
 
 async function authenticateNotificationsHub(request: Request, env: Env): Promise<JWTPayload | null> {
-  // Never accept an access JWT from the URL: URLs are routinely retained by logs,
-  // browser history, proxies, monitoring, and error tracking systems.
   if (request.headers.has('Authorization')) {
     return authenticateAccessToken(request, env);
+  }
+  // The official clients open the hub straight over WebSocket, without the
+  // negotiate step, and a browser cannot set headers on a WebSocket: the
+  // SignalR client puts the access token in the query, and vaultwarden
+  // accepts it there. Query strings are redacted from the Worker's logs and
+  // traces (wrangler.toml), and the token is dropped before the request goes
+  // on to the Durable Object.
+  const queryToken = String(new URL(request.url).searchParams.get('access_token') || '').trim();
+  if (queryToken) {
+    return new AuthService(env).verifyAccessToken(`Bearer ${queryToken}`);
   }
   return consumeWebSocketConnectionToken(request, env);
 }
@@ -114,6 +122,7 @@ export async function handleNotificationsHub(request: Request, env: Env): Promis
   const id = env.NOTIFICATIONS_HUB.idFromName(userId);
   const stub = env.NOTIFICATIONS_HUB.get(id);
   const forwardedUrl = new URL(request.url);
+  forwardedUrl.searchParams.delete('access_token');
   forwardedUrl.searchParams.set('nw_uid', userId);
   if (payload.did) {
     forwardedUrl.searchParams.set('nw_did', payload.did);
