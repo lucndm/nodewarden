@@ -1540,6 +1540,67 @@ export async function handleVerifyPassword(request: Request, env: Env, userId: s
   return jsonResponse(masterPasswordPolicyResponse());
 }
 
+// PUT /api/accounts/avatar
+// The color the clients draw behind the initials. Only the #rrggbb form shows
+// up in the clients, so a shorter form is refused rather than stored.
+export async function handlePutAvatar(request: Request, env: Env, userId: string): Promise<Response> {
+  let body: { avatarColor?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+  const avatarColor = body.avatarColor ?? null;
+  if (avatarColor !== null && (typeof avatarColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(avatarColor))) {
+    return errorResponse('The field AvatarColor must be a HTML/Hex color code with a length of 7 characters', 400);
+  }
+
+  const storage = new StorageService(env.DB);
+  const user = await storage.getUserById(userId);
+  if (!user) return errorResponse('User not found', 404);
+  await storage.setUserAvatarColor(userId, avatarColor);
+  user.avatarColor = avatarColor;
+  AuthService.invalidateUserCache(userId);
+  return jsonResponse(buildProfileResponse(user, env));
+}
+
+// POST /api/accounts/security-stamp
+// "Log out of all sessions": a new security stamp makes every access token
+// that carries the old one fail, and the refresh tokens go with it.
+export async function handlePostSecurityStamp(request: Request, env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const auth = new AuthService(env);
+  const user = await storage.getUserById(userId);
+  if (!user) return errorResponse('User not found', 404);
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+  const secret = readBodyString(body, ['masterPasswordHash', 'MasterPasswordHash']);
+  if (!await verifyUserSecret(auth, user, secret)) {
+    return errorResponse('Invalid password', 400);
+  }
+
+  user.securityStamp = generateUUID();
+  user.updatedAt = new Date().toISOString();
+  await storage.saveUser(user);
+  await storage.deleteRefreshTokensByUserId(user.id);
+  AuthService.invalidateUserCache(user.id);
+  await safeWriteAuditEvent(env, {
+    actorUserId: user.id,
+    action: 'user.sessions.revoke',
+    category: 'security',
+    level: 'security',
+    targetType: 'user',
+    targetId: user.id,
+    metadata: auditRequestMetadata(request),
+  });
+  return new Response(null, { status: 200 });
+}
+
 // POST /api/accounts/api-key
 export async function handleGetApiKey(request: Request, env: Env, userId: string): Promise<Response> {
   return apiKey(request, env, userId, false);

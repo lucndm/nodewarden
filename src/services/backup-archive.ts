@@ -22,6 +22,7 @@ import {
 //   2FA devices, and one-time tokens) must never enter an instance backup.
 // - users.api_key is intentionally not exported.
 // - users.user_key_id is not exported; clients backfill it again after a restore.
+// - users.avatar_color is not exported; it is cosmetic and falls back to the default color.
 // - backup.settings.v1 is exported as portable-only; the current server runtime
 //   envelope must not leave the instance.
 type SqlRow = Record<string, string | number | null>;

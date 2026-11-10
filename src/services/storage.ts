@@ -19,6 +19,7 @@ import {
   getUserCount as countStoredUsers,
   saveUser as saveStoredUser,
   setUserKeyId as setStoredUserKeyId,
+  setUserAvatarColor as setStoredUserAvatarColor,
   upgradePasswordVerifier as upgradeStoredPasswordVerifier,
 } from './storage-user-repo';
 import {
@@ -247,7 +248,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-09-emergency-access';
+const STORAGE_SCHEMA_VERSION = '2026-11-10-avatar-color';
 const REQUIRED_SCHEMA_TABLES = [
   'webauthn_credentials',
   'webauthn_challenges',
@@ -424,6 +425,10 @@ export class StorageService {
 
   async setUserKeyId(userId: string, userKeyId: string): Promise<boolean> {
     return setStoredUserKeyId(this.db, userId, userKeyId);
+  }
+
+  async setUserAvatarColor(userId: string, avatarColor: string | null): Promise<void> {
+    await setStoredUserAvatarColor(this.db, userId, avatarColor);
   }
 
   async createFirstUser(user: User): Promise<boolean> {

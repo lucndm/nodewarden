@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
   totp_recovery_code TEXT,
   api_key TEXT,
   user_key_id TEXT,
+  avatar_color TEXT,
   sso_subject TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

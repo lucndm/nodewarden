@@ -24,7 +24,7 @@ folder match the folders run one by one.
 | Folder | Requests | Passing | Failing |
 |---|---|---|---|
 | `20-account-profile` | 14 | 13 | 1 |
-| `21-account-lifecycle` | 16 | 8 | 8 |
+| `21-account-lifecycle` | 16 | 8 | 8; 16/16 on 2026-11-10 |
 | `22-account-email-flows` | 13 | 10 | 3 |
 | `23-emergency-access` | 18 | 0 | 17 (1 skipped); 18 pass, 1 skipped on 2026-11-10 |
 
@@ -61,10 +61,10 @@ Paths are the official ones, under `/api` unless marked identity.
 ### No route (404)
 
 - [ ] `GET /users/:id/public-key`: needed to confirm organization members and emergency contacts from an official client.
-- [ ] `PUT /accounts/avatar`.
-- [ ] `POST /accounts/security-stamp` ("log out of all sessions"); the old token keeps working.
-- [ ] `POST /accounts/key-management/rotate-user-account-keys` (rotate the account encryption key).
-- [ ] `GET /accounts/sso/user-identifier` and `DELETE /accounts/sso/:organizationId`: NodeWarden links SSO on its own routes (`/api/settings/sso`, `/api/settings/sso/link`). The expected answer is not decided; the tests only record that no route exists.
+- [x] `PUT /accounts/avatar` (2026-11-10): stored in `users.avatar_color`, `#rrggbb` or null, read back in the profile. Not in the backup export, like `user_key_id`.
+- [x] `POST /accounts/security-stamp` (2026-11-10): needs the master password, replaces the stamp and drops the refresh tokens; the old access token answers 401.
+- [x] `POST /accounts/key-management/rotate-user-account-keys`: 501, like a KDF change (decided 2026-11-10).
+- [x] `GET /accounts/sso/user-identifier` and `DELETE /accounts/sso/:organizationId`: 501 (decided 2026-11-10). The official clients link SSO per organization; NodeWarden links one provider for the server on `/api/settings/sso`.
 ### Refused on purpose (501), as decided
 
 - `POST /accounts/set-password`: SSO links existing accounts, so every account has a master password.
@@ -74,7 +74,7 @@ Paths are the official ones, under `/api` unless marked identity.
 
 ### The decision does not reach these paths
 
-- [ ] `DELETE /accounts`: NodeWarden refuses `POST /accounts/delete`, `/delete-account` and `/delete-vault` with 501, but the official client deletes with `DELETE /accounts`, which has no route (404).
+- [x] `DELETE /accounts`: 501, the same answer as the other deletion paths (2026-11-10).
 - [ ] `POST /accounts/email`: mail-backed like `email-token`, but 404 instead of 501.
 - [ ] `POST /accounts/delete-recover` and `/delete-recover-token`: mail-backed, sent without a token, so they end in 401 instead of 501.
 
@@ -88,4 +88,3 @@ Paths are the official ones, under `/api` unless marked identity.
 
 - Official sign-up does not actually need email: vaultwarden answers `register/send-verification-email` with the registration token directly when mail is off. NodeWarden treats it as mail-backed and refuses, which blocks sign-up from every official client. Should official sign-up stay blocked, given NodeWarden registers with invite codes and `RegisterFinishRequest` has no invite code field?
 - The organization invite still needs an answer for the token the official server emails; emergency access settled on not checking it (2026-11-10).
-- Expected answers for the SSO link endpoints.
