@@ -6,8 +6,8 @@
 // official clients read what this writes.
 //
 // What this does NOT do, and says so:
-//   - it never sends an email: the invitation is shown in the web vault, and
-//     the grantee has to sign in to see it.
+//   - it never mails anything that could open the vault: the invitation names
+//     the people involved and the wait, and nothing else.
 //
 // A takeover does not re-encrypt the vault: the vault key stays the same and
 // only the password that opens it is replaced.
@@ -36,6 +36,8 @@ import { getUser, getUserById } from '../services/storage-user-repo';
 import { StorageService } from '../services/storage';
 import { AuthService } from '../services/auth';
 import { sendEmergencyAccessNotice } from '../services/emergency-access-notifier';
+import { isMailConfigured, mailVaultUrl, sendMail } from '../services/mail';
+import { emergencyAccessInviteMail } from '../services/mail-templates';
 import {
   createEmergencyAccess,
   deleteEmergencyAccess,
@@ -113,6 +115,34 @@ async function grantorIdentity(
 ): Promise<{ email: string | null; name: string | null }> {
   const user = await getUserById(env.DB, row.grantorId);
   return { email: user?.email ?? null, name: user?.name ?? null };
+}
+
+/**
+ * Mails the invitation to the address it was sent to.
+ *
+ * The grantor names the grantee, so the mail is written by the grantor and
+ * goes to the address of the invitation, whether or not somebody has an
+ * account with it yet.
+ *
+ * The mail is best effort: it never throws, so a binding that fails cannot
+ * fail the request that stored the grant.
+ */
+async function mailEmergencyAccessInvite(
+  env: Env,
+  row: EmergencyAccessRow,
+  grantor: { email: string; name: string | null } | null
+): Promise<void> {
+  if (!isMailConfigured(env)) return;
+  const to = (row.email || '').trim().toLowerCase();
+  if (!to) return;
+  const mail = emergencyAccessInviteMail({
+    grantorName: grantor?.name ?? null,
+    grantorEmail: grantor?.email ?? '',
+    accessType: row.type === EMERGENCY_ACCESS_TYPE_TAKEOVER ? 'takeover' : 'view',
+    waitTimeDays: row.waitTimeDays,
+    vaultUrl: mailVaultUrl(env),
+  });
+  await sendMail(env, { kind: 'emergency_access_invite', to, ...mail });
 }
 
 /** GET /api/emergency-access/trusted */
@@ -225,7 +255,7 @@ export async function handleInviteEmergencyAccess(
 
   const id = crypto.randomUUID();
   const now = nowIso();
-  await createEmergencyAccess(env.DB, {
+  const row: EmergencyAccessRow = {
     id,
     grantorId: userId,
     granteeId: grantee?.id ?? null,
@@ -238,7 +268,11 @@ export async function handleInviteEmergencyAccess(
     lastNotificationAt: null,
     createdAt: now,
     updatedAt: now,
-  });
+  };
+  await createEmergencyAccess(env.DB, row);
+  // The invitation reaches the address it was sent to, so the grantee does
+  // not have to be watching the vault to hear about it.
+  await mailEmergencyAccessInvite(env, row, grantor);
   return jsonResponse(
     {
       id,
@@ -450,9 +484,10 @@ export async function handleUpdateEmergencyAccess(
 /**
  * POST /api/emergency-access/:id/reinvite — the grantor asks again.
  *
- * There is no mail channel, so this cannot send an invitation. What it can
- * do is point the invitation at somebody who already has an account here:
- * the grant is addressed to them, and they can accept it when they sign in.
+ * It points the invitation at somebody who already has an account here: the
+ * grant is addressed to them, and they can accept it when they sign in. The
+ * invitation is also mailed again, so somebody who never saw the first one
+ * hears about it.
  */
 export async function handleReinviteEmergencyAccess(
   request: Request,
@@ -482,6 +517,8 @@ export async function handleReinviteEmergencyAccess(
     granteeId: grantee.id,
     updatedAt: nowIso(),
   });
+  const grantor = await getUserById(env.DB, userId);
+  await mailEmergencyAccessInvite(env, row, grantor);
   return jsonResponse({ id, object: 'emergencyAccess' });
 }
 

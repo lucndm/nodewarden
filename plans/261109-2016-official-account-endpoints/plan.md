@@ -69,6 +69,7 @@ Paths are the official ones, under `/api` unless marked identity.
 
 - `POST /accounts/set-password`: SSO links existing accounts, so every account has a master password.
 - No email delivery: identity `register/send-verification-email`, `register/verification-email-clicked`, `register/finish`; `email-token`, `verify-email`, `verify-email-token`, `request-otp`, `verify-otp`, `resend-new-device-otp`.
+- The server does mail emergency access invitations, emergency access notices and organization invitations since 2026-11-11; the routes listed here stay 501.
 - `POST /accounts/verify-devices`: refused with 400 rather than 501, pointing to TOTP or WebAuthn, for the same reason.
 - `POST /accounts/password-hint`: removed on 2026-10-16; the request checks that no hint is disclosed.
 

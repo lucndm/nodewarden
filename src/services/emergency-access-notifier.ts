@@ -8,12 +8,15 @@
 // stop it. The message goes to the same chat the security alerts go to, and
 // it never carries a key, a password or a hash.
 //
-// The server has no mail channel, so this is a Telegram message. It is best
-// effort: a failure to deliver must never change the result of the request
-// that triggered it.
+// The owner also gets a mail, because the mail reaches them where the chat
+// may not. It is best effort: a failure to deliver must never change the
+// result of the request that triggered it.
 
 import type { Env } from '../types';
 import { RateLimitService } from './ratelimit';
+import { isMailConfigured, mailVaultUrl, sendMail } from './mail';
+import { emergencyAccessRecoveryMail } from './mail-templates';
+import { StorageService } from './storage';
 
 export interface EmergencyAccessNotice {
   /** The account whose vault is at stake: the one that granted the access. */
@@ -28,12 +31,51 @@ export interface EmergencyAccessNotice {
 
 const WINDOW_SECONDS = 900;
 
+/**
+ * Mails the owner that emergency access is moving.
+ *
+ * The mail goes to the address of the account that gave the access away: it
+ * is the one that can still refuse it. A grantor that no longer exists gets
+ * nothing, and the mail never carries anything that could open the vault.
+ */
+async function mailEmergencyAccessRecovery(env: Env, notice: EmergencyAccessNotice): Promise<void> {
+  if (!isMailConfigured(env)) return;
+  try {
+    const storage = new StorageService(env.DB);
+    const grantor = await storage.getUserById(notice.grantorId);
+    if (!grantor) return;
+    const grantee = notice.granteeId ? await storage.getUserById(notice.granteeId) : null;
+    const mail = emergencyAccessRecoveryMail({
+      kind: notice.kind,
+      granteeName: grantee?.name ?? null,
+      granteeEmail: grantee?.email ?? '',
+      waitTimeDays: notice.waitTimeDays,
+      vaultUrl: mailVaultUrl(env),
+    });
+    await sendMail(env, {
+      kind: 'emergency_access_recovery',
+      to: grantor.email,
+      // The kind of the notice is part of the budget, so the request and the
+      // approval that follows it both arrive.
+      budgetKey: `emergency_access_recovery:${notice.kind}`,
+      ...mail,
+    });
+  } catch {
+    // Best effort: a notice that cannot be delivered must not fail the
+    // request that triggered it.
+  }
+}
+
 export async function sendEmergencyAccessNotice(
   env: Env,
   /** The host of the instance, when the caller knows it. */
   host: string | undefined,
   notice: EmergencyAccessNotice
 ): Promise<void> {
+  // The mail goes out whether or not Telegram is configured: the owner can
+  // only refuse the recovery while they know about it.
+  await mailEmergencyAccessRecovery(env, notice);
+
   const token = env.TELEGRAM_BOT_TOKEN?.trim();
   const chatId = env.TELEGRAM_CHAT_ID?.trim();
   if (!token || !chatId) return;

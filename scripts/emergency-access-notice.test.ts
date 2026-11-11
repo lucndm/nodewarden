@@ -13,6 +13,9 @@ import { installTestGlobals } from './test-env';
 installTestGlobals();
 
 import { sendEmergencyAccessNotice } from '../src/services/emergency-access-notifier';
+import { ensureStorageSchema } from '../src/services/storage-schema';
+import { StorageService } from '../src/services/storage';
+import type { MailBinding } from '../src/services/mail';
 import { sqliteD1 } from './sqlite-d1';
 import type { Env } from '../src/types';
 
@@ -42,11 +45,72 @@ async function fixture(): Promise<Env> {
   db.exec(
     'CREATE TABLE rate_limit_buckets(bucket_key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)'
   );
-  return {
+  await ensureStorageSchema(sqliteD1(db));
+  const env = {
     DB: sqliteD1(db),
     TELEGRAM_BOT_TOKEN: TOKEN,
     TELEGRAM_CHAT_ID: CHAT,
   } as unknown as Env;
+  const storage = new StorageService(env.DB);
+  for (const [id, email] of [
+    [OWNER, 'owner@example.test'],
+    [GRANTEE, 'grantee@example.test'],
+  ]) {
+    await storage.createUser({
+      id,
+      email,
+      name: null,
+      masterPasswordHint: null,
+      masterPasswordHash: 'the-grantor-master-hash',
+      key: 'the-grantor-key',
+      privateKey: 'the-grantor-private-key',
+      publicKey: null,
+      kdfType: 0,
+      kdfIterations: 600000,
+      kdfMemory: null,
+      kdfParallelism: null,
+      securityStamp: 'stamp',
+      role: 'user',
+      status: 'active',
+      verifyDevices: false,
+      totpSecret: null,
+      totpRecoveryCode: null,
+      yubikeyKey1: null,
+      yubikeyKey2: null,
+      yubikeyKey3: null,
+      yubikeyKey4: null,
+      yubikeyNfc: false,
+      apiKey: null,
+      userKeyId: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as never);
+  }
+  return env;
+}
+
+/** The mails the server handed to the binding. */
+type SentMail = Parameters<MailBinding['send']>[0];
+
+/** A server that mails, and the mails it sent. */
+async function mailFixture(): Promise<{ env: Env; sent: SentMail[] }> {
+  const env = await fixture();
+  const sent: SentMail[] = [];
+  const EMAIL: MailBinding = {
+    async send(message) {
+      sent.push(message);
+      return { messageId: 'fake-message-id' };
+    },
+  };
+  return {
+    env: {
+      ...env,
+      EMAIL,
+      MAIL_FROM: 'no-reply@pass.minhluc.info',
+      MAIL_VAULT_URL: 'https://pass.minhluc.info',
+    } as unknown as Env,
+    sent,
+  };
 }
 
 test('the owner is told that somebody asked to take over', async () => {
@@ -196,4 +260,99 @@ test('a crafted host cannot write extra lines into the message', async () => {
   const message = capture.sent[0];
   assert.ok(!message.includes('your vault was taken'), 'the crafted line is not in the message');
   assert.ok(!message.includes('vault.example.test\n'), 'the crafted host is dropped whole');
+});
+
+test('the grantor is mailed when a recovery starts', async () => {
+  const { env, sent } = await mailFixture();
+  const capture = captureSent();
+  try {
+    await sendEmergencyAccessNotice(env, 'vault.example.test', {
+      kind: 'recovery_started',
+      grantorId: OWNER,
+      granteeId: GRANTEE,
+      waitTimeDays: 7,
+    });
+  } finally {
+    capture.restore();
+  }
+  assert.equal(sent.length, 1, 'one mail is sent');
+  assert.equal(sent[0].to, 'owner@example.test');
+  assert.equal(sent[0].subject, 'Emergency access to your vault was requested');
+  assert.ok(sent[0].text.includes('grantee@example.test'), sent[0].text);
+  assert.ok(sent[0].text.includes('7 days'), sent[0].text);
+});
+
+test('the mail goes out without Telegram configured', async () => {
+  const { env, sent } = await mailFixture();
+  const withoutTelegram = {
+    ...env,
+    TELEGRAM_BOT_TOKEN: undefined,
+    TELEGRAM_CHAT_ID: undefined,
+  } as unknown as Env;
+  await sendEmergencyAccessNotice(withoutTelegram, 'vault.example.test', {
+    kind: 'recovery_started',
+    grantorId: OWNER,
+    granteeId: GRANTEE,
+    waitTimeDays: 7,
+  });
+  assert.equal(sent.length, 1, 'the mail does not wait for the Telegram secrets');
+});
+
+test('a grantor who no longer exists is not mailed', async () => {
+  const { env, sent } = await mailFixture();
+  const capture = captureSent();
+  try {
+    await sendEmergencyAccessNotice(env, 'vault.example.test', {
+      kind: 'recovery_started',
+      grantorId: '00000000-0000-4000-8000-0000000000ff',
+      granteeId: GRANTEE,
+      waitTimeDays: 7,
+    });
+  } finally {
+    capture.restore();
+  }
+  assert.equal(sent.length, 0, 'there is nobody to mail');
+});
+
+test('started and approved are both delivered', async () => {
+  const { env, sent } = await mailFixture();
+  const capture = captureSent();
+  try {
+    await sendEmergencyAccessNotice(env, 'vault.example.test', {
+      kind: 'recovery_started',
+      grantorId: OWNER,
+      granteeId: GRANTEE,
+      waitTimeDays: 7,
+    });
+    await sendEmergencyAccessNotice(env, 'vault.example.test', {
+      kind: 'recovery_approved',
+      grantorId: OWNER,
+      granteeId: GRANTEE,
+      waitTimeDays: 7,
+    });
+  } finally {
+    capture.restore();
+  }
+  assert.equal(sent.length, 2, 'both kinds of notice arrive');
+});
+
+test('the mail carries nothing that opens the vault', async () => {
+  const { env, sent } = await mailFixture();
+  const capture = captureSent();
+  try {
+    await sendEmergencyAccessNotice(env, 'vault.example.test', {
+      kind: 'recovery_started',
+      grantorId: OWNER,
+      granteeId: GRANTEE,
+      waitTimeDays: 7,
+    });
+  } finally {
+    capture.restore();
+  }
+  assert.equal(sent.length, 1);
+  const mail = sent[0];
+  for (const secret of ['the-grantor-key', 'the-grantor-private-key', 'the-grantor-master-hash']) {
+    assert.ok(!mail.text.includes(secret), `the text does not carry ${secret}`);
+    assert.ok(!mail.html.includes(secret), `the html does not carry ${secret}`);
+  }
 });
