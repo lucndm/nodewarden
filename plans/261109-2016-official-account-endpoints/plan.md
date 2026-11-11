@@ -72,6 +72,12 @@ Paths are the official ones, under `/api` unless marked identity.
 - `POST /accounts/verify-devices`: refused with 400 rather than 501, pointing to TOTP or WebAuthn, for the same reason.
 - `POST /accounts/password-hint`: removed on 2026-10-16; the request checks that no hint is disclosed.
 
+### Sign-up stays in NodeWarden's web vault (decided 2026-11-11)
+
+- Identity `register/send-verification-email`, `register/verification-email-clicked` and `register/finish` stay 501, so no official client can create an account. Accounts are created in NodeWarden's web vault, which asks for an invite code; `RegisterFinishRequest` has no field for one.
+- This holds even though official sign-up does not strictly need mail: with mail off, vaultwarden answers `register/send-verification-email` with the registration token directly. Serving that path would open sign-up past the invite codes.
+- An account made in the web vault signs in from every official client as usual.
+
 ### The decision does not reach these paths
 
 - [x] `DELETE /accounts`: 501, the same answer as the other deletion paths (2026-11-10).
@@ -86,5 +92,4 @@ Paths are the official ones, under `/api` unless marked identity.
 
 ## Open questions
 
-- Official sign-up does not actually need email: vaultwarden answers `register/send-verification-email` with the registration token directly when mail is off. NodeWarden treats it as mail-backed and refuses, which blocks sign-up from every official client. Should official sign-up stay blocked, given NodeWarden registers with invite codes and `RegisterFinishRequest` has no invite code field?
 - The organization invite still needs an answer for the token the official server emails; emergency access settled on not checking it (2026-11-10).
