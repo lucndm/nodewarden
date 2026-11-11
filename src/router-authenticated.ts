@@ -108,7 +108,7 @@ import {
   handleRemoveSendAuth,
 } from './handlers/sends';
 import { handleSync } from './handlers/sync';
-import { handleCiphersImport } from './handlers/import';
+import { handleCiphersImport, handleOrganizationCiphersImport } from './handlers/import';
 import {
   handleCreateAttachment,
   handleUploadAttachment,
@@ -436,6 +436,10 @@ export async function handleAuthenticatedRoute(
 
   if (path === '/api/ciphers/import' && method === 'POST') {
     return handleCiphersImport(request, env, userId);
+  }
+
+  if (path === '/api/ciphers/import-organization' && method === 'POST') {
+    return handleOrganizationCiphersImport(request, env, userId);
   }
 
   if (path === '/api/ciphers/usage' && method === 'GET') {
