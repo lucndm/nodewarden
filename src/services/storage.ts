@@ -202,7 +202,9 @@ import {
   getCollectionRightsForCollections as listStoredCollectionRightsForCollections,
   getOrganizationCollectionIds as listStoredOrganizationCollectionIds,
   getOrganizationCiphersForRotation as listStoredOrganizationCiphersForRotation,
+  getOrganizationIdByCipherIds as listStoredOrganizationIdByCipherIds,
   setCipherCollections as setStoredCipherCollections,
+  updateCollectionCipherLinks as updateStoredCollectionCipherLinks,
   getCollectionsForUser as listStoredCollectionsForUser,
   getGroupsForUser as listStoredGroupsForUser,
   getItemAccess as getStoredItemAccess,
@@ -875,6 +877,19 @@ export class StorageService {
 
   async setCipherCollections(cipherId: string, collectionIds: string[]): Promise<void> {
     return setStoredCipherCollections(this.db, cipherId, collectionIds);
+  }
+
+  /** The organization each of these items belongs to, keyed by item id. */
+  async getOrganizationIdByCipherIds(cipherIds: string[]): Promise<Map<string, string | null>> {
+    return listStoredOrganizationIdByCipherIds(this.db, this.sqlChunkSize.bind(this), cipherIds);
+  }
+
+  /** Puts the collection links of several items in place, in one go. */
+  async updateCollectionCipherLinks(
+    added: Array<[string, string]>,
+    removed: Array<[string, string]>
+  ): Promise<void> {
+    return updateStoredCollectionCipherLinks(this.db, this.sqlChunkSize.bind(this), added, removed);
   }
 
   /**

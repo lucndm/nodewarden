@@ -43,6 +43,7 @@ import {
   handleDeleteCipher,
   handleDeleteCipherCompat,
   handleSetCipherCollections,
+  handleBulkUpdateCipherCollections,
   handleShareCipher,
   handleBulkShareCiphers,
   handlePermanentDeleteCipher,
@@ -441,6 +442,10 @@ export async function handleAuthenticatedRoute(
 
   if (path === '/api/ciphers/import-organization' && method === 'POST') {
     return handleOrganizationCiphersImport(request, env, userId);
+  }
+
+  if (path === '/api/ciphers/bulk-collections' && method === 'POST') {
+    return handleBulkUpdateCipherCollections(request, env, userId);
   }
 
   if (path === '/api/ciphers/usage' && method === 'GET') {

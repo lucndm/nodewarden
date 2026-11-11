@@ -886,6 +886,71 @@ export async function setCipherCollections(
   await db.batch(statements);
 }
 
+/**
+ * Adds and removes the collection links of several items at once.
+ *
+ * The caller has already checked that the member may write these items and
+ * these collections, and that no item is left without a collection: the
+ * statements below only put the links in place.
+ */
+export async function updateCollectionCipherLinks(
+  db: D1Database,
+  sqlChunkSize: SqlChunkSize,
+  added: Array<[string, string]>,
+  removed: Array<[string, string]>
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [];
+  for (const [cipherId, collectionId] of added) {
+    statements.push(
+      db
+        .prepare('INSERT INTO collection_ciphers (cipher_id, collection_id) VALUES (?, ?)')
+        .bind(cipherId, collectionId)
+    );
+  }
+  for (const [cipherId, collectionId] of removed) {
+    statements.push(
+      db
+        .prepare('DELETE FROM collection_ciphers WHERE cipher_id = ? AND collection_id = ?')
+        .bind(cipherId, collectionId)
+    );
+  }
+  if (!statements.length) return;
+  // D1 takes a bounded number of statements per batch, so the write is split.
+  const chunkSize = sqlChunkSize(0);
+  for (let i = 0; i < statements.length; i += chunkSize) {
+    await db.batch(statements.slice(i, i + chunkSize));
+  }
+}
+
+/**
+ * The organization each of these items belongs to, keyed by item id.
+ *
+ * An item of an organization belongs to it whatever member created it, so the
+ * organization of the item itself is what says whether a bulk action may
+ * touch it.
+ */
+export async function getOrganizationIdByCipherIds(
+  db: D1Database,
+  sqlChunkSize: SqlChunkSize,
+  cipherIds: string[]
+): Promise<Map<string, string | null>> {
+  const organizationByCipher = new Map<string, string | null>();
+  if (!cipherIds.length) return organizationByCipher;
+  const chunkSize = sqlChunkSize(0);
+  for (let i = 0; i < cipherIds.length; i += chunkSize) {
+    const chunk = cipherIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const res = await db
+      .prepare(`SELECT id, organization_id FROM ciphers WHERE id IN (${placeholders})`)
+      .bind(...chunk)
+      .all<{ id: string; organization_id: string | null }>();
+    for (const row of res.results || []) {
+      organizationByCipher.set(row.id, row.organization_id ?? null);
+    }
+  }
+  return organizationByCipher;
+}
+
 /** The collections of one organization that these ids name. */
 export async function getOrganizationCollectionIds(
   db: D1Database,
