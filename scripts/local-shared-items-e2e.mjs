@@ -145,7 +145,7 @@ async function run(worker, checks) {
     body: {
       name: ORG_NAME,
       key: enc('wrapped-organization-key'),
-      collectionName: COLLECTION_NAME,
+      collectionName: enc(COLLECTION_NAME),
       keys: {
         publicKey: Buffer.from('org-public-key').toString('base64'),
         encryptedPrivateKey: enc('org-private-key'),

@@ -14,6 +14,7 @@ import { StorageService } from '../services/storage';
 import { notifyVaultSyncForRequest } from './ciphers';
 import { errorResponse, jsonResponse } from '../utils/response';
 import { officialProfileOrganizationFields } from '../utils/profile-response';
+import { isValidEncString } from '../utils/enc-string';
 import type { Env } from '../types';
 
 const OWNER_TYPE = 0;
@@ -22,6 +23,11 @@ const STATUS_INVITED = 0;
 const STATUS_ACCEPTED = 1;
 const STATUS_CONFIRMED = 2;
 const STATUS_REVOKED = -1;
+
+// A collection name is protected by the organization key, like every other
+// name of a shared item. The official clients read it as an encrypted string
+// and refuse to sync an organization whose collection names are in plain text.
+export const COLLECTION_NAME_NOT_ENCRYPTED = 'The collection name must be encrypted with the organization key';
 
 // A rotation is a bounded write. These caps keep one call from pushing an
 // arbitrarily large body into the database; the client batches instead.
@@ -64,6 +70,15 @@ export async function handleCreateOrganization(
   const name = text(body.name).trim();
   if (!name) return errorResponse('Organization name is required', 400);
 
+  // The organization starts with one collection, and its name belongs to the
+  // organization key like every other name of a shared item. The official
+  // clients read it as an encrypted string and stop syncing when it is not
+  // one, so a plain name is refused here rather than stored.
+  const collectionName = text(body.collectionName, 4096).trim();
+  if (!isValidEncString(collectionName)) {
+    return errorResponse(COLLECTION_NAME_NOT_ENCRYPTED, 400);
+  }
+
   // Without a wrapped key the members could never open a shared item, so an
   // organization created without one would be a shell.
   const wrappedOrganizationKey = text(body.key, 4096).trim();
@@ -78,7 +93,6 @@ export async function handleCreateOrganization(
   const orgId = crypto.randomUUID();
   const membershipId = crypto.randomUUID();
   const collectionId = crypto.randomUUID();
-  const collectionName = text(body.collectionName).trim() || 'Default';
 
   await storage.createOrganizationWithOwner({
     id: orgId,
@@ -754,18 +768,16 @@ export async function handleCreateCollection(
   } catch {
     return errorResponse('Invalid JSON body', 400);
   }
-  const name = text(body.name).trim();
+  // The name is an encrypted string, so it is longer than the plain text it
+  // carries and needs more room than a name in the clear.
+  const name = text(body.name, 4096).trim();
   if (!name) return errorResponse('Collection name is required', 400);
+  if (!isValidEncString(name)) return errorResponse(COLLECTION_NAME_NOT_ENCRYPTED, 400);
 
   const collectionId = crypto.randomUUID();
   const now = new Date().toISOString();
   await storage.createCollection({ id: collectionId, orgId, name, now });
-  // A collection is something the members' clients have to sync.
-  for (const membership of await storage.getOrganizationUsers(orgId)) {
-    if (membership.status !== STATUS_CONFIRMED) continue;
-    const revision = await storage.updateRevisionDate(membership.userId, now);
-    notifyVaultSyncForRequest(request, env, membership.userId, revision);
-  }
+  await notifyOrganizationMembers(request, env, storage, orgId, now);
   return jsonResponse(
     {
       id: collectionId,
@@ -780,6 +792,79 @@ export async function handleCreateCollection(
     },
     200
   );
+}
+
+// PUT /api/organizations/:orgId/collections/:collectionId
+//
+// Renames a collection. The name belongs to the organization key like every
+// other name of a shared item, so the clients of the members have to read a
+// new one after the rename.
+export async function handleUpdateCollection(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string,
+  collectionId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  let body: { name?: unknown; groups?: unknown; users?: unknown };
+  try {
+    body = (await request.json()) as { name?: unknown; groups?: unknown; users?: unknown };
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
+  // The admin console sends the whole collection: the members and the groups
+  // that may reach it. This endpoint renames and nothing else, and answering
+  // it would quietly drop the access those lists carry.
+  if (body.groups !== undefined || body.users !== undefined) {
+    return handleUnsupportedOrganizationAction();
+  }
+
+  const collection = await storage.getCollection(collectionId);
+  if (!collection || collection.orgId !== orgId) {
+    return errorResponse('Collection not found', 404);
+  }
+
+  const name = text(body.name, 4096).trim();
+  if (!isValidEncString(name)) return errorResponse(COLLECTION_NAME_NOT_ENCRYPTED, 400);
+
+  const now = new Date().toISOString();
+  await storage.updateCollectionName({ id: collectionId, orgId, name, now });
+  await notifyOrganizationMembers(request, env, storage, orgId, now);
+  return jsonResponse(
+    {
+      id: collectionId,
+      organizationId: orgId,
+      name,
+      externalId: null,
+      type: 0,
+      readOnly: false,
+      hidePasswords: false,
+      manage: true,
+      object: 'collectionDetails',
+    },
+    200
+  );
+}
+
+// A collection is something the members' clients have to sync, so every
+// confirmed member of the organization gets a new revision.
+async function notifyOrganizationMembers(
+  request: Request,
+  env: Env,
+  storage: StorageService,
+  orgId: string,
+  now: string
+): Promise<void> {
+  for (const membership of await storage.getOrganizationUsers(orgId)) {
+    if (membership.status !== STATUS_CONFIRMED) continue;
+    const revision = await storage.updateRevisionDate(membership.userId, now);
+    notifyVaultSyncForRequest(request, env, membership.userId, revision);
+  }
 }
 
 // GET /api/organizations/:orgId/collections

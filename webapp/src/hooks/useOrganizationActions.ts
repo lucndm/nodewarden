@@ -395,7 +395,10 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
     }
     setBusyOrganizationId('new');
     try {
-      const material = await createOrganizationKeyMaterial({ ownerPublicKey: input.profile.publicKey });
+      const material = await createOrganizationKeyMaterial({
+        ownerPublicKey: input.profile.publicKey,
+        collectionName: 'Default',
+      });
       await createOrganizationApi(input.authedFetch, { name: trimmedName, ...material });
       await input.onChanged();
       input.onNotify('success', t('txt_organization_created'));

@@ -174,7 +174,8 @@ export async function createOrganization(
   authedFetch: AuthedFetch,
   input: {
     name: string;
-    collectionName?: string;
+    /** The name of the first collection, encrypted with the organization key. */
+    encryptedCollectionName: string;
     /** The organization key, wrapped for the owner in the `4.` form. */
     wrappedKey: string;
     /** The organization's RSA public key (SPKI, base64). */
@@ -188,7 +189,7 @@ export async function createOrganization(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: input.name,
-      collectionName: input.collectionName || 'Default',
+      collectionName: input.encryptedCollectionName,
       key: input.wrappedKey,
       keys: { publicKey: input.publicKey, encryptedPrivateKey: input.encryptedPrivateKey },
     }),
@@ -198,6 +199,30 @@ export async function createOrganization(
   const organization = body ? normalizeOrganization(body) : null;
   if (!organization) throw new Error(t('txt_organization_create_failed'));
   return organization;
+}
+
+/**
+ * Renames a collection.
+ *
+ * The name has to be encrypted with the organization key: the official
+ * clients read a collection name as an encrypted string and stop syncing an
+ * organization whose collection names are in plain text.
+ */
+export async function renameCollection(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  collectionId: string,
+  name: string
+): Promise<void> {
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(organizationId)}/collections/${encodeURIComponent(collectionId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Rename collection failed'));
 }
 
 /**

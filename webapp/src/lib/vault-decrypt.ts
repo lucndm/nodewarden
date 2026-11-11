@@ -127,6 +127,42 @@ async function decryptFieldWithSource(
 }
 
 /**
+ * Opens the organization keys the member holds.
+ *
+ * The organization key is wrapped for the member with their RSA key, so
+ * opening it takes the member's own key material: the server cannot help.
+ * An organization whose key does not open here simply has none for this
+ * member.
+ */
+export async function openOrganizationKeys(args: {
+  organizations: Array<{ id: string; key: string | null }>;
+  symEncKeyB64: string;
+  symMacKeyB64: string;
+  encryptedPrivateKey: string | null;
+}): Promise<Map<string, { encKey: Uint8Array; macKey: Uint8Array }>> {
+  const organizationKeys = new Map<string, { encKey: Uint8Array; macKey: Uint8Array }>();
+  if (!args.encryptedPrivateKey) return organizationKeys;
+  const userEnc = base64ToBytes(args.symEncKeyB64);
+  const userMac = base64ToBytes(args.symMacKeyB64);
+  for (const organization of args.organizations) {
+    const wrapped = String(organization.key || '');
+    if (!wrapped.startsWith('4.')) continue;
+    try {
+      const raw = await openOrganizationKey({
+        encryptedPrivateKey: args.encryptedPrivateKey,
+        userEncKey: userEnc,
+        userMacKey: userMac,
+        wrappedOrganizationKey: wrapped,
+      });
+      organizationKeys.set(organization.id, { encKey: raw.slice(0, 32), macKey: raw.slice(32, 64) });
+    } catch {
+      // A key wrapped for someone else simply does not open here.
+    }
+  }
+  return organizationKeys;
+}
+
+/**
  * Reads the names of the collections.
  *
  * A collection name is encrypted with the organization key, exactly like a
@@ -140,29 +176,19 @@ export async function decryptCollectionNames<T extends { organizationId: string;
   symEncKeyB64: string;
   symMacKeyB64: string;
   encryptedPrivateKey: string | null;
+  /** The organization keys, when the caller has already opened them. */
+  organizationKeys?: Map<string, { encKey: Uint8Array; macKey: Uint8Array }>;
 }): Promise<T[]> {
   if (!args.collections.length) return [];
-  const userEnc = base64ToBytes(args.symEncKeyB64);
-  const userMac = base64ToBytes(args.symMacKeyB64);
 
-  const organizationKeys = new Map<string, { encKey: Uint8Array; macKey: Uint8Array }>();
-  if (args.encryptedPrivateKey) {
-    for (const organization of args.organizations) {
-      const wrapped = String(organization.key || '');
-      if (!wrapped.startsWith('4.')) continue;
-      try {
-        const raw = await openOrganizationKey({
-          encryptedPrivateKey: args.encryptedPrivateKey,
-          userEncKey: userEnc,
-          userMacKey: userMac,
-          wrappedOrganizationKey: wrapped,
-        });
-        organizationKeys.set(organization.id, { encKey: raw.slice(0, 32), macKey: raw.slice(32, 64) });
-      } catch {
-        // A key wrapped for someone else simply does not open here.
-      }
-    }
-  }
+  const organizationKeys =
+    args.organizationKeys ??
+    (await openOrganizationKeys({
+      organizations: args.organizations,
+      symEncKeyB64: args.symEncKeyB64,
+      symMacKeyB64: args.symMacKeyB64,
+      encryptedPrivateKey: args.encryptedPrivateKey,
+    }));
 
   return Promise.all(
     args.collections.map(async (collection) => {

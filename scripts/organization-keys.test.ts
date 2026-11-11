@@ -40,6 +40,13 @@ function encString(iv: Uint8Array, data: Uint8Array, mac: Uint8Array): string {
   return `2.${b64(iv)}|${b64(data)}|${b64(mac)}`;
 }
 
+/** The name of the first collection, encrypted the way a client sends it. */
+const ENC_DEFAULT = encString(
+  new Uint8Array(12).fill(1),
+  new Uint8Array(16).fill(2),
+  new Uint8Array(16).fill(3)
+);
+
 /** Wraps a symmetric key for one RSA public key, the way a client does. */
 async function wrapFor(publicKey: CryptoKey, key: CryptoKey): Promise<{ wrapped: string; raw: Uint8Array }> {
   const raw = new Uint8Array(await subtle.exportKey('raw', key));
@@ -164,7 +171,7 @@ test('the organization key reaches each member wrapped for them', async () => {
   const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
     name: 'Acme',
     billingEmail: 'billing@example.test',
-    collectionName: 'Default',
+    collectionName: ENC_DEFAULT,
     key: ownerWrapped.wrapped,
     keys: { publicKey: ownerKeys.publicKeyB64, encryptedPrivateKey: '2.a|b|c' },
   });
@@ -265,7 +272,7 @@ test('an organization created without a wrapped key is refused', async () => {
   const response = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
     name: 'Acme',
     billingEmail: 'billing@example.test',
-    collectionName: 'Default',
+    collectionName: ENC_DEFAULT,
   });
   assert.ok(response);
   assert.equal(response.status, 400, 'an organization nobody could open must not be created');
@@ -276,7 +283,7 @@ test('only an owner or admin may invite or confirm', async () => {
 
   const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
     name: 'Acme',
-    collectionName: 'Default',
+    collectionName: ENC_DEFAULT,
     key: '2.a|b|c',
   });
   assert.ok(created);
@@ -322,7 +329,7 @@ test('the memberships list keeps the wrapped key away from an outsider', async (
   const { env } = await fixture();
   const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
     name: 'Acme',
-    collectionName: 'Default',
+    collectionName: ENC_DEFAULT,
     key: '2.a|b|c',
   });
   assert.ok(created);
@@ -345,7 +352,7 @@ test('a backup carries the organization and the wrapped keys across', async () =
 
   const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
     name: 'Acme',
-    collectionName: 'Default',
+    collectionName: ENC_DEFAULT,
     key: organizationKeyWrapped.wrapped,
     keys: { publicKey: ownerKeys.publicKeyB64, encryptedPrivateKey: '2.aa|bb|cc' },
   });
@@ -380,7 +387,7 @@ test('only the owner confirms an admin, and the confirmed member is told to sync
   const { env, memberKeys, organizationKey } = await fixture();
   const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
     name: 'Acme',
-    collectionName: 'Default',
+    collectionName: ENC_DEFAULT,
     key: '2.a|b|c',
   });
   assert.ok(created);
@@ -427,7 +434,7 @@ test('the official clients accept with the membership in the path, and only thei
   const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
     name: 'Acme',
     billingEmail: 'billing@example.test',
-    collectionName: 'Default',
+    collectionName: ENC_DEFAULT,
     key: ownerWrapped.wrapped,
     keys: { publicKey: ownerKeys.publicKeyB64, encryptedPrivateKey: '2.a|b|c' },
   });
@@ -462,7 +469,7 @@ test('every profile organization carries the fields the Android app requires', a
   const created = await call(env, 'https://vault.example.test/api/organizations', 'POST', OWNER, {
     name: 'Acme',
     billingEmail: 'billing@example.test',
-    collectionName: 'Default',
+    collectionName: ENC_DEFAULT,
     key: ownerWrapped.wrapped,
     keys: { publicKey: ownerKeys.publicKeyB64, encryptedPrivateKey: '2.a|b|c' },
   });
