@@ -1732,6 +1732,7 @@ Object.assign(fi, {
   "txt_email_change_code_sent": "Koodi on matkalla uuteen osoitteeseen. Se on voimassa 15 minuuttia.",
   "txt_email_changed_signing_out_everywhere": "Tilin sähköpostiosoite vaihtui. Kaikki istunnot päättyivät, kirjaudu uudelleen sisään.",
   "txt_email_change_failed": "Tilin sähköpostiosoitetta ei voitu vaihtaa.",
+  "txt_build_stamp_label": "Koonti",
 });
 
 export default fi;

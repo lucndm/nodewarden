@@ -434,6 +434,22 @@
   @apply m-0;
 }
 
+.auth-build-stamp {
+  margin-top: var(--space-3);
+  text-align: center;
+  font-size: var(--font-xs);
+  color: var(--muted);
+}
+
+.auth-build-stamp a {
+  color: var(--muted-strong);
+  font-family: var(--font-mono);
+}
+
+.auth-build-stamp a:hover {
+  text-decoration: underline;
+}
+
 .standalone-eyebrow {
   @apply mb-1 text-center text-xs font-extrabold uppercase tracking-[0.12em];
   color: var(--muted);

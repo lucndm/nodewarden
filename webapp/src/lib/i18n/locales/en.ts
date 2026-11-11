@@ -1811,6 +1811,7 @@ Object.assign(en, {
   "txt_email_change_code_sent": "The code is on its way to the new address. It is good for 15 minutes.",
   "txt_email_changed_signing_out_everywhere": "The email of your account was changed. Every session was ended, so sign in again.",
   "txt_email_change_failed": "The email of the account could not be changed.",
+  "txt_build_stamp_label": "Build",
 });
 
 export default en;

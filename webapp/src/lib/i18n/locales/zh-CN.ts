@@ -1761,6 +1761,7 @@ Object.assign(zhCN, {
   "txt_email_change_code_sent": "验证码已发往新地址，15 分钟内有效。",
   "txt_email_changed_signing_out_everywhere": "账户邮箱已更改，所有会话已结束，请重新登录。",
   "txt_email_change_failed": "无法更改账户邮箱。",
+  "txt_build_stamp_label": "构建",
 });
 
 export default zhCN;

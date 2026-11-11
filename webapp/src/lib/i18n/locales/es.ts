@@ -1732,6 +1732,7 @@ Object.assign(es, {
   "txt_email_change_code_sent": "El código va en camino a la nueva dirección. Es válido durante 15 minutos.",
   "txt_email_changed_signing_out_everywhere": "El correo electrónico de tu cuenta ha cambiado. Se han cerrado todas las sesiones, vuelve a iniciar sesión.",
   "txt_email_change_failed": "No se ha podido cambiar el correo electrónico de la cuenta.",
+  "txt_build_stamp_label": "Compilación",
 });
 
 export default es;

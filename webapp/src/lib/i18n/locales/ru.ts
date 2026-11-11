@@ -1732,6 +1732,7 @@ Object.assign(ru, {
   "txt_email_change_code_sent": "Код отправлен на новый адрес. Он действует 15 минут.",
   "txt_email_changed_signing_out_everywhere": "Адрес электронной почты вашей учётной записи изменён. Все сеансы завершены, войдите снова.",
   "txt_email_change_failed": "Не удалось сменить адрес электронной почты учётной записи.",
+  "txt_build_stamp_label": "Сборка",
 });
 
 export default ru;

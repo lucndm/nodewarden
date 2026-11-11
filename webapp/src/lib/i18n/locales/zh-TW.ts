@@ -1811,6 +1811,7 @@ Object.assign(zhTW, {
   "txt_email_change_code_sent": "驗證碼已寄往新位址，15 分鐘內有效。",
   "txt_email_changed_signing_out_everywhere": "帳戶電子郵件已變更，所有工作階段已結束，請重新登入。",
   "txt_email_change_failed": "無法變更帳戶電子郵件。",
+  "txt_build_stamp_label": "建置",
 });
 
 export default zhTW;
