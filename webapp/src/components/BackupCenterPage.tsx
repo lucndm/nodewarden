@@ -22,6 +22,7 @@ import {
   getRemoteBrowserCacheKey,
   getVisibleDestinations,
   invalidateRemoteBrowserCacheForDestination,
+  isDestinationReadyToBrowse,
   isReplaceRequiredError,
   loadPersistedRemoteBrowserState,
   persistRemoteBrowserState,
@@ -219,6 +220,7 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
   const [remoteBrowserPathByDestination, setRemoteBrowserPathByDestination] = useState<Record<string, string>>(persistedRemoteState.pathByDestination);
   const [remoteBrowserPageByKey, setRemoteBrowserPageByKey] = useState<Record<string, number>>(persistedRemoteState.pageByKey);
   const [remoteBrowserRefreshedAt, setRemoteBrowserRefreshedAt] = useState<Record<string, number>>(persistedRemoteState.refreshedAt || {});
+  const [remoteBrowserError, setRemoteBrowserError] = useState<string | null>(null);
   const [showAddChooser, setShowAddChooser] = useState(false);
 
   const visibleDestinations = getVisibleDestinations(settings);
@@ -242,6 +244,7 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
   const recommendedS3Providers = RECOMMENDED_PROVIDERS.filter((provider) => provider.protocol === 's3');
   const canRunSelectedDestination = !!selectedDestination && selectedDestinationIsSaved;
   const canBrowseSelectedDestination = !!savedSelectedDestination;
+  const selectedDestinationReady = savedSelectedDestination ? isDestinationReadyToBrowse(savedSelectedDestination) : false;
   const backupPasswordPromptTitle =
     pendingBackupVerification?.action === 'export'
       ? t('txt_backup_export')
@@ -316,13 +319,20 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
 
   useEffect(() => {
     if (!savedSelectedDestination) return;
+    setRemoteBrowserError(null);
+    // A destination without the details the server needs cannot be browsed.
+    // Asking for it anyway would greet the user with an error for a
+    // destination they have not filled in yet.
+    if (!isDestinationReadyToBrowse(savedSelectedDestination)) return;
     const destinationId = savedSelectedDestination.id;
     const path = remoteBrowserPathByDestination[destinationId] || '';
     const cacheKey = getRemoteBrowserCacheKey(destinationId, path);
     const lastRefreshed = remoteBrowserRefreshedAt[cacheKey] || 0;
     const isStale = Date.now() - lastRefreshed > REMOTE_BROWSER_REFRESH_TTL_MS;
     if (isStale) {
-      void loadRemoteBrowser(destinationId, path, { force: true });
+      // The page opens on this list, so a failure belongs in the list itself
+      // and not in a toast the user did not ask for.
+      void loadRemoteBrowser(destinationId, path, { force: true, silent: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedSelectedDestination?.id]);
@@ -400,7 +410,7 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
     }));
   }
 
-  async function loadRemoteBrowser(destinationId: string, path: string = '', options?: { force?: boolean }): Promise<void> {
+  async function loadRemoteBrowser(destinationId: string, path: string = '', options?: { force?: boolean; silent?: boolean }): Promise<void> {
     const cacheKey = getRemoteBrowserCacheKey(destinationId, path);
     setRemoteBrowserPathByDestination((current) => ({ ...current, [destinationId]: path }));
     if (!options?.force && remoteBrowserCache[cacheKey]) return;
@@ -415,10 +425,17 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
       setRemoteBrowserCache((current) => ({ ...current, [cacheKey]: nextBrowser }));
       setRemoteBrowserPageByKey((current) => ({ ...current, [cacheKey]: 1 }));
       setRemoteBrowserRefreshedAt((current) => ({ ...current, [cacheKey]: Date.now() }));
+      setRemoteBrowserError(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : t('txt_backup_remote_load_failed');
-      setLocalError(message);
-      props.onNotify('error', message);
+      if (options?.silent) {
+        // Nobody asked for this listing, so the failure belongs in the list
+        // and not in a toast over the page.
+        setRemoteBrowserError(message);
+      } else {
+        setLocalError(message);
+        props.onNotify('error', message);
+      }
     } finally {
       setLoadingRemoteBrowser(false);
     }
@@ -1004,6 +1021,8 @@ export default function BackupCenterPage(props: BackupCenterPageProps) {
         remoteBrowserVisibleItems={remoteBrowserVisibleItems}
         remoteBrowserCurrentPage={currentRemoteBrowserPage}
         remoteBrowserTotalPages={remoteBrowserTotalPages}
+        remoteBrowserError={remoteBrowserError}
+        selectedDestinationReady={selectedDestinationReady}
         loadingRemoteBrowser={loadingRemoteBrowser}
         downloadingRemotePath={downloadingRemotePath}
         downloadingRemotePercent={downloadingRemotePercent}

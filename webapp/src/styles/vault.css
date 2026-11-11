@@ -1,6 +1,6 @@
 .vault-grid {
   @apply grid h-full min-h-0 gap-3 p-0.5;
-  grid-template-columns: minmax(0, 36%) minmax(0, 1fr);
+  grid-template-columns: minmax(340px, 36%) minmax(0, 1fr);
 }
 
 @media (min-width: 1181px) {

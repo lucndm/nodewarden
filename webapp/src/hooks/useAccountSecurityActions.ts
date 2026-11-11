@@ -143,10 +143,10 @@ export default function useAccountSecurityActions(options: UseAccountSecurityAct
         });
       },
 
-      async requestEmailChangeCode(newEmail: string, password: string) {
+      async requestEmailChangeCode(newEmail: string, password: string): Promise<boolean> {
         if (!profile) {
           onNotify('error', t('txt_profile_unavailable'));
-          return;
+          return false;
         }
         try {
           await requestEmailChangeCodeApi(authedFetch, {
@@ -156,15 +156,17 @@ export default function useAccountSecurityActions(options: UseAccountSecurityAct
             newEmail,
           });
           onNotify('success', t('txt_email_change_code_sent'));
+          return true;
         } catch (error) {
           onNotify('error', error instanceof Error ? error.message : t('txt_email_change_failed'));
+          return false;
         }
       },
 
-      async changeEmail(newEmail: string, password: string, code: string) {
+      async changeEmail(newEmail: string, password: string, code: string): Promise<boolean> {
         if (!profile) {
           onNotify('error', t('txt_profile_unavailable'));
-          return;
+          return false;
         }
         try {
           await changeEmailApi(authedFetch, {
@@ -179,8 +181,10 @@ export default function useAccountSecurityActions(options: UseAccountSecurityAct
           // The address of the account changed, so every session of that
           // account ends, just as it does when the password changes.
           onLogoutNow();
+          return true;
         } catch (error) {
           onNotify('error', error instanceof Error ? error.message : t('txt_email_change_failed'));
+          return false;
         }
       },
 

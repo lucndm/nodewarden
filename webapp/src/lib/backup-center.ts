@@ -3,6 +3,8 @@ import {
   type BackupDestinationType,
   type BackupRuntimeState,
   type BackupSettings,
+  type S3BackupDestination,
+  type WebDavBackupDestination,
   createBackupDestinationRecord,
   createDefaultBackupSettings,
 } from '@shared/backup-schema';
@@ -209,6 +211,28 @@ export function getVisibleDestinations(settings: BackupSettings | null | undefin
 
 export function getFirstVisibleDestinationId(settings: BackupSettings | null | undefined): string | null {
   return getVisibleDestinations(settings)[0]?.id || null;
+}
+
+/**
+ * Whether a destination holds enough details to be browsed.
+ *
+ * A destination that was never filled in cannot be listed, so the page does
+ * not ask for a listing the server would refuse. The fields are the ones the
+ * server insists on: WebDAV needs the server URL, the user and the password,
+ * S3 needs the endpoint, the bucket, the access key and the secret key.
+ */
+export function isDestinationReadyToBrowse(destination: BackupDestinationRecord): boolean {
+  if (destination.type === 'webdav') {
+    const config = destination.destination as WebDavBackupDestination;
+    return Boolean(String(config.baseUrl || '').trim())
+      && Boolean(String(config.username || '').trim())
+      && Boolean(String(config.password || '').trim());
+  }
+  const config = destination.destination as S3BackupDestination;
+  return Boolean(String(config.endpoint || '').trim())
+    && Boolean(String(config.bucket || '').trim())
+    && Boolean(String(config.accessKeyId || '').trim())
+    && Boolean(String(config.secretAccessKey || '').trim());
 }
 
 export function getDestinationTypeLabel(type: BackupDestinationType): string {

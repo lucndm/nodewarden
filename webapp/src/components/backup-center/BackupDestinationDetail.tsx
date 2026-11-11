@@ -29,6 +29,10 @@ interface BackupDestinationDetailProps {
   remoteBrowserVisibleItems: RemoteBackupBrowserResponse['items'];
   remoteBrowserCurrentPage: number;
   remoteBrowserTotalPages: number;
+  /** The message of a listing that failed without the user asking for it. */
+  remoteBrowserError: string | null;
+  /** Whether the saved destination holds the details a listing needs. */
+  selectedDestinationReady: boolean;
   loadingRemoteBrowser: boolean;
   downloadingRemotePath: string;
   downloadingRemotePercent: number | null;
@@ -610,6 +614,8 @@ export function BackupDestinationDetail(props: BackupDestinationDetailProps) {
             visibleItems={props.remoteBrowserVisibleItems}
             currentPage={props.remoteBrowserCurrentPage}
             totalPages={props.remoteBrowserTotalPages}
+            remoteBrowserError={props.remoteBrowserError}
+            destinationReady={props.selectedDestinationReady}
             downloadingRemotePath={props.downloadingRemotePath}
             downloadingRemotePercent={props.downloadingRemotePercent}
             restoringRemotePath={props.restoringRemotePath}
