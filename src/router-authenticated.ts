@@ -144,6 +144,7 @@ import {
   handleCreateOrganization,
   handleRemoveOrganizationUser,
   handleRotateOrganizationKey,
+  handleUpdateCollection,
   handleUpdateOrganizationUser,
   handleGetCollections,
   handleGetMemberPublicKeys,
@@ -710,6 +711,15 @@ export async function handleAuthenticatedRoute(
       if (method === 'GET') return handleGetOrganizationCollections(request, env, userId, collectionMatch[1]);
       if (method === 'POST') {
         return handleCreateCollection(request, env, userId, collectionMatch[1]);
+      }
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // PUT /api/organizations/:orgId/collections/:collectionId — rename a collection.
+    const collectionItemMatch = path.match(/^\/api\/organizations\/([^/]+)\/collections\/([^/]+)$/i);
+    if (collectionItemMatch) {
+      if (method === 'PUT') {
+        return handleUpdateCollection(request, env, userId, collectionItemMatch[1], collectionItemMatch[2]);
       }
       return handleUnsupportedOrganizationAction();
     }

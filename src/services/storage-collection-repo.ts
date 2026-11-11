@@ -1084,6 +1084,33 @@ export async function createCollection(
     .run();
 }
 
+/** One collection, by its id, or null when there is none. */
+export async function getCollection(db: D1Database, id: string): Promise<Collection | null> {
+  const res = await db
+    .prepare('SELECT id, org_id, name, created_at, updated_at FROM collections WHERE id = ?')
+    .bind(id)
+    .first<{ id: string; org_id: string; name: string; created_at: string; updated_at: string }>();
+  if (!res) return null;
+  return {
+    id: res.id,
+    orgId: res.org_id,
+    name: res.name,
+    createdAt: res.created_at,
+    updatedAt: res.updated_at,
+  };
+}
+
+/** Renames a collection of one organization. */
+export async function updateCollectionName(
+  db: D1Database,
+  input: { id: string; orgId: string; name: string; now: string }
+): Promise<void> {
+  await db
+    .prepare('UPDATE collections SET name = ?, updated_at = ? WHERE id = ? AND org_id = ?')
+    .bind(input.name, input.now, input.id, input.orgId)
+    .run();
+}
+
 /**
  * Replaces the collection assignments of one membership.
  *

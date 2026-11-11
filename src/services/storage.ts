@@ -184,6 +184,8 @@ import {
   confirmOrganizationUser as confirmStoredOrganizationUser,
   createOrganizationWithOwner as createStoredOrganizationWithOwner,
   createCollection as createStoredCollection,
+  getCollection as getStoredCollection,
+  updateCollectionName as updateStoredCollectionName,
   filterWritableCipherIds as filterStoredWritableCipherIds,
   getMembershipCollections as listStoredMembershipCollections,
   getOrganizationMembershipIds as listStoredOrganizationMembershipIds,
@@ -890,6 +892,14 @@ export class StorageService {
 
   async createCollection(input: { id: string; orgId: string; name: string; now: string }): Promise<void> {
     return createStoredCollection(this.db, input);
+  }
+
+  async getCollection(id: string): Promise<Collection | null> {
+    return getStoredCollection(this.db, id);
+  }
+
+  async updateCollectionName(input: { id: string; orgId: string; name: string; now: string }): Promise<void> {
+    return updateStoredCollectionName(this.db, input);
   }
 
   async replaceMembershipCollections(membershipId: string, assignments: CollectionAssignment[]): Promise<void> {

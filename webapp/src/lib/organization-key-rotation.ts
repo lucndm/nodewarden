@@ -177,6 +177,8 @@ export interface NewOrganizationKeyMaterial {
   publicKey: string;
   /** The organization's RSA private key, sealed under the organization key. */
   encryptedPrivateKey: string;
+  /** The name of the first collection, encrypted with the organization key. */
+  encryptedCollectionName: string;
 }
 
 /**
@@ -187,12 +189,18 @@ export interface NewOrganizationKeyMaterial {
  * symmetric key is wrapped for the owner with the owner's RSA key, and the
  * organization's private key is sealed under the symmetric key.
  *
+ * The name of the collection the organization starts with is sealed under the
+ * same key: the official clients read a collection name as an encrypted
+ * string and stop syncing when it is in plain text.
+ *
  * The organization key itself never leaves this function: only its wrapped
  * form does.
  */
 export async function createOrganizationKeyMaterial(input: {
   /** The owner's RSA public key (SPKI, base64). */
   ownerPublicKey: string;
+  /** The plain name of the collection the organization starts with. */
+  collectionName: string;
 }): Promise<NewOrganizationKeyMaterial> {
   const organizationKey = randomKey();
   const keyHalves = splitKey(organizationKey);
@@ -207,6 +215,11 @@ export async function createOrganizationKeyMaterial(input: {
     wrappedKey: await wrapKeyForMember(organizationKey, input.ownerPublicKey),
     publicKey: bytesToBase64(publicKey),
     encryptedPrivateKey: await encryptBw(privateKey, keyHalves.encKey, keyHalves.macKey),
+    encryptedCollectionName: await encryptBw(
+      new TextEncoder().encode(input.collectionName),
+      keyHalves.encKey,
+      keyHalves.macKey
+    ),
   };
 }
 

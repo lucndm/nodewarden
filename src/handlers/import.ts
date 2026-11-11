@@ -5,6 +5,8 @@ import { errorResponse, jsonResponse } from '../utils/response';
 import { readActingDeviceIdentifier } from '../utils/device';
 import { generateUUID } from '../utils/uuid';
 import { LIMITS } from '../config/limits';
+import { isValidEncString } from '../utils/enc-string';
+import { COLLECTION_NAME_NOT_ENCRYPTED } from './organizations';
 import { normalizeCipherLoginForStorage, normalizeCipherSshKeyForCompatibility, validateCipherEncryptedFieldsForCompatibility } from './ciphers';
 
 // Bitwarden client import request format
@@ -424,6 +426,7 @@ export async function handleOrganizationCiphersImport(request: Request, env: Env
     if (!isAdmin) return errorResponse("The current user isn't allowed to create new collections", 403);
     const name = String(collections[i]?.name || '').trim();
     if (!name) return errorResponse(`Collection ${i + 1}: a name is required`, 400);
+    if (!isValidEncString(name)) return errorResponse(COLLECTION_NAME_NOT_ENCRYPTED, 400);
     const id = generateUUID();
     newCollections.push({ id, name });
     collectionIdByIndex.push(id);

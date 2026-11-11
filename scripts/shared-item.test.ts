@@ -525,11 +525,11 @@ test('a new collection is reachable by the owner', async () => {
   const { env } = await fixture();
 
   const created = await call(env, `https://vault.example.test/api/organizations/${ORG}/collections`, 'POST', OWNER, {
-    name: 'Fresh',
+    name: ENC('Fresh'),
   });
   assert.equal(created.status, 200);
   const collection = (await created.json()) as { id: string; name: string; organizationId: string };
-  assert.equal(collection.name, 'Fresh');
+  assert.equal(collection.name, ENC('Fresh'));
   assert.equal(collection.organizationId, ORG);
 
   const list = await call(env, 'https://vault.example.test/api/collections', 'GET', OWNER);

@@ -42,6 +42,8 @@ import {
   setPasswordSecurityExclusions,
 } from '@/lib/password-security-exclusions';
 import { getCollections, getOrganizations } from '@/lib/api/organizations';
+import type { VaultCollection } from '@/lib/api/organizations';
+import { plainCollectionCandidates, sealPlainCollectionNames } from '@/lib/collection-name-repair';
 import { getCachedVaultCoreSnapshot, invalidateVaultCoreSyncSnapshot, loadVaultCoreSyncSnapshot, saveVaultCoreSyncSnapshot } from '@/lib/api/vault-sync';
 import { silentlyRepairBackupSettingsIfNeeded } from '@/lib/backup-settings-repair';
 import {
@@ -78,7 +80,7 @@ import { dispatchBackupProgress, type BackupProgressDetail } from '@/lib/backup-
 import { clearOfflineUnlockRecord } from '@/lib/offline-auth';
 import { clearPasswordSecurityCache } from '@/lib/password-security-cache';
 import { clearGeneratorHistory } from '@/lib/generator-history';
-import { decryptCollectionNames, decryptSends, decryptVaultCore } from '@/lib/vault-decrypt';
+import { decryptCollectionNames, decryptSends, decryptVaultCore, openOrganizationKeys } from '@/lib/vault-decrypt';
 import { decryptSendsInWorker, decryptVaultCoreInWorker } from '@/lib/vault-worker';
 import {
   DEMO_CIPHERS,
@@ -1251,9 +1253,10 @@ export default function App() {
   }
   // A collection created by an official client carries an encrypted name, so
   // the names are read here the same way the vault is.
-  const [decryptedCollections, setDecryptedCollections] = useState<
-    import('@/lib/api/organizations').VaultCollection[]
-  >([]);
+  const [decryptedCollections, setDecryptedCollections] = useState<VaultCollection[]>([]);
+  // The collections whose plain name was already offered for sealing, so a
+  // collection the server refuses is not offered again and again.
+  const sealedCollectionIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const source = collectionsQuery.data ?? [];
     if (!source.length) {
@@ -1265,17 +1268,54 @@ export default function App() {
       return;
     }
     let active = true;
-    void decryptCollectionNames({
-      collections: source,
-      organizations: organizationsQuery.data ?? [],
-      symEncKeyB64: session.symEncKey,
-      symMacKeyB64: session.symMacKey,
-      encryptedPrivateKey: profile.privateKey,
+    const organizations = organizationsQuery.data ?? [];
+    const symEncKey = session.symEncKey;
+    const symMacKey = session.symMacKey;
+    const encryptedPrivateKey = profile.privateKey;
+    void openOrganizationKeys({
+      organizations,
+      symEncKeyB64: symEncKey,
+      symMacKeyB64: symMacKey,
+      encryptedPrivateKey,
     })
-      .then((next) => {
+      .then(async (organizationKeys) => {
+        const next = await decryptCollectionNames({
+          collections: source,
+          organizations,
+          symEncKeyB64: symEncKey,
+          symMacKeyB64: symMacKey,
+          encryptedPrivateKey,
+          organizationKeys,
+        });
         if (active) setDecryptedCollections(next);
+
+        // The collections of an older web vault carry a plain name, which the
+        // official clients refuse to sync. Sealing them runs in the
+        // background: the vault shows the names it has while it works, and a
+        // repair that fails says nothing, because there is nothing the
+        // member can do about it.
+        const candidates = plainCollectionCandidates({
+          collections: source,
+          organizations,
+          organizationKeys,
+        }).filter((collection) => !sealedCollectionIdsRef.current.has(collection.id));
+        // The collections are tried once: a collection the server refuses is
+        // not offered again and again.
+        for (const collection of candidates) sealedCollectionIdsRef.current.add(collection.id);
+        try {
+          const renamed = await sealPlainCollectionNames({
+            authedFetch,
+            collections: candidates,
+            organizations,
+            organizationKeys,
+          });
+          if (renamed > 0) await queryClient.invalidateQueries({ queryKey: collectionsQueryKey });
+        } catch {
+          // The names stay as they are.
+        }
       })
       .catch(() => {
+        // A vault that cannot be read shows the names it has.
         if (active) setDecryptedCollections(source);
       });
     return () => {
