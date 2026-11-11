@@ -130,7 +130,9 @@ async function grantorIdentity(
 async function mailEmergencyAccessInvite(
   env: Env,
   row: EmergencyAccessRow,
-  grantor: { email: string; name: string | null } | null
+  grantor: { email: string; name: string | null } | null,
+  /** Whether the address the invitation went to already has an account here. */
+  recipientHasAccount: boolean
 ): Promise<void> {
   if (!isMailConfigured(env)) return;
   const to = (row.email || '').trim().toLowerCase();
@@ -141,6 +143,7 @@ async function mailEmergencyAccessInvite(
     accessType: row.type === EMERGENCY_ACCESS_TYPE_TAKEOVER ? 'takeover' : 'view',
     waitTimeDays: row.waitTimeDays,
     vaultUrl: mailVaultUrl(env),
+    recipientHasAccount,
   });
   await sendMail(env, { kind: 'emergency_access_invite', to, ...mail });
 }
@@ -168,7 +171,8 @@ export async function handleListGrantedEmergencyAccess(
   userId: string
 ): Promise<Response> {
   void request;
-  const rows = await listEmergencyAccessByGrantee(env.DB, userId);
+  const user = await getUserById(env.DB, userId);
+  const rows = await listEmergencyAccessByGrantee(env.DB, userId, user?.email ?? null);
   const data = [];
   for (const row of rows) {
     const identity = await grantorIdentity(env, row);
@@ -272,7 +276,7 @@ export async function handleInviteEmergencyAccess(
   await createEmergencyAccess(env.DB, row);
   // The invitation reaches the address it was sent to, so the grantee does
   // not have to be watching the vault to hear about it.
-  await mailEmergencyAccessInvite(env, row, grantor);
+  await mailEmergencyAccessInvite(env, row, grantor, !!grantee);
   return jsonResponse(
     {
       id,
@@ -518,7 +522,8 @@ export async function handleReinviteEmergencyAccess(
     updatedAt: nowIso(),
   });
   const grantor = await getUserById(env.DB, userId);
-  await mailEmergencyAccessInvite(env, row, grantor);
+  // The grantee has an account here, or the reinvite would have been refused.
+  await mailEmergencyAccessInvite(env, row, grantor, true);
   return jsonResponse({ id, object: 'emergencyAccess' });
 }
 
@@ -629,6 +634,7 @@ export async function handleInitiateEmergencyAccess(
     grantorId: row.grantorId,
     granteeId: userId,
     waitTimeDays: row.waitTimeDays,
+    accessType: row.type === EMERGENCY_ACCESS_TYPE_TAKEOVER ? 'takeover' : 'view',
   });
   const updated = await getEmergencyAccess(env.DB, id);
   return jsonResponse({
@@ -676,6 +682,7 @@ export async function handleApproveEmergencyAccess(
     grantorId: row.grantorId,
     granteeId: row.granteeId ?? undefined,
     waitTimeDays: row.waitTimeDays,
+    accessType: row.type === EMERGENCY_ACCESS_TYPE_TAKEOVER ? 'takeover' : 'view',
   });
   const updated = await getEmergencyAccess(env.DB, id);
   return jsonResponse({
@@ -904,6 +911,7 @@ export async function handleEmergencyAccessPassword(
     grantorId: row.grantorId,
     granteeId: userId,
     waitTimeDays: row.waitTimeDays,
+    accessType: row.type === EMERGENCY_ACCESS_TYPE_TAKEOVER ? 'takeover' : 'view',
   });
   return jsonResponse({ object: 'emergencyAccess' });
 }

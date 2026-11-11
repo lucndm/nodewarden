@@ -25,6 +25,7 @@ test('each mail names the person and links the vault', () => {
     accessType: 'view',
     waitTimeDays: 7,
     vaultUrl: VAULT,
+    recipientHasAccount: true,
   });
   assert.ok(invite.text.includes('grantor@example.test'), invite.text);
   assert.match(invite.text, /Sign in at https:\/\/pass\.minhluc\.info(?![\w.-])/, invite.text);
@@ -37,6 +38,7 @@ test('each mail names the person and links the vault', () => {
     granteeEmail: 'grantee@example.test',
     waitTimeDays: 7,
     vaultUrl: VAULT,
+    accessType: null,
   });
   assert.ok(recovery.text.includes('grantee@example.test'), recovery.text);
   assert.match(recovery.text, /Sign in at https:\/\/pass\.minhluc\.info(?![\w.-])/, recovery.text);
@@ -61,6 +63,7 @@ test('the recovery notice says how long the owner has to refuse', () => {
     granteeEmail: 'grantee@example.test',
     waitTimeDays: 7,
     vaultUrl: VAULT,
+    accessType: null,
   });
   assert.ok(mail.text.includes('7 days'), mail.text);
   assert.ok(mail.text.includes('reject'), mail.text);
@@ -94,7 +97,84 @@ test('no vault url, no sign-in line', () => {
     accessType: 'takeover',
     waitTimeDays: 7,
     vaultUrl: null,
+    recipientHasAccount: true,
   });
   assert.ok(!mail.text.includes('Sign in at'), mail.text);
   assert.ok(!mail.html.includes('Sign in at'), mail.html);
+});
+
+test('the invite tells somebody with an account to sign in and accept', () => {
+  const mail = emergencyAccessInviteMail({
+    grantorName: 'The Grantor',
+    grantorEmail: 'grantor@example.test',
+    accessType: 'view',
+    waitTimeDays: 7,
+    vaultUrl: VAULT,
+    recipientHasAccount: true,
+  });
+  assert.ok(mail.text.includes('Sign in to accept the invitation.'), mail.text);
+  assert.ok(!mail.text.includes('invite code'), mail.text);
+});
+
+test('the invite tells somebody without an account how to get one', () => {
+  const mail = emergencyAccessInviteMail({
+    grantorName: 'The Grantor',
+    grantorEmail: 'grantor@example.test',
+    accessType: 'view',
+    waitTimeDays: 7,
+    vaultUrl: VAULT,
+    recipientHasAccount: false,
+  });
+  assert.ok(mail.text.includes('invite code'), mail.text);
+  assert.ok(mail.text.includes('sign up with this email address'), mail.text);
+});
+
+test('the invite says the contact is the one who gets in', () => {
+  const view = emergencyAccessInviteMail({
+    grantorName: 'The Grantor',
+    grantorEmail: 'grantor@example.test',
+    accessType: 'view',
+    waitTimeDays: 7,
+    vaultUrl: VAULT,
+    recipientHasAccount: true,
+  });
+  assert.ok(view.text.includes('you can read their vault 7 days after you ask'), view.text);
+  assert.ok(!view.text.includes('they can read their vault'), view.text);
+
+  const takeover = emergencyAccessInviteMail({
+    grantorName: 'The Grantor',
+    grantorEmail: 'grantor@example.test',
+    accessType: 'takeover',
+    waitTimeDays: 7,
+    vaultUrl: VAULT,
+    recipientHasAccount: true,
+  });
+  assert.ok(takeover.text.includes('you can take over their account'), takeover.text);
+});
+
+test('recovery mails name what the grantee can do', () => {
+  const view = emergencyAccessRecoveryMail({
+    kind: 'recovery_approved',
+    granteeName: 'The Grantee',
+    granteeEmail: 'grantee@example.test',
+    waitTimeDays: 7,
+    vaultUrl: VAULT,
+    accessType: 'view',
+  });
+  assert.ok(view.text.includes('can now read your vault'), view.text);
+  assert.ok(!view.text.includes('take over'), view.text);
+
+  const takeover = emergencyAccessRecoveryMail({
+    kind: 'recovery_approved',
+    granteeName: 'The Grantee',
+    granteeEmail: 'grantee@example.test',
+    waitTimeDays: 7,
+    vaultUrl: VAULT,
+    accessType: 'takeover',
+  });
+  assert.ok(takeover.text.includes('can now take over your account'), takeover.text);
+  assert.ok(
+    takeover.text.includes('Nothing has changed until they set a new password'),
+    takeover.text
+  );
 });
