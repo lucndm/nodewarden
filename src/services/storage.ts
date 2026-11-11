@@ -245,6 +245,13 @@ import {
   updateAccountPasskeyCounter as updateStoredAccountPasskeyCounter,
   updateAccountPasskeyEncryption as updateStoredAccountPasskeyEncryption,
 } from './storage-account-passkey-repo';
+import {
+  deleteEmailChangeRequest as deleteStoredEmailChangeRequest,
+  getEmailChangeRequest as findStoredEmailChangeRequest,
+  putEmailChangeRequest as saveStoredEmailChangeRequest,
+  recordEmailChangeAttempt as recordStoredEmailChangeAttempt,
+  type StoredEmailChangeRequest,
+} from './storage-email-change-repo';
 
 const TWO_FACTOR_REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
@@ -252,7 +259,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-11-10-avatar-color';
+const STORAGE_SCHEMA_VERSION = '2026-11-11-email-change';
 const REQUIRED_SCHEMA_TABLES = [
   'webauthn_credentials',
   'webauthn_challenges',
@@ -271,6 +278,9 @@ const REQUIRED_SCHEMA_TABLES = [
   // Emergency access: the same, so an install that was upgraded only halfway
   // runs the bootstrap again.
   'emergency_access',
+  // The pending email change: the same, so an install that was upgraded only
+  // halfway runs the bootstrap again.
+  'email_change_requests',
 ] as const;
 
 // D1-backed storage.
@@ -633,6 +643,29 @@ export class StorageService {
     nowMs: number = Date.now()
   ): Promise<AccountPasskeyChallenge | null> {
     return consumeStoredAccountPasskeyChallenge(this.db, challengeHash, scope, userId, nowMs);
+  }
+
+  // --- Email change ---
+
+  async putEmailChangeRequest(input: {
+    userId: string;
+    newEmail: string;
+    codeHash: string;
+    expiresAt: number;
+  }): Promise<void> {
+    await saveStoredEmailChangeRequest(this.db, input);
+  }
+
+  async getEmailChangeRequest(userId: string): Promise<StoredEmailChangeRequest | null> {
+    return findStoredEmailChangeRequest(this.db, userId);
+  }
+
+  async recordEmailChangeAttempt(userId: string): Promise<number> {
+    return recordStoredEmailChangeAttempt(this.db, userId);
+  }
+
+  async deleteEmailChangeRequest(userId: string): Promise<void> {
+    await deleteStoredEmailChangeRequest(this.db, userId);
   }
 
   // --- Ciphers ---

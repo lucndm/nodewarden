@@ -45,6 +45,7 @@ Paths are the official ones, under `/api` unless marked identity.
 - `POST /accounts/api-key` and `/accounts/rotate-api-key`: `apiKey` and `revisionDate`; a wrong password gets 400; rotation changes the key.
 - `POST /accounts/verify-password`: 200, and 400 for a wrong password.
 - `POST /accounts/password`: accepts the current `PasswordRequest` shape (`authenticationData`, `unlockData`); the new password logs in.
+- [x] `POST /accounts/email-token` and `POST /accounts/email` (2026-11-11): the code goes to the new address, and the change waits for that code; the old address is told afterwards. The server has to be able to mail: without the `EMAIL` binding or `MAIL_FROM` both routes answer 501.
 - identity `POST /accounts/prelogin/password`: KDF settings and `salt: null`. A null salt makes the client use the email, which holds only while the flag `pm-27060-password-prelogin-from-sdk` is off; `/api/config` keeps it off, and a request checks that.
 - identity `GET /accounts/webauthn/assertion-options`: `options.challenge` and `token`.
 
@@ -68,8 +69,8 @@ Paths are the official ones, under `/api` unless marked identity.
 ### Refused on purpose (501), as decided
 
 - `POST /accounts/set-password`: SSO links existing accounts, so every account has a master password.
-- No email delivery: identity `register/send-verification-email`, `register/verification-email-clicked`, `register/finish`; `email-token`, `verify-email`, `verify-email-token`, `request-otp`, `verify-otp`, `resend-new-device-otp`.
-- The server does mail emergency access invitations, emergency access notices and organization invitations since 2026-11-11; the routes listed here stay 501.
+- No email delivery: identity `register/send-verification-email`, `register/verification-email-clicked`, `register/finish`; `verify-email`, `verify-email-token`, `request-otp`, `verify-otp`, `resend-new-device-otp`.
+- The server does mail emergency access invitations, emergency access notices, organization invitations and the code of an email change since 2026-11-11; the routes listed here stay 501.
 - `POST /accounts/verify-devices`: refused with 400 rather than 501, pointing to TOTP or WebAuthn, for the same reason.
 - `POST /accounts/password-hint`: removed on 2026-10-16; the request checks that no hint is disclosed.
 
@@ -82,7 +83,6 @@ Paths are the official ones, under `/api` unless marked identity.
 ### The decision does not reach these paths
 
 - [x] `DELETE /accounts`: 501, the same answer as the other deletion paths (2026-11-10).
-- [x] `POST /accounts/email`: 501 like `email-token` (2026-11-10).
 - [x] `POST /accounts/delete-recover` and `/delete-recover-token`: 501 on the public router, before the login check (2026-11-10).
 
 ### Not recorded, out of scope

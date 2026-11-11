@@ -201,3 +201,44 @@ export function organizationInviteMail(input: {
     input.vaultUrl
   );
 }
+
+/**
+ * The mail that carries the code of a pending email change.
+ *
+ * The code goes to the address the account wants to have, so the person who
+ * receives it is the one who owns that address. The code is short-lived, and
+ * the mail says so, because a code that arrives late is of no use.
+ */
+export function emailChangeCodeMail(input: { code: string; vaultUrl: string | null }): MailContent {
+  return build(
+    subjectText('Your email change code'),
+    [
+      paragraph('Hi,'),
+      paragraph(`Your email change code is ${input.code}.`),
+      paragraph('The code is good for 15 minutes.'),
+      paragraph('If you did not ask for it, you can ignore this mail: nothing changes.'),
+    ],
+    input.vaultUrl
+  );
+}
+
+/**
+ * The mail that tells the old address that the account moved to another one.
+ *
+ * It goes to the address that is no longer the account, so it is the last
+ * thing the old address hears about it.
+ */
+export function emailChangedNoticeMail(input: { newEmail: string; vaultUrl: string | null }): MailContent {
+  return build(
+    subjectText('The email of your vault account was changed'),
+    [
+      paragraph('Hi,'),
+      paragraph(`The email of your vault account was changed to ${input.newEmail}.`),
+      paragraph('The sessions of that account have been thrown out.'),
+      paragraph(
+        'If you did not do this, sign in and change your master password, or contact the server\'s administrator.'
+      ),
+    ],
+    input.vaultUrl
+  );
+}

@@ -1724,6 +1724,13 @@ Object.assign(de, {
   "txt_email_breach_disabled": "Die E-Mail-Leak-Überwachung ist auf diesem Server nicht aktiviert.",
   "txt_recent_30_days": "Zuletzt (30 Tage)",
   "txt_multiple_select": "Mehrere auswählen",
+  "txt_change_email": "E-Mail-Adresse ändern",
+  "txt_new_email": "Neue E-Mail-Adresse",
+  "txt_email_change_code": "Der Code, der an die neue Adresse gesendet wurde",
+  "txt_send_code": "Code senden",
+  "txt_email_change_code_sent": "Der Code ist unterwegs zur neuen Adresse. Er ist 15 Minuten gültig.",
+  "txt_email_changed_signing_out_everywhere": "Die E-Mail-Adresse deines Kontos wurde geändert. Alle Sitzungen wurden beendet, melde dich erneut an.",
+  "txt_email_change_failed": "Die E-Mail-Adresse des Kontos konnte nicht geändert werden.",
 });
 
 export default de;

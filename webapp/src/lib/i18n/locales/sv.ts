@@ -1724,6 +1724,13 @@ Object.assign(sv, {
   "txt_email_breach_disabled": "Övervakning av e-postläckor är inte aktiverad på den här servern.",
   "txt_recent_30_days": "Senaste (30 dagar)",
   "txt_multiple_select": "Välj flera",
+  "txt_change_email": "Ändra e-postadress",
+  "txt_new_email": "Ny e-postadress",
+  "txt_email_change_code": "Koden som skickades till den nya adressen",
+  "txt_send_code": "Skicka kod",
+  "txt_email_change_code_sent": "Koden är på väg till den nya adressen. Den gäller i 15 minuter.",
+  "txt_email_changed_signing_out_everywhere": "E-postadressen för ditt konto har ändrats. Alla sessioner har avslutats, logga in igen.",
+  "txt_email_change_failed": "E-postadressen för kontot kunde inte ändras.",
 });
 
 export default sv;

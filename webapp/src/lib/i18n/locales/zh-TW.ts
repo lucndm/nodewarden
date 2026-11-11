@@ -1803,6 +1803,13 @@ Object.assign(zhTW, {
   "txt_email_breach_disabled": "此伺服器未啟用電子郵件外洩監控。",
   "txt_recent_30_days": "最近（30 天）",
   "txt_multiple_select": "多選",
+  "txt_change_email": "變更電子郵件地址",
+  "txt_new_email": "新的電子郵件地址",
+  "txt_email_change_code": "傳送到新位址的驗證碼",
+  "txt_send_code": "傳送驗證碼",
+  "txt_email_change_code_sent": "驗證碼已寄往新位址，15 分鐘內有效。",
+  "txt_email_changed_signing_out_everywhere": "帳戶電子郵件已變更，所有工作階段已結束，請重新登入。",
+  "txt_email_change_failed": "無法變更帳戶電子郵件。",
 });
 
 export default zhTW;

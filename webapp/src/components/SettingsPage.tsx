@@ -20,6 +20,8 @@ interface SettingsPageProps {
   onThemePreferenceChange: (preference: ThemePreference) => void;
   onVerifyMasterPassword: (email: string, password: string) => Promise<void>;
   onChangePassword: (currentPassword: string, nextPassword: string, nextPassword2: string) => Promise<void>;
+  onRequestEmailChangeCode: (newEmail: string, password: string) => Promise<void>;
+  onChangeEmail: (newEmail: string, password: string, code: string) => Promise<void>;
   onSavePasswordHint: (masterPasswordHint: string) => Promise<void>;
   onEnableTotp: (secret: string, token: string, masterPassword: string) => Promise<void>;
   onOpenDisableTotp: () => void;
@@ -169,6 +171,11 @@ export default function SettingsPage(props: SettingsPageProps) {
   const [masterPasswordPromptValue, setMasterPasswordPromptValue] = useState('');
   const [masterPasswordPromptSubmitting, setMasterPasswordPromptSubmitting] = useState(false);
   const [selectedLocale, setSelectedLocale] = useState<Locale>(() => getLocale());
+  const [emailChangeAddress, setEmailChangeAddress] = useState('');
+  const [emailChangePassword, setEmailChangePassword] = useState('');
+  const [emailChangeCode, setEmailChangeCode] = useState('');
+  const [emailChangeCodeSent, setEmailChangeCodeSent] = useState(false);
+  const [emailChangeBusy, setEmailChangeBusy] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [ssoStatus, setSsoStatus] = useState<{ enabled: boolean; linked: boolean; subjectPreview: string | null } | null>(null);
   const [ssoPassword, setSsoPassword] = useState('');
@@ -593,6 +600,25 @@ export default function SettingsPage(props: SettingsPageProps) {
     }
   }
 
+  async function sendEmailChangeCode(): Promise<void> {
+    setEmailChangeBusy(true);
+    try {
+      await props.onRequestEmailChangeCode(emailChangeAddress, emailChangePassword);
+      setEmailChangeCodeSent(true);
+    } finally {
+      setEmailChangeBusy(false);
+    }
+  }
+
+  async function submitEmailChange(): Promise<void> {
+    setEmailChangeBusy(true);
+    try {
+      await props.onChangeEmail(emailChangeAddress, emailChangePassword, emailChangeCode);
+    } finally {
+      setEmailChangeBusy(false);
+    }
+  }
+
   const settingsSections: Array<{ id: SettingsSection; label: string }> = [
     { id: 'appearance', label: t('txt_settings_appearance') },
     { id: 'session', label: t('txt_session_timeout') },
@@ -723,6 +749,58 @@ export default function SettingsPage(props: SettingsPageProps) {
                   <KeyRound size={14} className="btn-icon" />
                   {t('txt_change_password')}
                 </button>
+              </section>
+
+              <section className="settings-submodule">
+                <h3>{t('txt_change_email')}</h3>
+                <label className="field">
+                  <span>{t('txt_new_email')}</span>
+                  <input
+                    className="input"
+                    type="email"
+                    value={emailChangeAddress}
+                    onInput={(e) => setEmailChangeAddress((e.currentTarget as HTMLInputElement).value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t('txt_current_password')}</span>
+                  <input
+                    className="input"
+                    type="password"
+                    value={emailChangePassword}
+                    onInput={(e) => setEmailChangePassword((e.currentTarget as HTMLInputElement).value)}
+                  />
+                </label>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={emailChangeBusy}
+                    onClick={() => void sendEmailChangeCode()}
+                  >
+                    {t('txt_send_code')}
+                  </button>
+                </div>
+                {emailChangeCodeSent && (
+                  <>
+                    <label className="field">
+                      <span>{t('txt_email_change_code')}</span>
+                      <input
+                        className="input"
+                        value={emailChangeCode}
+                        onInput={(e) => setEmailChangeCode((e.currentTarget as HTMLInputElement).value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={emailChangeBusy}
+                      onClick={() => void submitEmailChange()}
+                    >
+                      {t('txt_change_email')}
+                    </button>
+                  </>
+                )}
               </section>
 
               <section className="settings-submodule">

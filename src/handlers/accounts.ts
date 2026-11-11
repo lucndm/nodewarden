@@ -4,10 +4,13 @@ import { getUserById } from '../services/storage-user-repo';
 import { AuthService } from '../services/auth';
 import { RateLimitService, getClientIdentifier } from '../services/ratelimit';
 import { auditRequestMetadata, writeAuditEvent, safeWriteAuditEvent } from '../services/audit-events';
-import { jsonResponse, errorResponse } from '../utils/response';
+import { jsonResponse, errorResponse, unsupportedResponse } from '../utils/response';
 import { generateUUID } from '../utils/uuid';
 import { LIMITS } from '../config/limits';
-import { isStoredApiKeyHash } from '../utils/api-key';
+import { constantTimeEquals, isStoredApiKeyHash } from '../utils/api-key';
+import { isValidEncString } from '../utils/enc-string';
+import { isMailConfigured, isSingleEmailAddress, mailVaultUrl, sendMail } from '../services/mail';
+import { emailChangeCodeMail, emailChangedNoticeMail } from '../services/mail-templates';
 import { findMatchingTotpCounter, isTotpEnabled } from '../utils/totp';
 import { createRecoveryCode, recoveryCodeEquals } from '../utils/recovery-code';
 import { buildAccountKeys } from '../utils/user-decryption';
@@ -30,6 +33,51 @@ const TWO_FACTOR_PROVIDER_AUTHENTICATOR = 0;
 const TWO_FACTOR_PROVIDER_YUBIKEY = 3;
 const TWO_FACTOR_PROVIDER_WEBAUTHN = 7;
 const TOTP_BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+// The email change: a code proves that the new address belongs to the person
+// asking for the change. The code lives for a quarter of an hour, and five
+// wrong codes end the request, so a code cannot be guessed.
+const EMAIL_CHANGE_CODE_TTL_MS = 15 * 60 * 1000;
+const EMAIL_CHANGE_MAX_ATTEMPTS = 5;
+const EMAIL_CHANGE_CODE_DIGITS = 6;
+const EMAIL_CHANGE_CODE_SPACE = 10 ** EMAIL_CHANGE_CODE_DIGITS;
+
+/** A code of six digits, and nothing that could make it shorter. */
+function generateEmailChangeCode(): string {
+  const bytes = new Uint8Array(4);
+  const limit = Math.floor(0xffffffff / EMAIL_CHANGE_CODE_SPACE) * EMAIL_CHANGE_CODE_SPACE;
+  for (;;) {
+    crypto.getRandomValues(bytes);
+    const value = new DataView(bytes.buffer).getUint32(0);
+    // The values above the limit are thrown away, so every code is equally
+    // likely.
+    if (value < limit) {
+      return String(value % EMAIL_CHANGE_CODE_SPACE).padStart(EMAIL_CHANGE_CODE_DIGITS, '0');
+    }
+  }
+}
+
+/**
+ * The hash the code is stored as.
+ *
+ * The code is bound to the account it was sent for, so a code of one account
+ * is no good for another, and the table never holds the code itself.
+ */
+async function hashEmailChangeCode(secret: string, userId: string, code: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`${userId}:${code}`)
+  );
+  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 // CONTRACT:
 // users.master_password_hash is server-side login verification only. It does
@@ -713,6 +761,168 @@ export async function handleChangePassword(request: Request, env: Env, userId: s
     category: 'security',
     level: 'security',
     metadata: { email: user.email, ...auditRequestMetadata(request) },
+  });
+
+  return new Response(null, { status: 200 });
+}
+
+// POST /api/accounts/email-token
+// The code that proves the new address belongs to the person asking for the
+// change. Without mail there is no code, so the route answers 501.
+export async function handleEmailToken(request: Request, env: Env, userId: string): Promise<Response> {
+  if (!isMailConfigured(env)) {
+    return unsupportedResponse('Email delivery is not supported by this server.');
+  }
+  const storage = new StorageService(env.DB);
+  const auth = new AuthService(env);
+  const user = await storage.getUserById(userId);
+  if (!user) return errorResponse('User not found', 404);
+
+  let body: { masterPasswordHash?: unknown; newEmail?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+
+  const masterPasswordHash = typeof body.masterPasswordHash === 'string' ? body.masterPasswordHash : '';
+  if (!masterPasswordHash) return errorResponse('Invalid password', 400);
+  const valid = await auth.verifyPassword(masterPasswordHash, user.masterPasswordHash, user.email);
+  if (!valid) return errorResponse('Invalid password', 400);
+
+  const newEmail = String(body.newEmail || '').trim().toLowerCase();
+  if (!isSingleEmailAddress(newEmail)) return errorResponse('Invalid email address', 400);
+  if (newEmail === user.email.trim().toLowerCase()) {
+    return errorResponse('The new email is the current email', 400);
+  }
+  const taken = await storage.getUser(newEmail);
+  if (taken && taken.id !== user.id) return errorResponse('Email already in use', 400);
+
+  const code = generateEmailChangeCode();
+  await storage.putEmailChangeRequest({
+    userId: user.id,
+    newEmail,
+    codeHash: await hashEmailChangeCode(env.JWT_SECRET, user.id, code),
+    expiresAt: Date.now() + EMAIL_CHANGE_CODE_TTL_MS,
+  });
+
+  const mail = emailChangeCodeMail({ code, vaultUrl: mailVaultUrl(env) });
+  const sent = await sendMail(env, {
+    kind: 'email_change_code',
+    to: newEmail,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+  });
+  if (!sent) {
+    // A code that was not delivered proves nothing, so the request goes.
+    await storage.deleteEmailChangeRequest(user.id);
+    return errorResponse('The code could not be sent; try again later', 429);
+  }
+
+  return new Response(null, { status: 200 });
+}
+
+// POST /api/accounts/email
+// The change itself: the password, the code of the pending request and the
+// key that the new master key wraps. The account keeps its password, so the
+// client derives the new hash with the new address as its salt.
+export async function handleChangeEmail(request: Request, env: Env, userId: string): Promise<Response> {
+  if (!isMailConfigured(env)) {
+    return unsupportedResponse('Email delivery is not supported by this server.');
+  }
+  const storage = new StorageService(env.DB);
+  const auth = new AuthService(env);
+  const user = await storage.getUserById(userId);
+  if (!user) return errorResponse('User not found', 404);
+
+  let body: {
+    masterPasswordHash?: unknown;
+    newEmail?: unknown;
+    newMasterPasswordHash?: unknown;
+    token?: unknown;
+    key?: unknown;
+  };
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+
+  const masterPasswordHash = typeof body.masterPasswordHash === 'string' ? body.masterPasswordHash : '';
+  if (!masterPasswordHash) return errorResponse('Invalid password', 400);
+  const valid = await auth.verifyPassword(masterPasswordHash, user.masterPasswordHash, user.email);
+  if (!valid) return errorResponse('Invalid password', 400);
+
+  const newEmail = String(body.newEmail || '').trim().toLowerCase();
+  const pending = await storage.getEmailChangeRequest(user.id);
+  if (!pending) return errorResponse('No email change pending', 400);
+  if (pending.newEmail !== newEmail) return errorResponse('Email change mismatch', 400);
+  if (pending.expiresAt <= Date.now()) {
+    await storage.deleteEmailChangeRequest(user.id);
+    return errorResponse('The code has expired; ask for a new one', 400);
+  }
+  if (pending.attempts >= EMAIL_CHANGE_MAX_ATTEMPTS) {
+    await storage.deleteEmailChangeRequest(user.id);
+    return errorResponse('Too many wrong codes; ask for a new one', 400);
+  }
+
+  const token = String(body.token || '').trim();
+  const expectedHash = await hashEmailChangeCode(env.JWT_SECRET, user.id, token);
+  if (!constantTimeEquals(expectedHash, pending.codeHash)) {
+    const attempts = await storage.recordEmailChangeAttempt(user.id);
+    if (attempts >= EMAIL_CHANGE_MAX_ATTEMPTS) {
+      // The request is gone, so a new code has to be asked for.
+      await storage.deleteEmailChangeRequest(user.id);
+      return errorResponse('Too many wrong codes; ask for a new one', 400);
+    }
+    return errorResponse('Token mismatch', 400);
+  }
+
+  const newMasterPasswordHash = typeof body.newMasterPasswordHash === 'string'
+    ? body.newMasterPasswordHash.trim()
+    : '';
+  if (!newMasterPasswordHash) return errorResponse('newMasterPasswordHash is required', 400);
+  const nextKey = typeof body.key === 'string' ? body.key.trim() : '';
+  if (!isValidEncString(nextKey)) return errorResponse('key is not a valid encrypted string', 400);
+
+  if (newEmail === user.email.trim().toLowerCase()) {
+    return errorResponse('The new email is the current email', 400);
+  }
+  const taken = await storage.getUser(newEmail);
+  if (taken && taken.id !== user.id) return errorResponse('Email already in use', 400);
+
+  const oldEmail = user.email;
+  user.email = newEmail;
+  user.masterPasswordHash = await auth.hashPasswordServer(newMasterPasswordHash);
+  user.key = nextKey;
+  user.securityStamp = generateUUID();
+  user.updatedAt = new Date().toISOString();
+  await storage.saveUser(user);
+  await storage.deleteEmailChangeRequest(user.id);
+  // The address of the account changed, so the sessions of that account have
+  // to go with it, exactly as they do when the password changes.
+  await storage.deleteRefreshTokensByUserId(user.id);
+  await storage.deleteTrustedTwoFactorTokensByUserId(user.id);
+  AuthService.invalidateUserCache(user.id);
+  await writeAuditEvent(storage, {
+    actorUserId: user.id,
+    action: 'account.email.change',
+    targetType: 'user',
+    targetId: user.id,
+    category: 'security',
+    level: 'security',
+    metadata: { email: oldEmail, targetEmail: newEmail, ...auditRequestMetadata(request) },
+  });
+
+  // The old address hears about it last, and only if it can be reached.
+  const notice = emailChangedNoticeMail({ newEmail, vaultUrl: mailVaultUrl(env) });
+  await sendMail(env, {
+    kind: 'email_changed',
+    to: oldEmail,
+    subject: notice.subject,
+    text: notice.text,
+    html: notice.html,
   });
 
   return new Response(null, { status: 200 });

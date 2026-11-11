@@ -1724,6 +1724,13 @@ Object.assign(fi, {
   "txt_email_breach_disabled": "Sähköpostivuotojen valvonta ei ole käytössä tällä palvelimella.",
   "txt_recent_30_days": "Viimeisimmät (30 päivää)",
   "txt_multiple_select": "Valitse useita",
+  "txt_change_email": "Vaihda sähköpostiosoite",
+  "txt_new_email": "Uusi sähköpostiosoite",
+  "txt_email_change_code": "Koodi, joka lähetettiin uuteen osoitteeseen",
+  "txt_send_code": "Lähetä koodi",
+  "txt_email_change_code_sent": "Koodi on matkalla uuteen osoitteeseen. Se on voimassa 15 minuuttia.",
+  "txt_email_changed_signing_out_everywhere": "Tilin sähköpostiosoite vaihtui. Kaikki istunnot päättyivät, kirjaudu uudelleen sisään.",
+  "txt_email_change_failed": "Tilin sähköpostiosoitetta ei voitu vaihtaa.",
 });
 
 export default fi;

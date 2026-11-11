@@ -1753,6 +1753,13 @@ Object.assign(zhCN, {
   "txt_email_breach_disabled": "此服务器未启用邮箱泄露监控。",
   "txt_recent_30_days": "最近（30 天）",
   "txt_multiple_select": "多选",
+  "txt_change_email": "更改邮箱地址",
+  "txt_new_email": "新的邮箱地址",
+  "txt_email_change_code": "发送到新地址的验证码",
+  "txt_send_code": "发送验证码",
+  "txt_email_change_code_sent": "验证码已发往新地址，15 分钟内有效。",
+  "txt_email_changed_signing_out_everywhere": "账户邮箱已更改，所有会话已结束，请重新登录。",
+  "txt_email_change_failed": "无法更改账户邮箱。",
 });
 
 export default zhCN;
