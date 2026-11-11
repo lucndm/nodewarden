@@ -42,7 +42,8 @@ upload v2, import, and delete (one and bulk) all work as the clients expect.
 
 - [x] `PUT /ciphers/share` (2026-11-10): each item goes through the single share; a malformed request changes nothing; answers a list of the shared items.
 - Not recorded here, for group 1b: the `admin` variants and `organization-details`.
-- Not recorded: `POST /ciphers/bulk-collections`, `POST /ciphers/import-organization`, attachment `renew` and attachment `share`, all without a route.
+- [x] `POST /ciphers/import-organization` (2026-11-11, Bruno `40/24`): as vaultwarden `post_org_import` (confirmed member, write rights on an existing collection, owner or admin for a new one), and an item left without a collection is refused, since a shared item always sits in one.
+- Not recorded: `POST /ciphers/bulk-collections`, attachment `renew` and attachment `share`, all without a route.
 
 ### Folders, sync, config (`41-vault-folders-sync`)
 

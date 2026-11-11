@@ -1,0 +1,68 @@
+meta {
+  name: POST ciphers/import-organization
+  type: http
+  seq: 24
+}
+
+post {
+  url: {{baseUrl}}/api/ciphers/import-organization?organizationId={{orgId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "ciphers": [
+      {
+        "type": 1,
+        "name": "2.aXYtb3JnLWltcG9ydA==|Y3Qtb3JnLWltcG9ydA==|bWFjLW9yZy1pbXBvcnQ=",
+        "notes": null,
+        "favorite": false,
+        "reprompt": 0,
+        "folderId": null,
+        "organizationId": "{{orgId}}",
+        "key": null,
+        "login": {
+          "username": "2.aXYtdXNlcg==|Y3QtdXNlcg==|bWFjLWdXNlcg==",
+          "password": "2.aXYtcGFzcw==|Y3QtcGFzcw==|bWFjLWcGFzcw==",
+          "uris": [],
+          "totp": null
+        },
+        "fields": [],
+        "passwordHistory": []
+      }
+    ],
+    "collections": [
+      {
+        "name": "2.aXYtY29s|Y3QtY29s|bWFjLWNvbA=="
+      }
+    ],
+    "collectionRelationships": [
+      {
+        "key": 0,
+        "value": 0
+      }
+    ]
+  }
+}
+
+docs {
+  Client: `ImportApiService.postImportOrganizationCiphers`
+  (`libs/importer/src/services/import-api.service.ts`), body
+  `ImportOrganizationCiphersRequest` (`ciphers`, `collections`,
+  `collectionRelationships`), organization in the query. No response body
+  read. The web vault calls it when the import target is an organization.
+  Reference: vaultwarden `post_org_import`: a confirmed member, write rights on an existing
+  collection, owner or admin for a new one. NodeWarden also refuses an item
+  left without a collection, since a shared item always sits in one.
+}
+
+tests {
+  test("the owner imports into the organization with a new collection", function () {
+    expect(res.status).to.equal(200);
+  });
+}
