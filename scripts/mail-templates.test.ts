@@ -27,9 +27,9 @@ test('each mail names the person and links the vault', () => {
     vaultUrl: VAULT,
   });
   assert.ok(invite.text.includes('grantor@example.test'), invite.text);
-  assert.ok(invite.text.includes(VAULT), invite.text);
+  assert.match(invite.text, /Sign in at https:\/\/pass\.minhluc\.info(?![\w.-])/, invite.text);
   assert.ok(invite.html.includes('grantor@example.test'), invite.html);
-  assert.ok(invite.html.includes(VAULT), invite.html);
+  assert.match(invite.html, /https:\/\/pass\.minhluc\.info(?![\w.-])/, invite.html);
 
   const recovery = emergencyAccessRecoveryMail({
     kind: 'recovery_started',
@@ -39,9 +39,9 @@ test('each mail names the person and links the vault', () => {
     vaultUrl: VAULT,
   });
   assert.ok(recovery.text.includes('grantee@example.test'), recovery.text);
-  assert.ok(recovery.text.includes(VAULT), recovery.text);
+  assert.match(recovery.text, /Sign in at https:\/\/pass\.minhluc\.info(?![\w.-])/, recovery.text);
   assert.ok(recovery.html.includes('grantee@example.test'), recovery.html);
-  assert.ok(recovery.html.includes(VAULT), recovery.html);
+  assert.match(recovery.html, /https:\/\/pass\.minhluc\.info(?![\w.-])/, recovery.html);
 
   const organization = organizationInviteMail({
     organizationName: 'The Organization',
@@ -49,9 +49,9 @@ test('each mail names the person and links the vault', () => {
     vaultUrl: VAULT,
   });
   assert.ok(organization.text.includes('inviter@example.test'), organization.text);
-  assert.ok(organization.text.includes(VAULT), organization.text);
+  assert.match(organization.text, /Sign in at https:\/\/pass\.minhluc\.info(?![\w.-])/, organization.text);
   assert.ok(organization.html.includes('inviter@example.test'), organization.html);
-  assert.ok(organization.html.includes(VAULT), organization.html);
+  assert.match(organization.html, /https:\/\/pass\.minhluc\.info(?![\w.-])/, organization.html);
 });
 
 test('the recovery notice says how long the owner has to refuse', () => {
