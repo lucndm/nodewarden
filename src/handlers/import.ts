@@ -444,18 +444,26 @@ export async function handleOrganizationCiphersImport(request: Request, env: Env
     collectionsByCipher.get(cipherIndex)!.add(collectionId);
   }
 
+  // The official web vault leaves the "Import to" collection empty by default,
+  // and an item of an organization always sits in at least one collection:
+  // say that once, before anything is written.
+  const collectionIdsByCipher = ciphers.map((_, index) => [...(collectionsByCipher.get(index) || [])]);
+  const itemsWithoutCollection = collectionIdsByCipher.filter((collectionIds) => collectionIds.length === 0).length;
+  if (itemsWithoutCollection > 0) {
+    return errorResponse(
+      `Choose a collection under "Import to" before importing into an organization: ${itemsWithoutCollection} of ${ciphers.length} items have no collection.`,
+      400
+    );
+  }
+
   const cipherRows: Cipher[] = [];
   for (let i = 0; i < ciphers.length; i++) {
-    const assigned = collectionsByCipher.get(i);
-    if (!assigned || !assigned.size) {
-      return errorResponse(`Cipher ${i + 1}: a shared item must be placed in at least one collection`, 400);
-    }
     const c = ciphers[i] && typeof ciphers[i] === 'object' ? ciphers[i] : ({} as CiphersImportRequest['ciphers'][number]);
     // The target organization replaces whatever the client put in the item,
     // and a shared item has no personal folder.
     const cipher = buildImportedCipher(c, userId, null, now);
     cipher.organizationId = organizationId;
-    cipher.collectionIds = [...assigned];
+    cipher.collectionIds = collectionIdsByCipher[i];
     const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
     if (compatibilityError) return errorResponse(`Cipher ${i + 1}: ${compatibilityError}`, 400);
     cipherRows.push(cipher);

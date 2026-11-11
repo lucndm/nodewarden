@@ -102,6 +102,11 @@ test('a malformed import writes nothing', async () => {
     collectionRelationships: [{ key: 0, value: 0 }],
   });
   assert.equal(withoutCollection.status, 400, 'an item left without a collection');
+  const withoutCollectionBody = await withoutCollection.json() as { error?: string };
+  assert.ok(
+    withoutCollectionBody.error?.includes('Choose a collection under "Import to"'),
+    withoutCollectionBody.error
+  );
   const badRelationship = await importOrganization(env, OWNER, {
     ciphers: [item('a')],
     collections: [{ id: COL_SHARED, name: ENC('Shared') }],

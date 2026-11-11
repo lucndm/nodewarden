@@ -21,6 +21,10 @@ const SIGNALR_UPDATE_TYPE_AUTH_REQUEST_RESPONSE = 16;
 const SIGNALR_UPDATE_TYPE_BACKUP_RESTORE_PROGRESS = 102;
 const WEBSOCKET_CONNECTION_TOKEN_PREFIX = 'ws-token:';
 const WEBSOCKET_CONNECTION_TOKEN_TTL_MS = 60 * 1000;
+// The Worker and this Durable Object run on different machines, and their
+// clocks need not agree: a ticket the Worker's clock puts a moment ahead is
+// still good.
+const WEBSOCKET_CONNECTION_TOKEN_CLOCK_SKEW_MS = 60 * 1000;
 
 type HubProtocol = 'json' | 'messagepack';
 type HubKind = 'user' | 'anonymous-auth-request';
@@ -201,6 +205,13 @@ function buildSignalRMessagePackInvocation(
   return frameSignalRBinary(encodedPayload);
 }
 
+export function isAcceptableTicketExpiry(expiresAt: number, now: number): boolean {
+  return (
+    expiresAt > now &&
+    expiresAt <= now + WEBSOCKET_CONNECTION_TOKEN_TTL_MS + WEBSOCKET_CONNECTION_TOKEN_CLOCK_SKEW_MS
+  );
+}
+
 export class NotificationsHub extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -225,7 +236,7 @@ export class NotificationsHub extends DurableObject<Env> {
       const token = String(body?.token || '').trim();
       const userId = String(body?.userId || '').trim();
       const expiresAt = Number(body?.expiresAt || 0);
-      if (!token || !userId || expiresAt <= Date.now() || expiresAt > Date.now() + WEBSOCKET_CONNECTION_TOKEN_TTL_MS) {
+      if (!token || !userId || !isAcceptableTicketExpiry(expiresAt, Date.now())) {
         return new Response('Invalid websocket connection token', { status: 400 });
       }
       await this.ctx.storage.put(`${WEBSOCKET_CONNECTION_TOKEN_PREFIX}${token}`, {

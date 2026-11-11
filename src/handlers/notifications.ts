@@ -10,6 +10,18 @@ import {
 } from '../utils/websocket-connection-token';
 
 const WEBSOCKET_CONNECTION_TOKEN_TTL_MS = 60 * 1000;
+const LOGGED_USER_AGENT_MAX_LENGTH = 120;
+
+// The Durable Object would not take the ticket it was offered: the client is
+// told to come back later, instead of seeing a server error.
+class HubRefusedTicketError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super('The notifications hub refused the websocket connection token');
+    this.status = status;
+  }
+}
 
 function extractAccessToken(request: Request): string | null {
   const authHeader = String(request.headers.get('Authorization') || '').trim();
@@ -40,7 +52,10 @@ async function issueWebSocketConnectionToken(payload: JWTPayload, env: Env): Pro
       expiresAt,
     }),
   });
-  if (!response.ok) throw new Error('Failed to issue websocket connection token');
+  if (!response.ok) {
+    if (response.status === 400) throw new HubRefusedTicketError(response.status);
+    throw new Error('Failed to issue websocket connection token');
+  }
   return token;
 }
 
@@ -93,7 +108,23 @@ export async function handleNotificationsNegotiate(request: Request, env: Env): 
   const payload = await authenticateAccessToken(request, env);
   if (!payload?.sub) return errorResponse('Unauthorized', 401);
 
-  const connectionToken = await issueWebSocketConnectionToken(payload, env);
+  let connectionToken: string;
+  try {
+    connectionToken = await issueWebSocketConnectionToken(payload, env);
+  } catch (error) {
+    if (!(error instanceof HubRefusedTicketError)) throw error;
+    // The client that keeps retrying shows up here; the ticket itself is
+    // never written to the log.
+    const userAgent = request.headers.get('User-Agent');
+    console.warn('notifications.negotiate.refused', JSON.stringify({
+      status: error.status,
+      userAgent: userAgent ? userAgent.slice(0, LOGGED_USER_AGENT_MAX_LENGTH) : null,
+    }));
+    const unavailable = errorResponse('Notifications are temporarily unavailable', 503);
+    unavailable.headers.set('Retry-After', '5');
+    return unavailable;
+  }
+
   return jsonResponse(
     {
       connectionId: generateUUID(),

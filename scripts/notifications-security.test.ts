@@ -1,15 +1,32 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { registerHooks } from 'node:module';
+import test, { mock } from 'node:test';
 
 import { handleNotificationsHub, handleNotificationsNegotiate } from '../src/handlers/notifications';
 import type { Env } from '../src/types';
 import { createJWT } from '../src/utils/jwt';
 
+// The Durable Object module imports the Workers runtime, which only resolves
+// on Cloudflare: the tests give it the same stub the other offline tests use.
+// A static import would load that module before the stub is registered, so it
+// is loaded once the hook below is in place.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'cloudflare:workers') {
+      const source = 'export class DurableObject {} export function waitUntil(p) { p.catch(() => {}); }';
+      return { url: 'data:text/javascript,' + encodeURIComponent(source), shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { isAcceptableTicketExpiry } = await import('../src/durable/notifications-hub');
+
 const secret = 'notification-security-test-secret-32-bytes';
 const userId = 'd75020e1-2de4-46e8-b8f1-475d127b51f2';
 const securityStamp = 'security-stamp';
 
-function createTestEnv() {
+function createTestEnv(options: { refuseTickets?: boolean } = {}) {
   const connectionTokens = new Map<string, { userId: string; deviceIdentifier: string | null; expiresAt: number }>();
   const forwardedHubUrls: string[] = [];
   const durableObjectNames: string[] = [];
@@ -67,6 +84,7 @@ function createTestEnv() {
           deviceIdentifier: string | null;
           expiresAt: number;
         };
+        if (options.refuseTickets) return new Response('Invalid websocket connection token', { status: 400 });
         connectionTokens.set(body.token, body);
         return new Response(null, { status: 204 });
       }
@@ -197,4 +215,42 @@ test('a forged ticket cannot select or activate a Durable Object', async () => {
 
   assert.equal(response.status, 401);
   assert.deepEqual(durableObjectNames, []);
+});
+
+test('a ticket the hub clock runs behind on is still accepted', () => {
+  const now = Date.now();
+
+  assert.equal(isAcceptableTicketExpiry(now + 60_000, now), true);
+  assert.equal(isAcceptableTicketExpiry(now + 90_000, now), true, 'the two clocks are a little apart');
+  assert.equal(isAcceptableTicketExpiry(now + 121_000, now), false, 'past the skew the hub tolerates');
+  assert.equal(isAcceptableTicketExpiry(now, now), false, 'a ticket that is already over');
+  assert.equal(isAcceptableTicketExpiry(now - 1, now), false);
+});
+
+test('a hub that refuses the ticket answers negotiate with 503', async () => {
+  const { env } = createTestEnv({ refuseTickets: true });
+  const accessToken = await validAccessToken();
+  const warnings: string[] = [];
+  const warn = mock.method(console, 'warn', (...args: unknown[]) => {
+    warnings.push(args.map((arg) => String(arg)).join(' '));
+  });
+
+  try {
+    const response = await handleNotificationsNegotiate(new Request(
+      'https://vault.example.test/notifications/hub/negotiate',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'Bitwarden/2026.9.0' },
+      }
+    ), env);
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get('Retry-After'), '5');
+  } finally {
+    warn.mock.restore();
+  }
+
+  assert.equal(warnings.length, 1, 'the refusal is logged once');
+  assert.ok(warnings[0].includes('notifications.negotiate.refused'));
+  assert.ok(warnings[0].includes('Bitwarden/2026.9.0'), 'the client that retries shows up in the log');
+  assert.equal(warnings[0].includes(accessToken), false, 'the access token stays out of the log');
 });
