@@ -27,6 +27,8 @@ export interface EmergencyAccessNotice {
   kind: 'recovery_started' | 'recovery_approved' | 'account_taken_over';
   /** How long the wait was, in days. */
   waitTimeDays: number;
+  /** What the grantee gets once the access is confirmed. */
+  accessType?: 'view' | 'takeover';
 }
 
 const WINDOW_SECONDS = 900;
@@ -51,6 +53,7 @@ async function mailEmergencyAccessRecovery(env: Env, notice: EmergencyAccessNoti
       granteeEmail: grantee?.email ?? '',
       waitTimeDays: notice.waitTimeDays,
       vaultUrl: mailVaultUrl(env),
+      accessType: notice.accessType ?? null,
     });
     await sendMail(env, {
       kind: 'emergency_access_recovery',

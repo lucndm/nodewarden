@@ -116,15 +116,30 @@ export async function listEmergencyAccessByGrantor(
   return (res.results || []).map(mapRow);
 }
 
-/** The grants one account was given. */
+/**
+ * The grants one account was given.
+ *
+ * An invitation to an address that has no account yet is stored by that
+ * address, so it is listed here as soon as the account with that address
+ * exists.
+ */
 export async function listEmergencyAccessByGrantee(
   db: D1Database,
-  granteeId: string
+  granteeId: string,
+  granteeEmail: string | null = null
 ): Promise<EmergencyAccessRow[]> {
-  const res = await db
-    .prepare(`SELECT ${COLUMNS} FROM emergency_access WHERE grantee_id = ? ORDER BY created_at DESC`)
-    .bind(granteeId)
-    .all<RawRow>();
+  const email = (granteeEmail || '').trim().toLowerCase();
+  const res = email
+    ? await db
+        .prepare(
+          `SELECT ${COLUMNS} FROM emergency_access WHERE grantee_id = ? OR (grantee_id IS NULL AND email = ?) ORDER BY created_at DESC`
+        )
+        .bind(granteeId, email)
+        .all<RawRow>()
+    : await db
+        .prepare(`SELECT ${COLUMNS} FROM emergency_access WHERE grantee_id = ? ORDER BY created_at DESC`)
+        .bind(granteeId)
+        .all<RawRow>();
   return (res.results || []).map(mapRow);
 }
 

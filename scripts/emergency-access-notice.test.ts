@@ -282,6 +282,24 @@ test('the grantor is mailed when a recovery starts', async () => {
   assert.ok(sent[0].text.includes('7 days'), sent[0].text);
 });
 
+test('the approval mail of a view grant does not speak of a takeover', async () => {
+  const { env, sent } = await mailFixture();
+  const capture = captureSent();
+  try {
+    await sendEmergencyAccessNotice(env, 'vault.example.test', {
+      kind: 'recovery_approved',
+      grantorId: OWNER,
+      granteeId: GRANTEE,
+      waitTimeDays: 7,
+      accessType: 'view',
+    });
+  } finally {
+    capture.restore();
+  }
+  assert.equal(sent.length, 1, 'one mail is sent');
+  assert.ok(!sent[0].text.includes('take over'), sent[0].text);
+});
+
 test('the mail goes out without Telegram configured', async () => {
   const { env, sent } = await mailFixture();
   const withoutTelegram = {

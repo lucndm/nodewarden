@@ -6,7 +6,10 @@ import { StorageService } from './services/storage';
 import { applyCors, jsonResponse } from './utils/response';
 import { runScheduledBackupIfDue } from './handlers/backup';
 import { sweepEmailBreachCaches } from './services/email-breach-monitor';
-import { approveExpiredEmergencyAccess } from './services/storage-emergency-access-repo';
+import {
+  approveExpiredEmergencyAccess,
+  EMERGENCY_ACCESS_TYPE_TAKEOVER,
+} from './services/storage-emergency-access-repo';
 import { sendEmergencyAccessNotice } from './services/emergency-access-notifier';
 import {
   isBackendRequestPath,
@@ -138,6 +141,7 @@ export default {
                 grantorId: grant.grantorId,
                 granteeId: grant.granteeId ?? undefined,
                 waitTimeDays: grant.waitTimeDays,
+                accessType: grant.type === EMERGENCY_ACCESS_TYPE_TAKEOVER ? 'takeover' : 'view',
               })
             )
           )

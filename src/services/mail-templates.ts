@@ -85,6 +85,8 @@ function build(subject: string, sections: Section[], vaultUrl: string | null): M
  * The mail that tells somebody they were named an emergency contact.
  *
  * The grantor names the grantee, so the grantor is the one who writes.
+ * The grantee has to sign in to accept the invitation, so somebody without
+ * an account is told how to get one first.
  */
 export function emergencyAccessInviteMail(input: {
   grantorName: string | null;
@@ -92,6 +94,8 @@ export function emergencyAccessInviteMail(input: {
   accessType: 'view' | 'takeover';
   waitTimeDays: number;
   vaultUrl: string | null;
+  /** Whether the address the invitation went to already has an account here. */
+  recipientHasAccount: boolean;
 }): MailContent {
   const grantor = who(input.grantorName, input.grantorEmail);
   const reach = input.accessType === 'takeover' ? 'take over their account' : 'read their vault';
@@ -101,9 +105,13 @@ export function emergencyAccessInviteMail(input: {
       paragraph('Hi,'),
       paragraph(`${grantor} named you as an emergency contact for their vault.`),
       paragraph(
-        `If they cannot get in themselves, they can ${reach} after a waiting period of ${days(input.waitTimeDays)}.`
+        input.recipientHasAccount
+          ? 'Sign in to accept the invitation.'
+          : "You need an account on this server first. Ask them or the server's administrator for an invite code, sign up with this email address, then sign in to accept the invitation."
       ),
-      paragraph('You will see the request in the vault when it happens.'),
+      paragraph(
+        `Once they confirm you, you can ask for access if they ever cannot get in: you can ${reach} ${days(input.waitTimeDays)} after you ask, unless they turn the request down.`
+      ),
     ],
     input.vaultUrl
   );
@@ -121,6 +129,8 @@ export function emergencyAccessRecoveryMail(input: {
   granteeEmail: string;
   waitTimeDays: number;
   vaultUrl: string | null;
+  /** What the grantee gets once the access is confirmed. */
+  accessType: 'view' | 'takeover' | null;
 }): MailContent {
   const grantee = who(input.granteeName, input.granteeEmail);
   // The grantee may not be known by name, for instance when the account was
@@ -133,20 +143,35 @@ export function emergencyAccessRecoveryMail(input: {
         ? 'Emergency access to your vault was granted'
         : 'Your account was taken over through emergency access';
 
+  const wait = days(input.waitTimeDays);
   const sections =
     input.kind === 'recovery_started'
       ? [
           paragraph('Hi,'),
           paragraph(`${actor} asked for emergency access to your vault.`),
-          paragraph(`Access is granted automatically after ${days(input.waitTimeDays)} unless you reject it.`),
+          paragraph(
+            input.accessType === 'takeover'
+              ? `They will be able to take over your account after ${wait} unless you reject the request.`
+              : input.accessType === 'view'
+                ? `They will be able to read your vault after ${wait} unless you reject the request.`
+                : `Access is granted automatically after ${wait} unless you reject the request.`
+          ),
           paragraph('Reject it in the emergency access settings of your vault, after you sign in.'),
         ]
       : input.kind === 'recovery_approved'
         ? [
             paragraph('Hi,'),
-            paragraph(`${actor} can now take over your vault.`),
             paragraph(
-              'Delete the grant if you do not want this. Until the account password is replaced, nothing has changed yet.'
+              input.accessType === 'takeover'
+                ? `${actor} can now take over your account.`
+                : input.accessType === 'view'
+                  ? `${actor} can now read your vault.`
+                  : `${actor} can now use the emergency access you gave them.`
+            ),
+            paragraph(
+              input.accessType === 'takeover'
+                ? 'Nothing has changed until they set a new password. To stop it, delete the grant in the emergency access settings of your vault.'
+                : 'To stop it, delete the grant in the emergency access settings of your vault.'
             ),
           ]
         : [

@@ -24,6 +24,40 @@ const GRANTEE = '00000000-0000-4000-8000-0000000000a2';
 const STRANGER = '00000000-0000-4000-8000-0000000000a3';
 const NOW = '2026-01-01T00:00:00.000Z';
 
+/** A user row, as the fixture writes it. */
+function newUser(id: string, email: string): Record<string, unknown> {
+  return {
+    id,
+    email,
+    name: null,
+    masterPasswordHint: null,
+    masterPasswordHash: 'hash',
+    key: 'key',
+    privateKey: null,
+    publicKey: null,
+    kdfType: 0,
+    kdfIterations: 600000,
+    kdfMemory: null,
+    kdfParallelism: null,
+    securityStamp: 'stamp',
+    role: 'user',
+    status: 'active',
+    verifyDevices: false,
+    totpSecret: null,
+    totpRecoveryCode: null,
+    yubikeyKey1: null,
+    yubikeyKey2: null,
+    yubikeyKey3: null,
+    yubikeyKey4: null,
+    yubikeyKey5: null,
+    yubikeyNfc: false,
+    apiKey: null,
+    userKeyId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+}
+
 async function fixture(): Promise<{ env: Env; storage: StorageService }> {
   const db = new DatabaseSync(':memory:');
   // The mail keeps its budget in the strict-budget table. The rate limiter
@@ -40,36 +74,7 @@ async function fixture(): Promise<{ env: Env; storage: StorageService }> {
     [GRANTEE, 'grantee@example.test'],
     [STRANGER, 'stranger@example.test'],
   ]) {
-    await storage.createUser({
-      id,
-      email,
-      name: null,
-      masterPasswordHint: null,
-      masterPasswordHash: 'hash',
-      key: 'key',
-      privateKey: null,
-      publicKey: null,
-      kdfType: 0,
-      kdfIterations: 600000,
-      kdfMemory: null,
-      kdfParallelism: null,
-      securityStamp: 'stamp',
-      role: 'user',
-      status: 'active',
-      verifyDevices: false,
-      totpSecret: null,
-      totpRecoveryCode: null,
-      yubikeyKey1: null,
-      yubikeyKey2: null,
-      yubikeyKey3: null,
-      yubikeyKey4: null,
-      yubikeyKey5: null,
-      yubikeyNfc: false,
-      apiKey: null,
-      userKeyId: null,
-      createdAt: NOW,
-      updatedAt: NOW,
-    } as never);
+    await storage.createUser(newUser(id, email) as never);
   }
   return { env, storage };
 }
@@ -327,6 +332,55 @@ test('an invitation to an address without an account is still mailed', async () 
   assert.equal(invited.status, 200);
   assert.equal(sent.length, 1, 'one mail is sent');
   assert.equal(sent[0].to, 'nobody@example.test');
+});
+
+test('the invitation to an address without an account says how to get one', async () => {
+  const { env, sent } = await mailFixture();
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
+    ...INVITE,
+    email: 'nobody@example.test',
+  });
+  assert.equal(invited.status, 200);
+  assert.equal(sent.length, 1, 'one mail is sent');
+  assert.ok(sent[0].text.includes('invite code'), sent[0].text);
+});
+
+test('an invitation to an address without an account shows up once that account exists', async () => {
+  const { env, storage } = await fixture();
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
+    ...INVITE,
+    email: 'later@example.test',
+  });
+  assert.equal(invited.status, 200);
+  const { id } = (await invited.json()) as { id: string };
+
+  // The account is created later, with the address the invitation was sent to.
+  const LATER = '00000000-0000-4000-8000-0000000000b1';
+  await storage.createUser(newUser(LATER, 'later@example.test') as never);
+
+  const granted = await call(env, 'GET', '/api/emergency-access/granted', LATER);
+  const list = await granted.json();
+  assert.equal(list.data.length, 1, 'the invitation is listed');
+  assert.equal(list.data[0].id, id);
+  assert.equal(list.data[0].status, 0, 'it is still an invitation');
+
+  const accepted = await call(env, 'PUT', `/api/emergency-access/${id}/accept`, LATER);
+  assert.equal(accepted.status, 200);
+
+  const again = await call(env, 'GET', '/api/emergency-access/granted', LATER);
+  const after = await again.json();
+  assert.equal(after.data.length, 1);
+  assert.equal(after.data[0].status, 1, 'it is accepted');
+});
+
+test('an invitation addressed to somebody else does not show up', async () => {
+  const { env } = await fixture();
+  await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
+    ...INVITE,
+    email: 'later@example.test',
+  });
+  const granted = await call(env, 'GET', '/api/emergency-access/granted', STRANGER);
+  assert.equal((await granted.json()).data.length, 0, 'the grant is for another address');
 });
 
 test('a reinvite mails again, but not twice in a quarter hour', async () => {
