@@ -234,9 +234,9 @@ export function emailChangedNoticeMail(input: { newEmail: string; vaultUrl: stri
     [
       paragraph('Hi,'),
       paragraph(`The email of your vault account was changed to ${input.newEmail}.`),
-      paragraph('The sessions of that account have been thrown out.'),
+      paragraph('Every session of the account was signed out.'),
       paragraph(
-        'If you did not do this, sign in and change your master password, or contact the server\'s administrator.'
+        'If you did not do this, contact the server\'s administrator right away: the account can no longer be signed in to with this address.'
       ),
     ],
     input.vaultUrl

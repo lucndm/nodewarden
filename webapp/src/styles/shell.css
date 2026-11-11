@@ -174,15 +174,15 @@
 }
 
 .vault-route .app-main {
-  grid-template-columns: 270px minmax(0, 1fr);
+  grid-template-columns: 240px 220px minmax(0, 1fr);
 }
 
-.vault-route .app-side {
+/* The filters of the vault scroll on their own, so the menu beside them
+   keeps its place and stays on screen. */
+.vault-filter-column {
+  @apply flex min-h-0 flex-col gap-2 border-r px-3 py-4;
+  border-color: var(--line-soft);
   overflow: auto;
-}
-
-.vault-route .side-nav-main {
-  flex: none;
 }
 
 .app-side {

@@ -20,8 +20,8 @@ interface SettingsPageProps {
   onThemePreferenceChange: (preference: ThemePreference) => void;
   onVerifyMasterPassword: (email: string, password: string) => Promise<void>;
   onChangePassword: (currentPassword: string, nextPassword: string, nextPassword2: string) => Promise<void>;
-  onRequestEmailChangeCode: (newEmail: string, password: string) => Promise<void>;
-  onChangeEmail: (newEmail: string, password: string, code: string) => Promise<void>;
+  onRequestEmailChangeCode: (newEmail: string, password: string) => Promise<boolean>;
+  onChangeEmail: (newEmail: string, password: string, code: string) => Promise<boolean>;
   onSavePasswordHint: (masterPasswordHint: string) => Promise<void>;
   onEnableTotp: (secret: string, token: string, masterPassword: string) => Promise<void>;
   onOpenDisableTotp: () => void;
@@ -603,8 +603,8 @@ export default function SettingsPage(props: SettingsPageProps) {
   async function sendEmailChangeCode(): Promise<void> {
     setEmailChangeBusy(true);
     try {
-      await props.onRequestEmailChangeCode(emailChangeAddress, emailChangePassword);
-      setEmailChangeCodeSent(true);
+      const sent = await props.onRequestEmailChangeCode(emailChangeAddress, emailChangePassword);
+      if (sent) setEmailChangeCodeSent(true);
     } finally {
       setEmailChangeBusy(false);
     }

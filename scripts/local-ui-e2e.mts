@@ -1208,8 +1208,8 @@ async function main() {
       emergencyText.slice(-300)
     );
     checks.ok(
-      'and it says nobody is emailed',
-      emergencyText.includes('Nobody is emailed'),
+      'and it says the person who is let in is told by email',
+      emergencyText.includes('The person you invite gets an email'),
       emergencyText.slice(-300)
     );
     checks.ok(
@@ -1465,6 +1465,157 @@ async function main() {
     );
     const oldSession = await asMember('/api/accounts/profile');
     checks.equal('and the old session of the member has ended', oldSession.status, 401);
+
+    // The change email form asks for the code only when the server really
+    // sent one. A request that fails leaves the form as it was, so nobody is
+    // asked for a code that does not exist.
+    await evaluate(`(() => {
+      const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/settings');
+      if (!link) return false;
+      link.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.settings-category-tab')`, 'the settings page', 20000);
+    await evaluate(`(() => {
+      const tab = [...document.querySelectorAll('.settings-category-tab')].find((b) => b.textContent.trim().toLowerCase() === 'master password');
+      if (!tab) return false;
+      tab.click();
+      return true;
+    })()`);
+    await waitFor(
+      `!![...document.querySelectorAll('.settings-submodule h3')].find((h) => h.textContent.trim().toLowerCase() === 'change email')`,
+      'the change email form',
+      20000
+    );
+    const emailChangeSent = await evaluate(`(() => {
+      const section = [...document.querySelectorAll('.settings-submodule')].find((s) => (s.querySelector('h3')?.textContent || '').trim().toLowerCase() === 'change email');
+      if (!section) return false;
+      const setValue = (input, value) => {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      const email = [...section.querySelectorAll('input')].find((input) => input.type === 'email');
+      const password = [...section.querySelectorAll('input')].find((input) => input.type === 'password');
+      if (!email || !password) return false;
+      setValue(email, 'another-address@example.test');
+      setValue(password, 'Wrong-Master-Password-2026!');
+      const button = [...section.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Send code');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    // The answer of the server takes a moment, so the form is watched until
+    // the request is over.
+    const readEmailForm = async () => evaluate(`(() => {
+      const section = [...document.querySelectorAll('.settings-submodule')].find((s) => (s.querySelector('h3')?.textContent || '').trim().toLowerCase() === 'change email');
+      return {
+        inputs: section ? section.querySelectorAll('input').length : -1,
+        answered: !!document.querySelector('.toast-item.error'),
+      };
+    })()`);
+    let emailForm = await readEmailForm();
+    const emailDeadline = Date.now() + 15000;
+    while (!emailForm.answered && Date.now() < emailDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      emailForm = await readEmailForm();
+    }
+    checks.ok(
+      'the change email form does not ask for a code the server did not send',
+      emailChangeSent === true && emailForm.inputs === 2,
+      `sent=${emailChangeSent} inputs=${emailForm.inputs}`
+    );
+
+    // The backup page opens on the destination that is selected. A
+    // destination that was never filled in cannot be listed, and the page
+    // must not greet the user with an error for it.
+    await evaluate(`(() => {
+      for (const trigger of [...document.querySelectorAll('.side-group-trigger')]) {
+        if (trigger.getAttribute('aria-expanded') === 'false') trigger.click();
+      }
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await evaluate(`(() => {
+      const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/backup');
+      if (!link) return false;
+      link.click();
+      return true;
+    })()`);
+    await waitFor(`document.body.textContent.includes('Remote Backups')`, 'the remote backups section', 20000);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const backupText = await evaluate('document.body.innerText');
+    checks.ok(
+      'the backup page does not complain about a destination that was never filled in',
+      !backupText.includes('WebDAV server URL is required'),
+      backupText.slice(-300)
+    );
+
+    // The filters of the vault sit in a column of their own, so the menu
+    // keeps its place and stays on screen.
+    await evaluate(`(() => {
+      const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/vault');
+      if (!link) return false;
+      link.click();
+      return true;
+    })()`);
+    await waitFor(
+      `!!document.querySelector('.vault-filter-column') && document.querySelector('.vault-filter-column').textContent.includes('All Items')`,
+      'the vault filters in their own column',
+      20000
+    );
+    const vaultLayout = await evaluate(`(() => {
+      const linkBox = (text) => {
+        const link = [...document.querySelectorAll('.app-side a')].find((a) => a.textContent.trim() === text);
+        if (!link) return null;
+        const box = link.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom };
+      };
+      const column = document.querySelector('.vault-filter-column');
+      return {
+        sends: linkBox('Sends'),
+        accountSettings: linkBox('Account Settings'),
+        column: !!column,
+        filters: column ? column.textContent.includes('All Items') : false,
+        viewport: window.innerHeight,
+      };
+    })()`);
+    checks.ok(
+      'the menu of the vault keeps every link on the screen',
+      !!vaultLayout?.sends
+        && !!vaultLayout?.accountSettings
+        && vaultLayout.sends.bottom <= vaultLayout.viewport
+        && vaultLayout.accountSettings.bottom <= vaultLayout.viewport,
+      JSON.stringify(vaultLayout || {})
+    );
+    checks.ok(
+      'the filters of the vault sit in a column of their own',
+      vaultLayout?.column === true && vaultLayout?.filters === true,
+      JSON.stringify(vaultLayout || {})
+    );
+
+    // The emergency access page says who hears about a grant, so it must not
+    // claim that nobody is told.
+    await evaluate(`(() => {
+      const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/settings');
+      if (!link) return false;
+      link.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.settings-category-tab')`, 'the settings page', 20000);
+    await evaluate(`(() => {
+      const tab = [...document.querySelectorAll('.settings-category-tab')].find((b) => b.textContent.trim() === 'Emergency access');
+      if (!tab) return false;
+      tab.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.settings-submodule')`, 'the emergency access section', 20000);
+    const emergencyCopy = await evaluate('document.body.innerText');
+    checks.ok(
+      'the emergency access page does not claim that nobody is told about a grant',
+      !emergencyCopy.includes('Nobody is emailed'),
+      emergencyCopy.slice(-300)
+    );
 
     return checks.finish() ? 0 : 1;
   } finally {

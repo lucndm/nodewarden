@@ -13,6 +13,12 @@
     grid-template-columns: 1fr;
   }
 
+  /* On a narrow screen the vault brings its own filter menu, so the column
+     beside the menu is not needed. */
+  .vault-filter-column {
+    display: none;
+  }
+
   .app-side {
     @apply grid items-start gap-2;
     border-right: none;

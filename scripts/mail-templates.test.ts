@@ -202,7 +202,7 @@ test('the notice names the new email', () => {
   assert.ok(mail.text.includes('new@example.test'), mail.text);
   assert.ok(
     mail.text.includes(
-      "If you did not do this, sign in and change your master password, or contact the server's administrator."
+      "If you did not do this, contact the server's administrator right away: the account can no longer be signed in to with this address."
     ),
     mail.text
   );

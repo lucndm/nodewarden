@@ -210,11 +210,15 @@ export default function AppAuthenticatedShell(props: AppAuthenticatedShellProps)
 
         <div className="app-main">
           <aside className="app-side">
-            {props.location === '/vault' && <div id="vault-sidebar-slot" />}
             <div className="side-nav-main">
               {groupedNav}
             </div>
           </aside>
+          {props.location === '/vault' && (
+            <aside className="vault-filter-column" aria-label={t('txt_filter')}>
+              <div id="vault-sidebar-slot" />
+            </aside>
+          )}
           <main className="content">
             <div key={routeAnimationKey} className={`route-stage ${isDomainRulesRoute ? 'route-stage-fixed' : ''} ${isLogRoute ? 'route-stage-log-fixed' : ''}`}>
               <AppMainRoutes {...props.mainRoutesProps} />

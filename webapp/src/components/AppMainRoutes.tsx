@@ -132,8 +132,8 @@ export interface AppMainRoutesProps {
   uploadingSendFileName: string;
   sendUploadPercent: number | null;
   onChangePassword: (currentPassword: string, nextPassword: string, nextPassword2: string) => Promise<void>;
-  onRequestEmailChangeCode: (newEmail: string, password: string) => Promise<void>;
-  onChangeEmail: (newEmail: string, password: string, code: string) => Promise<void>;
+  onRequestEmailChangeCode: (newEmail: string, password: string) => Promise<boolean>;
+  onChangeEmail: (newEmail: string, password: string, code: string) => Promise<boolean>;
   onSavePasswordHint: (masterPasswordHint: string) => Promise<void>;
   onEnableTotp: (secret: string, token: string, masterPassword: string) => Promise<void>;
   onOpenDisableTotp: () => void;

@@ -6,12 +6,16 @@ import { t } from '@/lib/i18n';
 interface RemoteBackupBrowserProps {
   canBrowse: boolean;
   destinationIsSaved: boolean;
+  /** Whether the saved destination holds the details a listing needs. */
+  destinationReady: boolean;
   disableWhileBusy: boolean;
   loadingRemoteBrowser: boolean;
   remoteBrowser: RemoteBackupBrowserResponse | null;
   visibleItems: RemoteBackupBrowserResponse['items'];
   currentPage: number;
   totalPages: number;
+  /** The message of a listing that failed without the user asking for it. */
+  remoteBrowserError: string | null;
   downloadingRemotePath: string;
   downloadingRemotePercent: number | null;
   restoringRemotePath: string;
@@ -52,8 +56,14 @@ export function RemoteBackupBrowser(props: RemoteBackupBrowserProps) {
         <h3>{t('txt_backup_remote_title')}</h3>
       </div>
 
+      {props.remoteBrowserError ? (
+        <div className="local-error" role="alert">{props.remoteBrowserError}</div>
+      ) : null}
+
       {!props.destinationIsSaved ? (
         <div className="backup-browser-empty">{t('txt_backup_remote_save_first')}</div>
+      ) : !props.destinationReady ? (
+        <div className="backup-browser-empty">{t('txt_backup_remote_not_configured')}</div>
       ) : props.loadingRemoteBrowser && !props.remoteBrowser ? (
         <div className="backup-browser-empty">{t('txt_backup_remote_loading')}</div>
       ) : !props.remoteBrowser ? (
