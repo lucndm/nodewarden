@@ -26,3 +26,4 @@ interface Window {
 }
 
 declare const __NODEWARDEN_DEMO__: boolean;
+declare const __NODEWARDEN_BUILD__: { sha: string; committedAt: string | null };

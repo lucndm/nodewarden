@@ -1732,6 +1732,7 @@ Object.assign(it, {
   "txt_email_change_code_sent": "Il codice è in viaggio verso il nuovo indirizzo. È valido per 15 minuti.",
   "txt_email_changed_signing_out_everywhere": "L'indirizzo email del tuo account è stato modificato. Tutte le sessioni sono state chiuse, accedi di nuovo.",
   "txt_email_change_failed": "Non è stato possibile modificare l'indirizzo email dell'account.",
+  "txt_build_stamp_label": "Compilazione",
 });
 
 export default it;

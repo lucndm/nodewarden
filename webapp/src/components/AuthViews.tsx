@@ -2,7 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { AlertTriangle, ArrowLeft, Eye, EyeOff, KeyRound, LogIn, LogOut, Unlock, UserPlus } from 'lucide-preact';
 import NetworkStatusBadge from '@/components/NetworkStatusBadge';
 import StandalonePageFrame from '@/components/StandalonePageFrame';
-import { t } from '@/lib/i18n';
+import { currentBuild, describeBuild } from '@/lib/build-info';
+import { getLocale, t } from '@/lib/i18n';
 import { getCurrentNetworkStatus, subscribeNetworkStatus, type NetworkStatus } from '@/lib/network-status';
 
 interface LoginValues {
@@ -280,6 +281,10 @@ export default function AuthViews(props: AuthViewsProps) {
     );
   }
 
+  // The build stamp names the commit this bundle was built from. It belongs to
+  // the login screen only: the unlock and register screens say nothing about it.
+  const { shortSha, commitUrl, committedLabel } = describeBuild(currentBuild, getLocale());
+
   return (
     <div className="auth-page">
       <StandalonePageFrame title={t('txt_log_in')} titleAccessory={<NetworkStatusBadge />}>
@@ -365,6 +370,22 @@ export default function AuthViews(props: AuthViewsProps) {
             </>
           )}
         </form>
+        <p className="auth-build-stamp">
+          {t('txt_build_stamp_label')}{' '}
+          {commitUrl ? (
+            <a href={commitUrl} target="_blank" rel="noreferrer">
+              {shortSha}
+            </a>
+          ) : (
+            <span>{shortSha}</span>
+          )}
+          {committedLabel ? (
+            <>
+              {' · '}
+              <time dateTime={currentBuild.committedAt!}>{committedLabel}</time>
+            </>
+          ) : null}
+        </p>
       </StandalonePageFrame>
     </div>
   );

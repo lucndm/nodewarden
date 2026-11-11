@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import preact from '@preact/preset-vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
+import { gitRunner, readBuildStamp } from './build-stamp';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 
@@ -271,12 +272,14 @@ function searchIndexPolicyPlugin(isDemo: boolean): Plugin {
 
 export default defineConfig(({ mode }) => {
   const isDemo = mode === 'demo';
+  const stamp = readBuildStamp(process.env, gitRunner(rootDir));
 
   return {
     root: rootDir,
     plugins: [preact(), tailwindcss(), searchIndexPolicyPlugin(isDemo), pwaServiceWorkerPlugin(isDemo)],
     define: {
       __NODEWARDEN_DEMO__: JSON.stringify(isDemo),
+      __NODEWARDEN_BUILD__: JSON.stringify(stamp),
     },
     resolve: {
       alias: {

@@ -1732,6 +1732,7 @@ Object.assign(sv, {
   "txt_email_change_code_sent": "Koden är på väg till den nya adressen. Den gäller i 15 minuter.",
   "txt_email_changed_signing_out_everywhere": "E-postadressen för ditt konto har ändrats. Alla sessioner har avslutats, logga in igen.",
   "txt_email_change_failed": "E-postadressen för kontot kunde inte ändras.",
+  "txt_build_stamp_label": "Byggversion",
 });
 
 export default sv;
