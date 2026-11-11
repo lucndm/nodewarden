@@ -853,7 +853,7 @@ export async function handleUpdateCollection(
 
 // A collection is something the members' clients have to sync, so every
 // confirmed member of the organization gets a new revision.
-async function notifyOrganizationMembers(
+export async function notifyOrganizationMembers(
   request: Request,
   env: Env,
   storage: StorageService,

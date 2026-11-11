@@ -1,0 +1,54 @@
+meta {
+  name: POST ciphers/bulk-collections
+  type: http
+  seq: 25
+}
+
+post {
+  url: {{baseUrl}}/api/ciphers/bulk-collections
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ownerToken}}
+}
+
+body:json {
+  {
+    "organizationId": "{{orgId}}",
+    "cipherIds": ["00000000-0000-4000-8000-0000000000aa"],
+    "collectionIds": ["00000000-0000-4000-8000-0000000000bb"],
+    "removeCollections": false
+  }
+}
+
+docs {
+  Client: `CipherSdkService.bulkUpdateCollectionsWithServer`
+  (`libs/common/src/vault/services/cipher-sdk.service.ts`), called from
+  `assign-collections.component.ts`: the "Assign to collections" dialog of the
+  web vault, the extension and the desktop app puts several items of an
+  organization into collections at once. It calls the route twice when a
+  collection is taken away: once to add the collections that stay, once to
+  remove the one that goes. Body `organizationId`, `cipherIds`,
+  `collectionIds`, `removeCollections`.
+
+  Reference: vaultwarden `post_bulk_collections`
+  (`vaultwarden/src/api/core/organizations.rs`): a confirmed member of the
+  organization, and the items the member may write. NodeWarden also refuses a
+  request that would leave an item without a collection, since a shared item
+  always sits in one.
+
+  The request names a collection that does not exist: the Bruno run holds no
+  id of a collection of `{{orgId}}`, so this call checks the route and the
+  membership of the member. The writing itself is covered by the unit test.
+}
+
+tests {
+  const f = (o, k) => (o == null ? undefined : o[k] !== undefined ? o[k] : o[k.charAt(0).toUpperCase() + k.slice(1)]);
+  test("the collection of the request does not exist", function () {
+    expect(res.status).to.equal(404);
+    const message = f(f(res.body, "ErrorModel"), "message") || f(res.body, "error");
+    expect(message).to.contain("Collection not found");
+  });
+}

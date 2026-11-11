@@ -25,6 +25,7 @@ import {
 import { jsonResponse, errorResponse } from '../utils/response';
 import { generateUUID } from '../utils/uuid';
 import { deleteAllAttachmentsForCipher, deleteAllAttachmentsForCiphers } from './attachments';
+import { notifyOrganizationMembers } from './organizations';
 import { parsePagination, encodeContinuationToken } from '../utils/pagination';
 import { readActingDeviceIdentifier } from '../utils/device';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
@@ -154,6 +155,16 @@ function getAliasedProp(source: any, aliases: string[]): { present: boolean; val
 
 function readCipherProp<T = unknown>(source: any, aliases: string[]): { present: boolean; value: T | undefined } {
   return getAliasedProp(source, aliases) as { present: boolean; value: T | undefined };
+}
+
+/** The ids of a list of strings, without the empty ones and without repeats. */
+function readIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids = value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+  return [...new Set(ids)];
 }
 
 function normalizeCipherTimestamp(value: unknown): string | null {
@@ -1646,6 +1657,100 @@ export async function handleSetCipherCollections(
   await storage.setCipherCollections(cipher.id, requested);
   const revision = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revision);
+
+  return new Response(null, { status: 204 });
+}
+
+// POST /api/ciphers/bulk-collections
+//
+// The "Assign to collections" dialog of the web vault, the extension and the
+// desktop app calls this route to put several items of an organization into
+// collections at once. It calls it twice when a collection is taken away:
+// once to add the collections that stay, once to remove the one that goes.
+//
+// An item the member may not write is skipped, and an item of an
+// organization always stays in at least one collection, so the whole request
+// is refused when it would leave one behind.
+export async function handleBulkUpdateCipherCollections(
+  request: Request,
+  env: Env,
+  userId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+
+  const rawOrganizationId = readCipherProp<unknown>(body, ['organizationId', 'OrganizationId']).value;
+  const organizationId = typeof rawOrganizationId === 'string' ? normalizeOptionalId(rawOrganizationId) : null;
+  if (!organizationId) return errorResponse('organizationId is required', 400);
+
+  const cipherIds = readIdList(readCipherProp<string[] | null>(body, ['cipherIds', 'CipherIds']).value);
+  const collectionIds = readIdList(readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']).value);
+  if (!collectionIds.length) return errorResponse('At least one collection is required', 400);
+  if (!cipherIds.length) return errorResponse('At least one item is required', 400);
+
+  const removeCollections =
+    readCipherProp<boolean | null>(body, ['removeCollections', 'RemoveCollections']).value === true;
+
+  // Only a confirmed member of the organization may assign its collections.
+  const membership = await storage.getOrganizationUserForUser(organizationId, userId);
+  if (!membership || membership.status !== 2) return errorResponse('Organization not found', 404);
+
+  const organizationCollections = await storage.getOrganizationCollectionIds(organizationId, collectionIds);
+  if (organizationCollections.size !== collectionIds.length) {
+    return errorResponse('Collection not found', 404);
+  }
+  const rights = await storage.getCollectionRightsForCollections(userId, collectionIds);
+  for (const collectionId of collectionIds) {
+    const entry = rights.get(collectionId);
+    if (!entry || entry.readOnly || entry.hidePasswords) {
+      return errorResponse('You may not write to that collection', 403);
+    }
+  }
+
+  // Only the items of this organization the member may change: an item of
+  // another organization, a personal item, and an item the member may only
+  // read are skipped, as the official server does.
+  const writable = await storage.filterWritableCipherIds(cipherIds, userId);
+  const organizations = await storage.getOrganizationIdByCipherIds(writable);
+  const targetIds = writable.filter((id) => organizations.get(id) === organizationId);
+  if (!targetIds.length) return new Response(null, { status: 204 });
+
+  const current = await storage.getCollectionIdsByCipherIds(targetIds);
+  const requested = new Set(collectionIds);
+  const added: Array<[string, string]> = [];
+  const removed: Array<[string, string]> = [];
+  for (const cipherId of targetIds) {
+    const links = current.get(cipherId) ?? [];
+    const held = new Set(links);
+    for (const collectionId of collectionIds) {
+      if (removeCollections) {
+        if (held.has(collectionId)) removed.push([cipherId, collectionId]);
+      } else if (!held.has(collectionId)) {
+        added.push([cipherId, collectionId]);
+      }
+    }
+    // An item of an organization always sits in a collection, so taking the
+    // last one away is refused before anything is written.
+    if (removeCollections && links.some((collectionId) => requested.has(collectionId))) {
+      const left = links.filter((collectionId) => !requested.has(collectionId));
+      if (!left.length) {
+        return errorResponse('A shared item must stay in at least one collection', 400);
+      }
+    }
+  }
+
+  if (added.length || removed.length) {
+    await storage.updateCollectionCipherLinks(added, removed);
+    // The collections of the organization decide what every member may see,
+    // so the members have to sync.
+    await notifyOrganizationMembers(request, env, storage, organizationId, new Date().toISOString());
+  }
 
   return new Response(null, { status: 204 });
 }
