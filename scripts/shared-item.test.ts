@@ -29,6 +29,7 @@ import {
   COL_READONLY,
   COL_OTHER,
   ENC,
+  RSA_ENC,
   fixture,
   createUser,
   call,
@@ -638,11 +639,11 @@ test('a rotation naming another organization is refused whole', async () => {
 
   // Nothing changed, not even the part that was valid.
   const organizations = await storage.getOrganizationsForUser(OWNER);
-  assert.equal(organizations[0].privateKey, 'enc-private');
+  assert.equal(organizations[0].privateKey, ENC('org-private'));
   const before = (await (
     await call(env, 'https://vault.example.test/api/organizations', 'GET', OWNER)
   ).json()) as { data: Array<{ key: string }> };
-  assert.equal(before.data[0].key, 'wrapped', 'a refused rotation leaves every key as it was');
+  assert.equal(before.data[0].key, RSA_ENC('wrapped-org-key'), 'a refused rotation leaves every key as it was');
   const cipher = await storage.getCipher(created.id);
   assert.ok(cipher);
   assert.notEqual(cipher.key, ENC('new'));
@@ -720,7 +721,7 @@ test('only the owner can read what a rotation needs', async () => {
     ciphers: Array<{ id: string; key: string | null; name: string | null; data: unknown }>;
   };
   assert.equal(data.organization.id, ORG);
-  assert.equal(data.organization.privateKey, 'enc-private');
+  assert.equal(data.organization.privateKey, ENC('org-private'));
   assert.equal(data.members.length, 3, 'the confirmed members come back');
   assert.ok(data.members.every((member) => !!member.membershipId));
 

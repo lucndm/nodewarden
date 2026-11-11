@@ -153,7 +153,7 @@ test('a rename is refused to anyone but an owner or an admin', async () => {
     name: ENC('Renamed'),
   });
   assert.equal(other.status, 404);
-  assert.ok((await collectionNames(env, OTHER_ORG)).includes('Other'), 'the collection kept its name');
+  assert.ok((await collectionNames(env, OTHER_ORG)).includes(ENC('Other')), 'the collection kept its name');
 });
 
 test('a rename refuses a name in plain text', async () => {
@@ -161,7 +161,7 @@ test('a rename refuses a name in plain text', async () => {
 
   const response = await call(env, COLLECTION_URL(ORG, COL_SHARED), 'PUT', OWNER, { name: 'Renamed' });
   assert.equal(response.status, 400);
-  assert.ok((await collectionNames(env, ORG)).includes('Shared'), 'the collection kept its name');
+  assert.ok((await collectionNames(env, ORG)).includes(ENC('Shared')), 'the collection kept its name');
 });
 
 test('a rename refuses the body of the admin console', async () => {
@@ -173,7 +173,7 @@ test('a rename refuses the body of the admin console', async () => {
     users: [],
   });
   assert.equal(response.status, 501);
-  assert.ok((await collectionNames(env, ORG)).includes('Shared'), 'the collection kept its name');
+  assert.ok((await collectionNames(env, ORG)).includes(ENC('Shared')), 'the collection kept its name');
 });
 
 // The web vault seals the plain names of the collections of an organization
