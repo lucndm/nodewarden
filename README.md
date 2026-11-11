@@ -215,6 +215,46 @@ If no message arrives, check that the chat ID belongs to the chat where you sent
 To verify delivery after deployment, sign in successfully from a fresh browser profile or an incognito window, using your normal authentication method. An existing client or a vault unlock does not trigger a new-client alert. Web SSO creates a fresh client identifier, so a successful SSO sign-in can also exercise this path. Do not deliberately lock out your production account. Check Telegram for the message; a successful deployment alone does not prove delivery.
 
 
+## Outbound mail (optional)
+
+NodeWarden can mail the people who have to act: the somebody named as an emergency contact, the owner of a vault whose emergency access is moving, and the member invited to an organization. The feature is off by default — without the `EMAIL` binding or without `MAIL_FROM`, nothing is sent and the server behaves exactly as it did before.
+
+**What a mail contains**
+
+- the names and the addresses of the people involved, as the vault already shows them
+- the waiting time of an emergency access, in days
+- the address of the web vault
+
+No mail carries a key, a password, a hash, a token or an encrypted value.
+
+**How often mail is sent**
+
+- At most one mail per recipient and kind per 15-minute window.
+- At most 100 mails per hour for the whole instance, which keeps a burst of invitations from eating the monthly quota.
+- Delivery is best effort: a mail that cannot be sent is logged and dropped, and the request that triggered it still answers as it did before.
+
+**Setup**
+
+The binding and the two variables live in `wrangler.toml`:
+
+```toml
+[vars]
+MAIL_FROM = "no-reply@pass.minhluc.info"
+MAIL_VAULT_URL = "https://pass.minhluc.info"
+
+[[send_email]]
+name = "EMAIL"
+```
+
+The sending domain has to be onboarded to Cloudflare Email Sending, and the deploy token needs the Email Sending permission. Change `MAIL_FROM` and `MAIL_VAULT_URL` to your own domain and your own vault address; leave `MAIL_VAULT_URL` out and the mails carry no sign-in link.
+
+**What does not change**
+
+The routes that answer 501 today still answer 501: registration, the two-step login by email, the one-time code of a new device, the change of an email address, and the deletion of an account by mail. Mail here carries invitations and notices; it does not open a new way into an account, and sign-up stays in the web vault.
+
+The plan is in [plans/261111-1845-outbound-mail/plan.md](plans/261111-1845-outbound-mail/plan.md).
+
+
 ## FAQ
 
 - **After forking the repository, why can't I see my repository when connecting GitHub to Cloudflare, or why do I get a 404 after selecting it?**  

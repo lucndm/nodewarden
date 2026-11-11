@@ -15,6 +15,7 @@ installTestGlobals();
 import { handleAuthenticatedRoute } from '../src/router-authenticated';
 import { ensureStorageSchema } from '../src/services/storage-schema';
 import { StorageService } from '../src/services/storage';
+import type { MailBinding } from '../src/services/mail';
 import { sqliteD1 } from './sqlite-d1';
 import type { Env } from '../src/types';
 
@@ -25,6 +26,12 @@ const NOW = '2026-01-01T00:00:00.000Z';
 
 async function fixture(): Promise<{ env: Env; storage: StorageService }> {
   const db = new DatabaseSync(':memory:');
+  // The mail keeps its budget in the strict-budget table. The rate limiter
+  // only creates that table once per process, so a fresh database here has to
+  // have the table already.
+  db.exec(
+    'CREATE TABLE IF NOT EXISTS rate_limit_buckets(bucket_key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)'
+  );
   await ensureStorageSchema(sqliteD1(db));
   const env = { DB: sqliteD1(db) } as unknown as Env;
   const storage = new StorageService(env.DB);
@@ -92,6 +99,28 @@ const INVITE = {
   // encrypted, so the server holds a key it cannot open.
   encryptedUserKey: '4.not-a-real-key-just-a-placeholder',
 };
+
+/** The mails the server handed to the binding. */
+type SentMail = Parameters<MailBinding['send']>[0];
+
+/** A server that mails, and the mails it sent. */
+async function mailFixture(): Promise<{ env: Env; storage: StorageService; sent: SentMail[] }> {
+  const { env, storage } = await fixture();
+  const sent: SentMail[] = [];
+  const EMAIL: MailBinding = {
+    async send(message) {
+      sent.push(message);
+      return { messageId: 'fake-message-id' };
+    },
+  };
+  const mailing = {
+    ...env,
+    EMAIL,
+    MAIL_FROM: 'no-reply@pass.minhluc.info',
+    MAIL_VAULT_URL: 'https://pass.minhluc.info',
+  } as unknown as Env;
+  return { env: mailing, storage, sent };
+}
 
 test('the grantor invites somebody and sees the grant', async () => {
   const { env } = await fixture();
@@ -278,4 +307,72 @@ test('the grantor sees the grantee only, and the grantee sees the grantor only',
   assert.equal((await strangerTrusted.json()).data.length, 0);
   const strangerGranted = await call(env, 'GET', '/api/emergency-access/granted', STRANGER);
   assert.equal((await strangerGranted.json()).data.length, 0);
+});
+
+test('an invitation is mailed to the person invited', async () => {
+  const { env, sent } = await mailFixture();
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, INVITE);
+  assert.equal(invited.status, 200);
+  assert.equal(sent.length, 1, 'one mail is sent');
+  assert.equal(sent[0].to, 'grantee@example.test');
+  assert.equal(sent[0].subject, 'You were named an emergency contact');
+});
+
+test('an invitation to an address without an account is still mailed', async () => {
+  const { env, sent } = await mailFixture();
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, {
+    ...INVITE,
+    email: 'nobody@example.test',
+  });
+  assert.equal(invited.status, 200);
+  assert.equal(sent.length, 1, 'one mail is sent');
+  assert.equal(sent[0].to, 'nobody@example.test');
+});
+
+test('a reinvite mails again, but not twice in a quarter hour', async () => {
+  const { env, sent } = await mailFixture();
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, INVITE);
+  assert.equal(invited.status, 200);
+  const id = (await invited.json()).id;
+  const again = await call(env, 'PUT', `/api/emergency-access/${id}/reinvite`, GRANTOR);
+  assert.equal(again.status, 200);
+  assert.equal(sent.length, 1, 'the same person is not mailed twice in a quarter hour');
+});
+
+test('the request succeeds when the mail binding fails', async () => {
+  const { env } = await fixture();
+  const failing: MailBinding = {
+    async send() {
+      throw Object.assign(new Error('quota'), { code: 'E_RATE_LIMIT_EXCEEDED' });
+    },
+  };
+  const mailing = {
+    ...env,
+    EMAIL: failing,
+    MAIL_FROM: 'no-reply@pass.minhluc.info',
+  } as unknown as Env;
+
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map((value) => String(value)).join(' '));
+  };
+  let invited: Response;
+  try {
+    invited = await call(mailing, 'POST', '/api/emergency-access/invite', GRANTOR, INVITE);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(invited.status, 200, 'the invitation is granted anyway');
+  assert.equal(warnings.length, 1, 'the failure is logged once');
+  assert.ok(warnings[0].includes('mail.send_failed'), warnings[0]);
+
+  const trusted = await call(mailing, 'GET', '/api/emergency-access/trusted', GRANTOR);
+  assert.equal((await trusted.json()).data.length, 1, 'the grant exists');
+});
+
+test('nothing is mailed when mail is not configured', async () => {
+  const { env } = await fixture();
+  const invited = await call(env, 'POST', '/api/emergency-access/invite', GRANTOR, INVITE);
+  assert.equal(invited.status, 200, 'the invitation is granted');
 });

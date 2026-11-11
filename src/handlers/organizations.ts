@@ -11,6 +11,8 @@
 // organization key in a form only their own private key opens. A member who has
 // no wrapped key yet (invited, not confirmed) gets nothing.
 import { StorageService } from '../services/storage';
+import { isMailConfigured, mailVaultUrl, sendMail } from '../services/mail';
+import { organizationInviteMail } from '../services/mail-templates';
 import { notifyVaultSyncForRequest } from './ciphers';
 import { errorResponse, jsonResponse } from '../utils/response';
 import { officialProfileOrganizationFields } from '../utils/profile-response';
@@ -143,6 +145,45 @@ interface InviteMemberBody {
   type?: unknown;
 }
 
+/**
+ * Mails the members that were just invited.
+ *
+ * Only the members that were added are told: an address without an account
+ * and a member that was already there are left out of the invitation, so
+ * they are left out of the mail too.
+ *
+ * The mail is best effort: it never throws, so a binding that fails cannot
+ * fail the invitation.
+ */
+async function mailOrganizationInvites(
+  env: Env,
+  storage: StorageService,
+  orgId: string,
+  inviterId: string,
+  emails: string[]
+): Promise<void> {
+  if (!isMailConfigured(env) || !emails.length) return;
+  try {
+    const organization = (await storage.getOrganizationsForUser(inviterId)).find(
+      (entry) => entry.id === orgId
+    );
+    if (!organization) return;
+    const inviter = await storage.getUserById(inviterId);
+    if (!inviter) return;
+    for (const email of emails) {
+      const mail = organizationInviteMail({
+        organizationName: organization.name,
+        inviterEmail: inviter.email,
+        vaultUrl: mailVaultUrl(env),
+      });
+      await sendMail(env, { kind: 'organization_invite', to: email, ...mail });
+    }
+  } catch {
+    // Best effort: a mail that cannot be delivered must not fail the
+    // invitation that triggered it.
+  }
+}
+
 // POST /api/organizations/:orgId/users
 //
 // An owner or admin invites a member. The membership starts as an invitation:
@@ -180,6 +221,7 @@ export async function handleInviteOrganizationUser(
 
   const now = new Date().toISOString();
   const added: string[] = [];
+  const addedEmails: string[] = [];
 
   for (const email of emails) {
     const user = await storage.getUser(email);
@@ -196,7 +238,10 @@ export async function handleInviteOrganizationUser(
       now,
     });
     added.push(user.id);
+    addedEmails.push(user.email);
   }
+
+  await mailOrganizationInvites(env, storage, orgId, userId, addedEmails);
 
   return jsonResponse({ object: 'list', data: added.map((id) => ({ id })), continuationToken: null }, 200);
 }

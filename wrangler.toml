@@ -33,6 +33,14 @@ invocation_logs = true
 [observability.traces]
 enabled = true
 
+[vars]
+MAIL_FROM = "no-reply@pass.minhluc.info"
+MAIL_VAULT_URL = "https://pass.minhluc.info"
+
+[[send_email]]
+# No destination address, so the worker can mail any recipient.
+name = "EMAIL"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "nodewarden-db"
