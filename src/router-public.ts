@@ -353,6 +353,22 @@ export async function handlePublicRoute(
     return handleSsoPrevalidate(request, env);
   }
 
+  // The SSO page of the official clients asks this route without a login to
+  // find the organizations that claimed the domain of an email address.
+  // NodeWarden has no claimed domain, so the answer is always an empty list,
+  // the same as the official server returns when nothing matches; the client
+  // then lets the user type the identifier. Without this route the request
+  // falls through to the router that requires a login, answers 401, and the
+  // client shows an error on the SSO screen.
+  if (
+    (path === '/api/organizations/domain/sso/verified' || path === '/organizations/domain/sso/verified') &&
+    method === 'POST'
+  ) {
+    const blocked = await enforcePublicRateLimit('public-read', LIMITS.rateLimit.publicReadRequestsPerMinute);
+    if (blocked) return blocked;
+    return jsonResponse({ data: [], object: 'list', continuationToken: null });
+  }
+
   if ((path === '/identity/connect/authorize' || path === '/connect/authorize') && method === 'GET') {
     const blocked = await enforcePublicRateLimit('public-read', LIMITS.rateLimit.publicReadRequestsPerMinute);
     if (blocked) return blocked;

@@ -1,0 +1,43 @@
+meta {
+  name: POST organizations/domain/sso/verified
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/organizations/domain/sso/verified
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "member@example.test"
+  }
+}
+
+docs {
+  Client: `OrgDomainApiService.getVerifiedOrgDomainsByEmail`
+  (`libs/common/src/admin-console/services/organization-domain/org-domain-api.service.ts`),
+  used by the SSO page of the web vault, the browser extension and the desktop
+  client; Android asks the same route through `UnauthenticatedOrganizationApi`.
+  The request carries no token.
+
+  NodeWarden has no claimed domain, so the answer is always an empty list, the
+  same as the official server returns when no organization claimed the domain.
+  The client then lets the user type the identifier.
+
+  The clients ignore a 404 but report every other status as an error
+  (`sso.component.ts`, `handleGetClaimedDomainByEmailError`), so the route has
+  to answer 200.
+}
+
+tests {
+  test("the verified domains route answers without a token", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("the verified domains route returns an empty list", function () {
+    expect(res.body.data).to.be.an("array");
+    expect(res.body.data.length).to.equal(0);
+  });
+}
