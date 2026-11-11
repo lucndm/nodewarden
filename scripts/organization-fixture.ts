@@ -31,6 +31,9 @@ export const COL_OTHER = 'col-other';
 export const ENC = (value: string) =>
   `2.${Buffer.from(`iv-${value}`).toString('base64')}|${Buffer.from(`ct-${value}`).toString('base64')}|${Buffer.from(`mac-${value}`).toString('base64')}`;
 
+/** An organization key, wrapped with an RSA key: one part after the type. */
+export const RSA_ENC = (value: string) => `4.${Buffer.from(value).toString('base64')}`;
+
 export async function fixture(): Promise<{ env: Env; storage: StorageService }> {
   const db = new DatabaseSync(':memory:');
   await ensureStorageSchema(sqliteD1(db));
@@ -50,7 +53,7 @@ export async function fixture(): Promise<{ env: Env; storage: StorageService }> 
     await env.DB.prepare(
       'INSERT INTO organizations (id, name, private_key, public_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
     )
-      .bind(id, id, 'enc-private', 'public', NOW, NOW)
+      .bind(id, id, ENC('org-private'), 'public', NOW, NOW)
       .run();
   }
 
@@ -66,14 +69,14 @@ export async function fixture(): Promise<{ env: Env; storage: StorageService }> 
     await env.DB.prepare(
       'INSERT INTO organization_users (id, user_id, org_id, type, status, key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
-      .bind(id, userId, orgId, type, 2, 'wrapped', NOW, NOW)
+      .bind(id, userId, orgId, type, 2, RSA_ENC('wrapped-org-key'), NOW, NOW)
       .run();
   }
 
   for (const [id, orgId, name] of [
-    [COL_SHARED, ORG, 'Shared'],
-    [COL_READONLY, ORG, 'Read only'],
-    [COL_OTHER, OTHER_ORG, 'Other'],
+    [COL_SHARED, ORG, ENC('Shared')],
+    [COL_READONLY, ORG, ENC('Read only')],
+    [COL_OTHER, OTHER_ORG, ENC('Other')],
   ]) {
     await env.DB.prepare('INSERT INTO collections (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
       .bind(id, orgId, name, NOW, NOW)
@@ -105,7 +108,7 @@ export async function createUser(storage: StorageService, id: string, email: str
     name: null,
     masterPasswordHint: null,
     masterPasswordHash: 'hash',
-    key: 'key',
+    key: ENC('user-key'),
     privateKey: null,
     publicKey: null,
     kdfType: 0,
