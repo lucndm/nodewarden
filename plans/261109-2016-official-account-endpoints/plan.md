@@ -82,7 +82,7 @@ Paths are the official ones, under `/api` unless marked identity.
 
 - `GET /accounts/key-connector/confirmation-details/:orgSsoIdentifier` and `POST /accounts/set-key-connector-key`: Key Connector, an enterprise feature NodeWarden does not have.
 - `PUT /accounts/update-tde-offboarding-password`: trusted device encryption, enterprise.
-- `PUT /accounts/update-temp-password`: the forced reset after an admin recovers an account, which needs organization account recovery.
+- `PUT /accounts/update-temp-password`: the forced reset after an admin recovers an account, which needs organization account recovery. Checked on 2026-11-11: the clients call it only from `ChangePasswordComponent` when the reason is `ForceSetPasswordReason.AdminForcePasswordReset` (`changePasswordForAccountRecovery`), which comes from `ForcePasswordReset: true` in the token or profile. NodeWarden and vaultwarden always send `false`, and vaultwarden serves no such route. Emergency access takeover sets the new password through `/emergency-access/:id/password`, not here. A weak master password under an organization policy goes through `POST /accounts/password`.
 
 ## Open questions
 
