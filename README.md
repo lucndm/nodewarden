@@ -217,15 +217,16 @@ To verify delivery after deployment, sign in successfully from a fresh browser p
 
 ## Outbound mail (optional)
 
-NodeWarden can mail the people who have to act: the somebody named as an emergency contact, the owner of a vault whose emergency access is moving, and the member invited to an organization. The feature is off by default — without the `EMAIL` binding or without `MAIL_FROM`, nothing is sent and the server behaves exactly as it did before.
+NodeWarden can mail the people who have to act: the somebody named as an emergency contact, the owner of a vault whose emergency access is moving, the member invited to an organization, and a user who changes the email of the account — the code that proves the new address, and the notice that tells the old address afterwards. The feature is off by default — without the `EMAIL` binding or without `MAIL_FROM`, nothing is sent and the server behaves exactly as it did before.
 
 **What a mail contains**
 
 - the names and the addresses of the people involved, as the vault already shows them
 - the waiting time of an emergency access, in days
 - the address of the web vault
+- the one-time code of an email change, and the new address of the account
 
-No mail carries a key, a password, a hash, a token or an encrypted value.
+No mail carries a key, a password, a hash, a session token or an encrypted value.
 
 **How often mail is sent**
 
@@ -250,7 +251,7 @@ The sending domain has to be onboarded to Cloudflare Email Sending, and the depl
 
 **What does not change**
 
-The routes that answer 501 today still answer 501: registration, the two-step login by email, the one-time code of a new device, the change of an email address, and the deletion of an account by mail. Mail here carries invitations and notices; it does not open a new way into an account, and sign-up stays in the web vault.
+The routes that answer 501 today still answer 501: registration, the two-step login by email, the one-time code of a new device, and the deletion of an account by mail. The change of an email address is the one mail-backed route that works, and it needs mail: without the binding or the sender address it answers 501 as well. Mail here carries invitations and notices; it does not open a new way into an account, and sign-up stays in the web vault.
 
 The plan is in [plans/261111-1845-outbound-mail/plan.md](plans/261111-1845-outbound-mail/plan.md).
 

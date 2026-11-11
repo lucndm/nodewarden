@@ -1803,6 +1803,13 @@ Object.assign(en, {
   "txt_email_breach_disabled": "Email breach monitoring is not enabled on this server.",
   "txt_recent_30_days": "Recent (30 days)",
   "txt_multiple_select": "Select multiple",
+  "txt_change_email": "Change email",
+  "txt_new_email": "New email address",
+  "txt_email_change_code": "The code that was sent to the new address",
+  "txt_send_code": "Send code",
+  "txt_email_change_code_sent": "The code is on its way to the new address. It is good for 15 minutes.",
+  "txt_email_changed_signing_out_everywhere": "The email of your account was changed. Every session was ended, so sign in again.",
+  "txt_email_change_failed": "The email of the account could not be changed.",
 });
 
 export default en;

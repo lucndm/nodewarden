@@ -2372,6 +2372,8 @@ export default function App() {
     uploadingSendFileName: vaultSendActions.uploadingSendFileName,
     sendUploadPercent: vaultSendActions.sendUploadPercent,
     onChangePassword: accountSecurityActions.changePassword,
+    onRequestEmailChangeCode: accountSecurityActions.requestEmailChangeCode,
+    onChangeEmail: accountSecurityActions.changeEmail,
     onSavePasswordHint: accountSecurityActions.savePasswordHint,
     onEnableTotp: async (secret: string, token: string, masterPassword: string) => {
       await accountSecurityActions.enableTotp(secret, token, masterPassword);

@@ -27,13 +27,12 @@ docs {
   body `EmailTokenRequest` (`masterPasswordHash`, `newEmail`). The server
   emails a code to the new address.
 
-  NodeWarden decision: no email delivery, so every flow that sends a code or a
-  link by email answers 501 (`publicMailBackedPaths` in `router-public.ts`,
-  `mailBackedAccountPaths` in `router-authenticated.ts`).
+  NodeWarden serves this route when outbound mail is configured (EMAIL binding and MAIL_FROM); without it the answer is 501. The local test worker has the binding but cannot deliver, so the code request answers 429 and nothing is pending.
 }
 
 tests {
-  test("NodeWarden refuses on purpose: no email delivery", function () {
-    expect(res.status).to.equal(501);
+  test("the route is served; the local worker cannot deliver the code", function () {
+    expect(res.status).to.equal(429);
+    expect(res.body.error).to.contain("The code could not be sent");
   });
 }

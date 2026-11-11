@@ -30,12 +30,12 @@ docs {
   `key`, or `authenticationData` and `unlockData`. The email is the salt, so
   the client re-derives the master key and sends the rewrapped user key.
 
-  It only works after `email-token`, which NodeWarden refuses, but this path has
-  no route, so the client gets 404 instead of the same 501.
+  NodeWarden serves this route when outbound mail is configured (EMAIL binding and MAIL_FROM); without it the answer is 501. The local test worker has the binding but cannot deliver, so the code request answers 429 and nothing is pending.
 }
 
 tests {
-  test("NodeWarden refuses on purpose: no email delivery", function () {
-    expect(res.status).to.equal(501);
+  test("without a pending code the change is refused", function () {
+    expect(res.status).to.equal(400);
+    expect(res.body.error).to.contain("No email change pending");
   });
 }

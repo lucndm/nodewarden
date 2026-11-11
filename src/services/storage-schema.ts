@@ -317,6 +317,14 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   // cache data, safe to rebuild — not part of the backup export contract.
   'CREATE TABLE IF NOT EXISTS email_breach_cache (' +
   'email_norm TEXT PRIMARY KEY, checked_at TEXT NOT NULL, status TEXT NOT NULL, breaches_json TEXT NOT NULL)',
+
+  // The email change a user asked for: the address the code went to, the
+  // code as it was hashed, when it stops being good, and how many wrong
+  // codes were tried. One row per account, so a request never crosses
+  // accounts. The row is short-lived and is not part of the backup contract.
+  'CREATE TABLE IF NOT EXISTS email_change_requests (' +
+  'user_id TEXT PRIMARY KEY, new_email TEXT NOT NULL, code_hash TEXT NOT NULL, ' +
+  'expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)',
 ];
 
 async function executeSchemaStatement(db: D1Database, statement: string): Promise<void> {

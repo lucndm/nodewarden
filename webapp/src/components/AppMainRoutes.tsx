@@ -132,6 +132,8 @@ export interface AppMainRoutesProps {
   uploadingSendFileName: string;
   sendUploadPercent: number | null;
   onChangePassword: (currentPassword: string, nextPassword: string, nextPassword2: string) => Promise<void>;
+  onRequestEmailChangeCode: (newEmail: string, password: string) => Promise<void>;
+  onChangeEmail: (newEmail: string, password: string, code: string) => Promise<void>;
   onSavePasswordHint: (masterPasswordHint: string) => Promise<void>;
   onEnableTotp: (secret: string, token: string, masterPassword: string) => Promise<void>;
   onOpenDisableTotp: () => void;
@@ -347,6 +349,8 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
                 onThemePreferenceChange={props.onThemePreferenceChange}
                 onVerifyMasterPassword={props.onVerifyMasterPassword}
                 onChangePassword={props.onChangePassword}
+                onRequestEmailChangeCode={props.onRequestEmailChangeCode}
+                onChangeEmail={props.onChangeEmail}
                 onSavePasswordHint={props.onSavePasswordHint}
                 onEnableTotp={props.onEnableTotp}
                 onOpenDisableTotp={props.onOpenDisableTotp}

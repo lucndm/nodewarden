@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  emailChangeCodeMail,
+  emailChangedNoticeMail,
   emergencyAccessInviteMail,
   emergencyAccessRecoveryMail,
   organizationInviteMail,
@@ -177,4 +179,37 @@ test('recovery mails name what the grantee can do', () => {
     takeover.text.includes('Nothing has changed until they set a new password'),
     takeover.text
   );
+});
+
+test('the code mail carries the code and its lifetime', () => {
+  const mail = emailChangeCodeMail({ code: '123456', vaultUrl: VAULT });
+  assert.equal(mail.subject, 'Your email change code');
+  assert.ok(mail.text.includes('123456'), mail.text);
+  assert.ok(mail.text.includes('15 minutes'), mail.text);
+  assert.ok(mail.text.includes('did not ask for it'), mail.text);
+  assert.ok(mail.html.includes('123456'), mail.html);
+});
+
+test('the code mail says it can be ignored without a vault', () => {
+  const mail = emailChangeCodeMail({ code: '123456', vaultUrl: null });
+  assert.ok(!mail.text.includes('Sign in at'), mail.text);
+  assert.ok(mail.text.includes('123456'), mail.text);
+});
+
+test('the notice names the new email', () => {
+  const mail = emailChangedNoticeMail({ newEmail: 'new@example.test', vaultUrl: VAULT });
+  assert.equal(mail.subject, 'The email of your vault account was changed');
+  assert.ok(mail.text.includes('new@example.test'), mail.text);
+  assert.ok(
+    mail.text.includes(
+      "If you did not do this, sign in and change your master password, or contact the server's administrator."
+    ),
+    mail.text
+  );
+});
+
+test('the new email is escaped in the html of the notice', () => {
+  const mail = emailChangedNoticeMail({ newEmail: '<b>x</b>&"\'', vaultUrl: VAULT });
+  assert.ok(mail.html.includes('&lt;b&gt;x&lt;/b&gt;&amp;&quot;&#39;'), mail.html);
+  assert.ok(!mail.html.includes('<b>x'), mail.html);
 });

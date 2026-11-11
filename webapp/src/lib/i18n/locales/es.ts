@@ -1724,6 +1724,13 @@ Object.assign(es, {
   "txt_email_breach_disabled": "La monitorización de filtraciones de correo no está activada en este servidor.",
   "txt_recent_30_days": "Recientes (30 días)",
   "txt_multiple_select": "Seleccionar varios",
+  "txt_change_email": "Cambiar el correo electrónico",
+  "txt_new_email": "Nueva dirección de correo electrónico",
+  "txt_email_change_code": "El código que se envió a la nueva dirección",
+  "txt_send_code": "Enviar código",
+  "txt_email_change_code_sent": "El código va en camino a la nueva dirección. Es válido durante 15 minutos.",
+  "txt_email_changed_signing_out_everywhere": "El correo electrónico de tu cuenta ha cambiado. Se han cerrado todas las sesiones, vuelve a iniciar sesión.",
+  "txt_email_change_failed": "No se ha podido cambiar el correo electrónico de la cuenta.",
 });
 
 export default es;

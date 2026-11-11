@@ -16,6 +16,8 @@ import {
   handlePutAvatar,
   handlePostSecurityStamp,
   handleChangePassword,
+  handleChangeEmail,
+  handleEmailToken,
   handleSetVerifyDevices,
   handleGetTotpStatus,
   handleSetTotpStatus,
@@ -226,12 +228,19 @@ export async function handleAuthenticatedRoute(
     return errorResponse('Not implemented', 501);
   }
 
+  // The email change: the code goes to the new address, and the change waits
+  // for that code. Both routes answer 501 when the server cannot mail.
+  if (
+    (path === '/api/accounts/email-token' || path === '/accounts/email-token') &&
+    method === 'POST'
+  ) {
+    return handleEmailToken(request, env, userId);
+  }
+  if ((path === '/api/accounts/email' || path === '/accounts/email') && method === 'POST') {
+    return handleChangeEmail(request, env, userId);
+  }
+
   const mailBackedAccountPaths = new Set([
-    '/api/accounts/email-token',
-    '/accounts/email-token',
-    // Changing the email needs the code email-token sends, so it gets the same answer.
-    '/api/accounts/email',
-    '/accounts/email',
     '/api/accounts/verify-email',
     '/accounts/verify-email',
     '/api/accounts/verify-email-token',

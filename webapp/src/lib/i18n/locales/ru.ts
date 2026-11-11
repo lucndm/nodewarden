@@ -1724,6 +1724,13 @@ Object.assign(ru, {
   "txt_email_breach_disabled": "Мониторинг утечек email не включён на этом сервере.",
   "txt_recent_30_days": "Недавние (30 дней)",
   "txt_multiple_select": "Выбрать несколько",
+  "txt_change_email": "Сменить адрес электронной почты",
+  "txt_new_email": "Новый адрес электронной почты",
+  "txt_email_change_code": "Код, отправленный на новый адрес",
+  "txt_send_code": "Отправить код",
+  "txt_email_change_code_sent": "Код отправлен на новый адрес. Он действует 15 минут.",
+  "txt_email_changed_signing_out_everywhere": "Адрес электронной почты вашей учётной записи изменён. Все сеансы завершены, войдите снова.",
+  "txt_email_change_failed": "Не удалось сменить адрес электронной почты учётной записи.",
 });
 
 export default ru;

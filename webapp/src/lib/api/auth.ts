@@ -20,7 +20,7 @@ import type {
 } from '../types';
 import type { AccountPasskeyAssertion, AccountPasskeyPrfKeySet } from '../account-passkeys';
 import { recordNodeWardenReachable, recordNodeWardenUnreachable } from '../network-status';
-import { parseJson, type AuthedFetch, type SessionSetter } from './shared';
+import { parseJson, parseErrorMessage, type AuthedFetch, type SessionSetter } from './shared';
 
 const SESSION_KEY = 'nodewarden.web.session.v4';
 const PROFILE_SNAPSHOT_KEY = 'nodewarden.web.profile-snapshot.v1';
@@ -681,6 +681,82 @@ export async function changeMasterPassword(
     }),
   });
   if (!resp.ok) throw new Error('Change master password failed');
+}
+
+/**
+ * Asks for the code of an email change.
+ *
+ * The code goes to the new address, so only the owner of that address can
+ * finish the change.
+ */
+export async function requestEmailChangeCode(
+  authedFetch: AuthedFetch,
+  args: { email: string; password: string; currentIterations: number; newEmail: string }
+): Promise<void> {
+  const current = await deriveLoginHash(args.email, args.password, args.currentIterations);
+  const resp = await authedFetch('/api/accounts/email-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      masterPasswordHash: current.hash,
+      newEmail: args.newEmail.trim().toLowerCase(),
+    }),
+  });
+  if (!resp.ok) {
+    throw new Error(await parseErrorMessage(resp, t('txt_email_change_failed')));
+  }
+}
+
+/**
+ * Changes the email of the account.
+ *
+ * The password stays the same, but the address is the salt of the master key,
+ * so the master key changes with it. The user key is the same one, wrapped
+ * with the new master key, and the server keeps the password it is given.
+ */
+export async function changeEmail(
+  authedFetch: AuthedFetch,
+  args: {
+    email: string;
+    password: string;
+    currentIterations: number;
+    profileKey: string;
+    newEmail: string;
+    code: string;
+  }
+): Promise<void> {
+  const kdf = await getPreloginKdfConfig(args.email, args.currentIterations);
+  if (kdf.kdfType !== 0) {
+    throw new Error(t('txt_unsupported_kdf_type', { type: String(kdf.kdfType) }));
+  }
+  const current = await deriveLoginHashLocally(args.email, args.password, kdf.kdfIterations);
+  const oldEnc = await hkdfExpand(current.masterKey, 'enc', 32);
+  const oldMac = await hkdfExpand(current.masterKey, 'mac', 32);
+  const userSym = await decryptBw(args.profileKey, oldEnc, oldMac);
+  if (userSym.length !== 64) {
+    throw new Error('Invalid profile key');
+  }
+  const salt = args.newEmail.trim().toLowerCase();
+  const nextMasterKey = await pbkdf2(args.password, salt, current.kdfIterations, 32);
+  const nextHash = await pbkdf2(nextMasterKey, args.password, 1, 32);
+  const nextEnc = await hkdfExpand(nextMasterKey, 'enc', 32);
+  const nextMac = await hkdfExpand(nextMasterKey, 'mac', 32);
+  const newKey = await encryptBw(userSym, nextEnc, nextMac);
+
+  const resp = await authedFetch('/api/accounts/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      masterPasswordHash: current.hash,
+      newEmail: salt,
+      newMasterPasswordHash: bytesToBase64(nextHash),
+      token: args.code.trim(),
+      key: newKey,
+    }),
+  });
+  if (!resp.ok) {
+    throw new Error(await parseErrorMessage(resp, t('txt_email_change_failed')));
+  }
 }
 
 export async function setTotp(

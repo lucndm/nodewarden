@@ -24,7 +24,12 @@ export interface MailBinding {
 }
 
 /** What the mail is about, used for the budget and for the log line. */
-export type MailKind = 'emergency_access_invite' | 'emergency_access_recovery' | 'organization_invite';
+export type MailKind =
+  | 'emergency_access_invite'
+  | 'emergency_access_recovery'
+  | 'organization_invite'
+  | 'email_change_code'
+  | 'email_changed';
 
 export interface OutboundMail {
   kind: MailKind;
@@ -85,7 +90,7 @@ export async function sendMail(
   if (!binding || !from) return false;
 
   const to = mail.to.trim();
-  if (!isSingleAddress(to)) return false;
+  if (!isSingleEmailAddress(to)) return false;
 
   try {
     const limiter = new RateLimitService(env.DB);
@@ -162,7 +167,7 @@ const FORBIDDEN_IN_ADDRESS: Partial<Record<string, true>> = {
 };
 
 /** One address, and nothing else: a list of addresses is not an address. */
-function isSingleAddress(value: string): boolean {
+export function isSingleEmailAddress(value: string): boolean {
   if (!value || /\s/.test(value)) return false;
   for (const char of value) {
     const code = char.codePointAt(0) ?? 0;

@@ -1,6 +1,8 @@
 import { useMemo } from 'preact/hooks';
 import {
   changeMasterPassword,
+  changeEmail as changeEmailApi,
+  requestEmailChangeCode as requestEmailChangeCodeApi,
   bootstrapYubiKeyOtpApiCredentials,
   deleteAllAuthorizedDevices,
   deleteAuthorizedDevice,
@@ -139,6 +141,47 @@ export default function useAccountSecurityActions(options: UseAccountSecurityAct
             })();
           },
         });
+      },
+
+      async requestEmailChangeCode(newEmail: string, password: string) {
+        if (!profile) {
+          onNotify('error', t('txt_profile_unavailable'));
+          return;
+        }
+        try {
+          await requestEmailChangeCodeApi(authedFetch, {
+            email: profile.email,
+            password,
+            currentIterations: defaultKdfIterations,
+            newEmail,
+          });
+          onNotify('success', t('txt_email_change_code_sent'));
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_email_change_failed'));
+        }
+      },
+
+      async changeEmail(newEmail: string, password: string, code: string) {
+        if (!profile) {
+          onNotify('error', t('txt_profile_unavailable'));
+          return;
+        }
+        try {
+          await changeEmailApi(authedFetch, {
+            email: profile.email,
+            password,
+            currentIterations: defaultKdfIterations,
+            profileKey: profile.key,
+            newEmail,
+            code,
+          });
+          onNotify('success', t('txt_email_changed_signing_out_everywhere'));
+          // The address of the account changed, so every session of that
+          // account ends, just as it does when the password changes.
+          onLogoutNow();
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_email_change_failed'));
+        }
       },
 
       async savePasswordHint(masterPasswordHint: string) {

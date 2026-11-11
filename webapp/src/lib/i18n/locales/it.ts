@@ -1724,6 +1724,13 @@ Object.assign(it, {
   "txt_email_breach_disabled": "Il monitoraggio delle violazioni e-mail non è attivato su questo server.",
   "txt_recent_30_days": "Recenti (30 giorni)",
   "txt_multiple_select": "Seleziona più elementi",
+  "txt_change_email": "Cambia l'indirizzo email",
+  "txt_new_email": "Nuovo indirizzo email",
+  "txt_email_change_code": "Il codice inviato al nuovo indirizzo",
+  "txt_send_code": "Invia codice",
+  "txt_email_change_code_sent": "Il codice è in viaggio verso il nuovo indirizzo. È valido per 15 minuti.",
+  "txt_email_changed_signing_out_everywhere": "L'indirizzo email del tuo account è stato modificato. Tutte le sessioni sono state chiuse, accedi di nuovo.",
+  "txt_email_change_failed": "Non è stato possibile modificare l'indirizzo email dell'account.",
 });
 
 export default it;
