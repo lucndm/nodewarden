@@ -155,7 +155,7 @@ test('an item is found by the host of its link', () => {
 
   assert.equal(items.length, 1);
   assert.equal(items[0].cipherId, 'cipher-bank');
-  assert.ok(items[0].hint.includes('secure.example.com'));
+  assert.equal(items[0].hint, 'me@example.org · secure.example.com');
 });
 
 test('an item in the trash is gone from the results', () => {
