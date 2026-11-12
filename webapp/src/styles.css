@@ -1936,4 +1936,27 @@ input[type='file'].input::file-selector-button {
   .domain-rule-icon-btn {
     min-width: 44px;
   }
+
+  /* The filter buttons of the vault on a phone open a menu, so they are a
+     target of their own. */
+  .mobile-vault-filter-trigger {
+    height: auto;
+    min-height: 44px;
+  }
+
+  /* The row of an item carries the name of the item, and it is the part
+     that opens it. The item itself is taller, but the button is not. */
+  .list-item .row-main {
+    min-height: 44px;
+  }
+
+  /* The help button of the backup shows a question mark only, so it keeps
+     the small mark and grows around it. */
+  .backup-help-trigger {
+    width: auto;
+    height: auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 11px;
+  }
 }
