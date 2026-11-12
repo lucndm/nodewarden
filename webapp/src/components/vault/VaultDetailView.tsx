@@ -524,15 +524,13 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     if (type === 2) {
       const checked = toBooleanFieldValue(value);
       return (
-        <div key={`view-field-${index}`} className="custom-field-card">
-          <div className="custom-field-label" title={labelTitle}>
-            <span className="custom-field-icon" aria-hidden="true">
-              <KindIcon size={13} />
-            </span>
-            {label}
-          </div>
-          <div className="custom-field-body">
-            <div className="custom-field-value">
+        <div key={`view-field-${index}`} className="kv-field custom-field-card">
+          <span className="kv-field-icon" aria-hidden="true">
+            <KindIcon size={13} />
+          </span>
+          <div className="kv-field-body">
+            <span className="kv-field-label custom-field-label" title={labelTitle}>{label}</span>
+            <div className="kv-field-value custom-field-value">
               <label className="check-line cf-check view custom-field-check">
                 <input type="checkbox" checked={checked} disabled />
                 <span className="boolean-text value-ellipsis" title={checked ? t('txt_checked') : t('txt_unchecked')}>
@@ -541,21 +539,20 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
               </label>
             </div>
           </div>
+          <div className="kv-actions" />
         </div>
       );
     }
     const masked = presentation.secret;
     const revealed = !masked || !!props.hiddenFieldVisibleMap[index];
     return (
-      <CopyTarget key={`view-field-${index}`} className="custom-field-card" label={label} onCopy={() => void copyToClipboard(value)}>
-        <div className="custom-field-label" title={labelTitle}>
-          <span className="custom-field-icon" aria-hidden="true">
-            <KindIcon size={13} />
-          </span>
-          {label}
-        </div>
-        <div className="custom-field-body">
-          <div className="custom-field-value">
+      <CopyTarget key={`view-field-${index}`} className="kv-field custom-field-card" label={label} onCopy={() => void copyToClipboard(value)}>
+        <span className="kv-field-icon" aria-hidden="true">
+          <KindIcon size={13} />
+        </span>
+        <div className="kv-field-body">
+          <span className="kv-field-label custom-field-label" title={labelTitle}>{label}</span>
+          <div className="kv-field-value custom-field-value">
             <strong
               className={masked && !revealed ? 'value-ellipsis' : 'custom-field-display'}
               title={masked && !revealed ? (type === 1 ? '' : t('txt_field_masked_hint')) : value}
@@ -563,22 +560,22 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
               {masked && !revealed ? maskSecret(value) : value}
             </strong>
           </div>
-          <div className="kv-actions">
-            {masked && (
-              <button
-                type="button"
-                className="btn btn-secondary small"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  props.onToggleHiddenField(index);
-                }}
-              >
-                {revealed ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
-                {revealed ? t('txt_hide') : t('txt_reveal')}
-              </button>
-            )}
-            <CopyHint />
-          </div>
+        </div>
+        <div className="kv-actions">
+          {masked && (
+            <button
+              type="button"
+              className="btn btn-secondary small"
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onToggleHiddenField(index);
+              }}
+            >
+              {revealed ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
+              {revealed ? t('txt_hide') : t('txt_reveal')}
+            </button>
+          )}
+          <CopyHint />
         </div>
       </CopyTarget>
     );

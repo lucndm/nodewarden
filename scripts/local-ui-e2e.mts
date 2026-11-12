@@ -2663,6 +2663,141 @@ async function main() {
       JSON.stringify({ restoredRows, clearedSearchBarText })
     );
 
+    // The bulk actions of the list keep the width of their own text, so no
+    // word runs into the button next to it and no word is cut off.
+    await cdp.send(
+      'Emulation.setDeviceMetricsOverride',
+      { width: 1200, height: 900, deviceScaleFactor: 1, mobile: false },
+      sessionId
+    );
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    // The pointer speaks to the page through the input domain, so the click
+    // is the click of a person.
+    const clickExpression = async (expression) => {
+      const point = await evaluate(`(() => {
+        const element = ${expression};
+        if (!element) return null;
+        element.scrollIntoView({ block: 'center', inline: 'center' });
+        const box = element.getBoundingClientRect();
+        if (!box.width || !box.height) return null;
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      })()`);
+      if (!point) return false;
+      await pressMouse(point, 'left');
+      return true;
+    };
+    const bulkButton = (label) => `(() => {
+      const head = document.querySelector('.list-head.selection-mode');
+      if (!head) return null;
+      return [...head.querySelectorAll('button')].find((button) => (button.textContent || '').trim() === ${JSON.stringify(label)}) || null;
+    })()`;
+    // Every button of the bar is measured: the boxes of two of them may not
+    // touch, and the text of one of them may not be cut off.
+    const measureBulkActions = async () =>
+      evaluate(`(() => {
+        const head = document.querySelector('.list-head.selection-mode');
+        if (!head) return null;
+        const buttons = [...head.querySelectorAll('button')].map((button) => {
+          const box = button.getBoundingClientRect();
+          return {
+            label: (button.textContent || '').trim(),
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            bottom: box.bottom,
+            scrollWidth: button.scrollWidth,
+            clientWidth: button.clientWidth,
+          };
+        });
+        const overlaps = [];
+        for (let i = 0; i < buttons.length; i += 1) {
+          for (let j = i + 1; j < buttons.length; j += 1) {
+            const a = buttons[i];
+            const b = buttons[j];
+            if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) {
+              overlaps.push(a.label + ' / ' + b.label);
+            }
+          }
+        }
+        const cut = buttons.filter((button) => button.scrollWidth > button.clientWidth + 1).map((button) => button.label);
+        return { buttons, overlaps, cut };
+      })()`);
+
+    const pickedOne = await clickExpression(`document.querySelector('.list-select-multiple')`);
+    await waitFor(`!!document.querySelector('.list-head.selection-mode')`, 'the selection of the list', 10000).catch(
+      () => false
+    );
+    const pickedAll = await clickExpression(bulkButton('Select All'));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const bulkAt1200 = await measureBulkActions();
+    checks.ok(
+      'the bulk actions of the list do not run into each other',
+      pickedOne && pickedAll && (bulkAt1200?.buttons?.length || 0) >= 4 && bulkAt1200.overlaps.length === 0,
+      JSON.stringify(bulkAt1200 || {})
+    );
+    checks.ok(
+      'every bulk action of the list shows its whole text',
+      pickedOne && pickedAll && (bulkAt1200?.buttons?.length || 0) >= 4 && bulkAt1200.cut.length === 0,
+      JSON.stringify(bulkAt1200 || {})
+    );
+
+    // The same bar in a wider window keeps the words of its buttons.
+    await cdp.send(
+      'Emulation.setDeviceMetricsOverride',
+      { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false },
+      sessionId
+    );
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const bulkAt1440 = await measureBulkActions();
+    checks.ok(
+      'the bulk actions of the list keep their words in a wider window',
+      (bulkAt1440?.buttons?.length || 0) >= 4 && bulkAt1440.overlaps.length === 0 && bulkAt1440.cut.length === 0,
+      JSON.stringify(bulkAt1440 || {})
+    );
+
+    // The cancel button puts the list back the way it was.
+    const cancelled = await clickExpression(bulkButton('Cancel'));
+    await waitFor(`!document.querySelector('.list-head.selection-mode')`, 'the end of the selection', 10000).catch(
+      () => false
+    );
+    checks.ok(
+      'the cancel button ends the selection of the list',
+      cancelled && !(await evaluate(`!!document.querySelector('.list-head.selection-mode')`)),
+      `cancelled: ${cancelled}`
+    );
+
+    // A custom field reads like the rows above it: the value starts under
+    // the label, and both start where the label of the username starts.
+    const customFieldRows = await evaluate(`(() => {
+      const card = [...document.querySelectorAll('.custom-field-card')].find(
+        (entry) => (entry.querySelector('.kv-field-label')?.textContent || '').trim() === 'Email'
+      );
+      if (!card) return null;
+      const label = card.querySelector('.kv-field-label');
+      const value = card.querySelector('.kv-field-value');
+      const credentials = document.querySelector('[role="group"][aria-label="Login Credentials"]');
+      const row = credentials && [...credentials.querySelectorAll('.kv-field')].find(
+        (entry) => (entry.querySelector('.kv-field-label')?.textContent || '').trim() === 'Username'
+      );
+      const rowLabel = row?.querySelector('.kv-field-label');
+      const rowValue = row?.querySelector('.kv-field-value');
+      if (!label || !value || !rowLabel || !rowValue) return null;
+      return {
+        fieldLabel: label.getBoundingClientRect().left,
+        fieldValue: value.getBoundingClientRect().left,
+        rowLabel: rowLabel.getBoundingClientRect().left,
+        rowValue: rowValue.getBoundingClientRect().left,
+      };
+    })()`);
+    checks.ok(
+      'the value of a custom field lines up with its label and with the rows above it',
+      !!customFieldRows &&
+        Math.abs(customFieldRows.fieldLabel - customFieldRows.fieldValue) <= 1 &&
+        Math.abs(customFieldRows.fieldLabel - customFieldRows.rowLabel) <= 1 &&
+        Math.abs(customFieldRows.fieldLabel - customFieldRows.rowValue) <= 1,
+      JSON.stringify(customFieldRows || {})
+    );
+
     return checks.finish() ? 0 : 1;
   } finally {
     if (browser) await browser.stop();
