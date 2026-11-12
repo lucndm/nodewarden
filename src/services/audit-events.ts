@@ -56,6 +56,10 @@ const ALLOWED_METADATA_KEYS = new Set([
   'count',
   'requestedCount',
   'type',
+  // The record of an export of an organization's items: which format it was
+  // written in and how many items it carried.
+  'format',
+  'itemCount',
   'folderId',
   'cipherId',
   'size',

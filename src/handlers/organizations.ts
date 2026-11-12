@@ -13,6 +13,7 @@
 import { StorageService } from '../services/storage';
 import { isMailConfigured, mailVaultUrl, sendMail } from '../services/mail';
 import { organizationInviteMail } from '../services/mail-templates';
+import { auditRequestMetadata, writeAuditEvent, type AuditEventInput } from '../services/audit-events';
 import { notifyVaultSyncForRequest } from './ciphers';
 import { errorResponse, jsonResponse } from '../utils/response';
 import { officialProfileOrganizationFields } from '../utils/profile-response';
@@ -40,6 +41,12 @@ const ROTATION_DATA_MAX = 65_536;
 const ROTATION_MAX_CIPHERS = 200;
 const ROTATION_MAX_MEMBERS = 200;
 const ROTATION_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+
+// The formats an organization export can use. The other formats carry
+// folders or attachments, which belong to the member and not to the
+// organization.
+const ORGANIZATION_EXPORT_FORMATS = ['bitwarden_json', 'bitwarden_csv', 'bitwarden_encrypted_json'];
+const ORGANIZATION_EXPORT_MAX_ITEMS = 1_000_000;
 
 interface CreateOrganizationBody {
   name?: unknown;
@@ -1365,4 +1372,73 @@ export async function handleRotateOrganizationKey(
     },
     200
   );
+}
+
+/**
+ * Writes the audit event and reports whether it went through.
+ *
+ * `writeAuditEvent` swallows a failing write, so the storage is watched to
+ * keep the error: an export that cannot be recorded must not happen.
+ */
+async function writeAuditEventStrict(storage: StorageService, event: AuditEventInput): Promise<boolean> {
+  let failed = false;
+  const watched = Object.create(storage) as StorageService;
+  watched.createAuditLog = async (log) => {
+    try {
+      await storage.createAuditLog(log);
+    } catch (error) {
+      failed = true;
+      throw error;
+    }
+  };
+  await writeAuditEvent(watched, event);
+  return !failed;
+}
+
+// POST /api/organizations/:orgId/export-events
+//
+// The record of an export of the organization's items. The server never sees
+// the exported data, so this is the only trace an export leaves: the client
+// writes it before it hands the file over, and the export does not happen
+// when the record cannot be written.
+export async function handleRecordOrganizationExport(
+  request: Request,
+  env: Env,
+  userId: string,
+  orgId: string
+): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  if (!(await requireOrgAdmin(storage, orgId, userId))) {
+    return errorResponse('Organization not found', 404);
+  }
+
+  let body: { format?: unknown; itemCount?: unknown };
+  try {
+    body = (await request.json()) as { format?: unknown; itemCount?: unknown };
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
+
+  const format = typeof body?.format === 'string' ? body.format : '';
+  if (!ORGANIZATION_EXPORT_FORMATS.includes(format)) {
+    return errorResponse('Unsupported export format', 400);
+  }
+  const itemCount = body?.itemCount;
+  if (typeof itemCount !== 'number' || !Number.isInteger(itemCount) || itemCount < 0 || itemCount > ORGANIZATION_EXPORT_MAX_ITEMS) {
+    return errorResponse('Invalid item count', 400);
+  }
+
+  const written = await writeAuditEventStrict(storage, {
+    actorUserId: userId,
+    action: 'organization.vault.export',
+    category: 'data',
+    level: 'security',
+    targetType: 'organization',
+    targetId: orgId,
+    metadata: { ...auditRequestMetadata(request), format, itemCount },
+  });
+  if (!written) {
+    return errorResponse('The export could not be recorded', 503);
+  }
+  return new Response(null, { status: 204 });
 }

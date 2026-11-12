@@ -20,12 +20,50 @@ export const EXPORT_FORMATS = [
 export type ExportFormatId = (typeof EXPORT_FORMATS)[number]['id'];
 export type EncryptedJsonMode = 'account' | 'password';
 
+/** The formats an organization export can use. The other formats carry folders or attachments, which are personal. */
+export const ORGANIZATION_EXPORT_FORMAT_IDS = [
+  'bitwarden_json',
+  'bitwarden_csv',
+  'bitwarden_encrypted_json',
+] as const;
+
+export type OrganizationExportFormatId = (typeof ORGANIZATION_EXPORT_FORMAT_IDS)[number];
+
+/** Whether the format can carry an organization export. */
+export function isOrganizationExportFormat(format: ExportFormatId): boolean {
+  return (ORGANIZATION_EXPORT_FORMAT_IDS as readonly ExportFormatId[]).includes(format);
+}
+
+/**
+ * What the export covers.
+ *
+ * A personal export holds the items of the member alone. An organization
+ * export holds the items and the collections of one organization; the key it
+ * is written with is the organization key, not the member's own.
+ */
+export type ExportScope =
+  | { kind: 'personal' }
+  | {
+      kind: 'organization';
+      organizationId: string;
+      collections: Array<{
+        id: string;
+        /** The decrypted collection name. */
+        name: string;
+        /** The name as the server holds it, so an encrypted export can keep it as it is. */
+        encryptedName?: string | null;
+        externalId?: string | null;
+      }>;
+    };
+
 export interface ExportRequest {
   format: ExportFormatId;
   encryptedJsonMode?: EncryptedJsonMode;
   filePassword?: string;
   zipPassword?: string;
   masterPassword?: string;
+  /** The organization to export. Absent or null means the member's own vault. */
+  organizationId?: string | null;
 }
 
 export interface ExportDownloadPayload {
@@ -50,15 +88,22 @@ export interface NodeWardenAttachmentRecord {
 interface BuildPlainJsonArgs {
   folders: Folder[];
   ciphers: Cipher[];
+  /**
+   * The key the payload is written with: the member's own key for a personal
+   * export, the organization key for an organization export.
+   */
   userEncB64: string;
   userMacB64: string;
+  scope?: ExportScope;
 }
 
 interface BuildEncryptedJsonArgs {
   folders: Folder[];
   ciphers: Cipher[];
+  /** The key the payload is written with: the member's own key, or the organization key. */
   userEncB64: string;
   userMacB64: string;
+  scope?: ExportScope;
 }
 
 interface PasswordProtectedArgs {
@@ -394,13 +439,71 @@ function trimNullKeys(value: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-function filterExportableCiphers(ciphers: Cipher[]): Cipher[] {
-  return ciphers.filter((cipher) => !cipher.deletedDate && !(cipher as { organizationId?: unknown }).organizationId);
+/** The organization an item belongs to, or an empty string when it stays personal. */
+function cipherOrganizationId(cipher: Cipher): string {
+  if ('organizationId' in cipher) {
+    const value = cipher.organizationId;
+    return typeof value === 'string' ? value : '';
+  }
+  return '';
+}
+
+/** The collections an item sits in, as the ids the server holds. */
+function cipherCollectionIds(cipher: Cipher): string[] {
+  if ('collectionIds' in cipher) {
+    const value = cipher.collectionIds;
+    if (!Array.isArray(value)) return [];
+    return value.map((id) => String(id || '').trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function filterExportableCiphers(ciphers: Cipher[], scope: ExportScope): Cipher[] {
+  if (scope.kind === 'organization') {
+    return ciphers.filter((cipher) => !cipher.deletedDate && cipherOrganizationId(cipher) === scope.organizationId);
+  }
+  return ciphers.filter((cipher) => !cipher.deletedDate && !cipherOrganizationId(cipher));
+}
+
+/**
+ * The organization shape of an item.
+ *
+ * A folder and a favorite belong to the member alone, so an organization
+ * export leaves them out; the organization and its collections belong to the
+ * item and are kept.
+ */
+function mapOrganizationCipherMetadata(cipher: Cipher, item: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...item };
+  out.organizationId = cipherOrganizationId(cipher);
+  out.collectionIds = cipherCollectionIds(cipher);
+  delete out.folderId;
+  delete out.favorite;
+  return out;
 }
 
 export async function buildPlainBitwardenJsonDocument(args: BuildPlainJsonArgs): Promise<Record<string, unknown>> {
+  const scope = args.scope ?? { kind: 'personal' };
   const userEnc = base64ToBytes(args.userEncB64);
   const userMac = base64ToBytes(args.userMacB64);
+
+  if (scope.kind === 'organization') {
+    const items = await Promise.all(
+      filterExportableCiphers(args.ciphers, scope).map(async (cipher) => {
+        const item = await mapCipherPlain(cipher, userEnc, userMac);
+        return trimNullKeys(mapOrganizationCipherMetadata(cipher, item));
+      })
+    );
+    return {
+      encrypted: false,
+      collections: scope.collections.map((collection) => ({
+        id: collection.id,
+        organizationId: scope.organizationId,
+        name: collection.name,
+        externalId: collection.externalId ?? null,
+      })),
+      items,
+    };
+  }
 
   const folders = await Promise.all(
     args.folders.map(async (folder) => ({
@@ -409,7 +512,7 @@ export async function buildPlainBitwardenJsonDocument(args: BuildPlainJsonArgs):
     }))
   );
 
-  const items = await Promise.all(filterExportableCiphers(args.ciphers).map((cipher) => mapCipherPlain(cipher, userEnc, userMac)));
+  const items = await Promise.all(filterExportableCiphers(args.ciphers, scope).map((cipher) => mapCipherPlain(cipher, userEnc, userMac)));
 
   return {
     encrypted: false,
@@ -577,17 +680,115 @@ export function buildBitwardenCsvString(bitwardenJsonDoc: Record<string, unknown
   return `\uFEFF${buildCsvString(rows)}`;
 }
 
+const BITWARDEN_ORGANIZATION_CSV_HEADERS = [
+  'collections',
+  'type',
+  'name',
+  'notes',
+  'fields',
+  'reprompt',
+  'login_uri',
+  'login_username',
+  'login_password',
+  'login_totp',
+] as const;
+
+/** A cell that always carries double quotes, because it holds a list of names. */
+function quoteCsvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function buildCollectionNameById(collectionsRaw: unknown): Map<string, string> {
+  const out = new Map<string, string>();
+  const collections = Array.isArray(collectionsRaw) ? collectionsRaw : [];
+  for (const collection of collections) {
+    if (!isRecord(collection)) continue;
+    const id = csvText(collection.id).trim();
+    if (!id) continue;
+    out.set(id, csvText(collection.name));
+  }
+  return out;
+}
+
+/**
+ * The CSV of an organization export.
+ *
+ * A folder and a favorite are personal, so the columns of the personal CSV
+ * are replaced by the collections the item sits in.
+ */
+export function buildBitwardenOrganizationCsvString(bitwardenJsonDoc: Record<string, unknown>): string {
+  const collectionNameById = buildCollectionNameById(bitwardenJsonDoc.collections);
+  const lines: string[] = [BITWARDEN_ORGANIZATION_CSV_HEADERS.map((label) => escapeCsvCell(label)).join(',')];
+  const items = Array.isArray(bitwardenJsonDoc.items) ? bitwardenJsonDoc.items : [];
+  for (const itemRaw of items) {
+    if (!isRecord(itemRaw)) continue;
+    const type = normalizeNumber(itemRaw.type, 1);
+    const isLogin = type === 1;
+    const login = isRecord(itemRaw.login) ? itemRaw.login : null;
+    const collectionIds = Array.isArray(itemRaw.collectionIds) ? itemRaw.collectionIds : [];
+    const collectionNames = collectionIds
+      .map((id) => collectionNameById.get(csvText(id).trim()) || '')
+      .filter(Boolean);
+    lines.push([
+      quoteCsvCell(collectionNames.join(',')),
+      escapeCsvCell(bitwardenCsvType(type)),
+      escapeCsvCell(csvText(itemRaw.name) || '--'),
+      escapeCsvCell(csvText(itemRaw.notes)),
+      escapeCsvCell(buildBitwardenCsvFields(itemRaw, type)),
+      escapeCsvCell(String(normalizeNumber(itemRaw.reprompt, 0))),
+      isLogin ? escapeCsvCell(buildBitwardenCsvLoginUri(login)) : '',
+      isLogin ? escapeCsvCell(csvText(login?.username)) : '',
+      isLogin ? escapeCsvCell(csvText(login?.password)) : '',
+      isLogin ? escapeCsvCell(csvText(login?.totp)) : '',
+    ].join(','));
+  }
+  return `\uFEFF${lines.join('\r\n')}\r\n`;
+}
+
 export async function buildAccountEncryptedBitwardenJsonString(args: BuildEncryptedJsonArgs): Promise<string> {
+  const scope = args.scope ?? { kind: 'personal' };
   const userEnc = base64ToBytes(args.userEncB64);
   const userMac = base64ToBytes(args.userMacB64);
   const validation = await encryptBw(new TextEncoder().encode(randomGuid()), userEnc, userMac);
+
+  if (scope.kind === 'organization') {
+    // A collection name the server holds encrypted stays as it is; an older
+    // collection whose name is plain text is encrypted with the organization
+    // key, the way an official client writes it.
+    const collections = await Promise.all(
+      scope.collections.map(async (collection) => {
+        const stored = String(collection.encryptedName ?? collection.name ?? '');
+        const name = isCipherString(stored)
+          ? stored
+          : await encryptBw(new TextEncoder().encode(collection.name), userEnc, userMac);
+        return {
+          id: collection.id,
+          organizationId: scope.organizationId,
+          name,
+          externalId: collection.externalId ?? null,
+        };
+      })
+    );
+
+    const items = filterExportableCiphers(args.ciphers, scope).map((cipher) =>
+      mapOrganizationCipherMetadata(cipher, mapCipherEncrypted(cipher))
+    );
+
+    const doc = {
+      encrypted: true,
+      encKeyValidation_DO_NOT_EDIT: validation,
+      collections,
+      items,
+    };
+    return JSON.stringify(doc, null, 2);
+  }
 
   const folders = args.folders.map((folder) => ({
     id: folder.id,
     name: folder.name,
   }));
 
-  const items = filterExportableCiphers(args.ciphers).map((cipher) => mapCipherEncrypted(cipher));
+  const items = filterExportableCiphers(args.ciphers, scope).map((cipher) => mapCipherEncrypted(cipher));
 
   const doc = {
     encrypted: true,
@@ -757,7 +958,7 @@ function nowStamp(now = new Date()): string {
   return `${y}${m}${d}_${hh}${mm}${ss}`;
 }
 
-export function buildExportFileName(format: ExportFormatId, zipEncrypted = false): string {
+export function buildExportFileName(format: ExportFormatId, zipEncrypted = false, organization = false): string {
   const stamp = nowStamp();
   if (
     format === 'bitwarden_csv' ||
@@ -766,9 +967,11 @@ export function buildExportFileName(format: ExportFormatId, zipEncrypted = false
     format === 'nodewarden_json' ||
     format === 'nodewarden_encrypted_json'
   ) {
-    if (format === 'bitwarden_csv') return `bitwarden_export_${stamp}.csv`;
+    if (format === 'bitwarden_csv') {
+      return organization ? `bitwarden_organization_export_${stamp}.csv` : `bitwarden_export_${stamp}.csv`;
+    }
     if (format.startsWith('nodewarden_')) return `nodewarden_export_${stamp}.json`;
-    return `bitwarden_export_${stamp}.json`;
+    return organization ? `bitwarden_organization_export_${stamp}.json` : `bitwarden_export_${stamp}.json`;
   }
   if (format === 'bitwarden_json_zip' || format === 'bitwarden_encrypted_json_zip') {
     if (zipEncrypted) return `bitwarden_export_${stamp}.zip`;

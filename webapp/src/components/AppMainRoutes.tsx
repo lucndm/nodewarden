@@ -99,6 +99,8 @@ export interface AppMainRoutesProps {
     attachments?: ImportAttachmentFile[]
   ) => Promise<ImportResultSummary>;
   onExport: (request: ExportRequest) => Promise<void>;
+  /** The organizations the member may export: the ones they own or administer. */
+  exportOrganizations: Array<{ id: string; name: string }>;
   onCreateVaultItem: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
   onUpdateVaultItem: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
   onDeleteVaultItem: (cipher: Cipher) => Promise<void>;
@@ -211,6 +213,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
         onNotify={props.onNotify}
         folders={props.decryptedFolders}
         onExport={props.onExport}
+        exportOrganizations={props.exportOrganizations}
         authedFetch={props.authedFetch}
         session={props.session}
         onRefreshVault={props.onRefreshVault}

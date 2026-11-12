@@ -2093,6 +2093,7 @@ export default function App() {
     encryptedFolders,
     decryptedFolders,
     organizations: organizationsQuery.data ?? [],
+    collections: collectionsQuery.data ?? [],
     refetchCiphers: async () => {
       const result = await refetchVaultCoreData() as { data?: VaultCoreSnapshot };
       return { data: result.data?.ciphers };
@@ -2290,6 +2291,16 @@ export default function App() {
     }
   }, [phase, mobileLayout, location, navigate]);
 
+  // The organizations the member may export: an owner or an admin of a
+  // confirmed organization.
+  const exportOrganizations = useMemo(
+    () =>
+      (organizationsQuery.data ?? [])
+        .filter((organization) => (organization.type === 0 || organization.type === 1) && organization.status === 2)
+        .map((organization) => ({ id: organization.id, name: organization.name })),
+    [organizationsQuery.data]
+  );
+
   const mainRoutesProps = {
     profile,
     profileLoading: profileQuery.isFetching && !profile,
@@ -2341,6 +2352,7 @@ export default function App() {
     onImport: vaultSendActions.importVault,
     onImportEncryptedRaw: vaultSendActions.importEncryptedRaw,
     onExport: vaultSendActions.exportVault,
+    exportOrganizations,
     onCreateVaultItem: vaultSendActions.createVaultItem,
     onUpdateVaultItem: vaultSendActions.updateVaultItem,
     onDeleteVaultItem: vaultSendActions.deleteVaultItem,

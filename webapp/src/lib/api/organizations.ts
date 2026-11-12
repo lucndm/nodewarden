@@ -476,6 +476,29 @@ export async function getCollections(authedFetch: AuthedFetch): Promise<VaultCol
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Records that the organization was exported.
+ *
+ * The server never sees the exported data, so this record is the only trace
+ * the export leaves. The export is only handed over when the record is
+ * written, so a failure here stops the export.
+ */
+export async function recordOrganizationExport(
+  authedFetch: AuthedFetch,
+  organizationId: string,
+  body: { format: string; itemCount: number }
+): Promise<void> {
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(organizationId)}/export-events`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, t('txt_export_failed')));
+}
+
 async function parseErrorMessage(resp: Response, fallback: string): Promise<string> {
   try {
     const body = (await resp.json()) as { error_description?: string; error?: string; message?: string };
