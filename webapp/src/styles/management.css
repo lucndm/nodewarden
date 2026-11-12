@@ -1350,7 +1350,9 @@
     padding-inline: 9px 26px;
   }
 
-  .log-search-input {
+  /* The search field keeps the room for the icon in front of it: the padding
+     of the form would otherwise push the text under the icon. */
+  .log-filter-form .log-search-input {
     font-size: 14px;
     padding-left: 2.15rem;
     padding-right: 10px;
@@ -1665,13 +1667,15 @@
   @apply relative;
 }
 
+/* The menu hangs on the right edge of its button, so it opens towards the
+   middle of the window instead of past its edge. */
 .create-menu {
-  @apply absolute left-0 z-20 w-[220px] overflow-hidden rounded-xl border;
+  @apply absolute right-0 z-20 w-[220px] overflow-hidden rounded-xl border;
   top: calc(100% + 6px);
   background: #fff;
   border-color: var(--line);
   box-shadow: 0 12px 28px rgba(18, 16, 32, 0.18);
-  transform-origin: bottom left;
+  transform-origin: bottom right;
   animation: menu-in 190ms var(--ease-out-strong) both;
 }
 

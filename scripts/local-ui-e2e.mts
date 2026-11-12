@@ -2798,6 +2798,228 @@ async function main() {
       JSON.stringify(customFieldRows || {})
     );
 
+    // The pages of the review of the layout are opened again, so the checks
+    // below measure what a person sees.
+    // A page is opened through its link, so the app keeps its state; a page
+    // without a link is opened through its address.
+    const goTo = async (href) => {
+      await evaluate(`(() => {
+        for (const trigger of [...document.querySelectorAll('.side-group-trigger')]) {
+          if (trigger.getAttribute('aria-expanded') === 'false') trigger.click();
+        }
+        return true;
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const clicked = await evaluate(`(() => {
+        const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === ${JSON.stringify(href)});
+        if (!link) return false;
+        link.click();
+        return true;
+      })()`);
+      if (!clicked) {
+        await cdp.send('Page.navigate', { url: `${worker.baseUrl}${href}` }, sessionId);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    };
+    const atDesktop = async () => {
+      await cdp.send(
+        'Emulation.setDeviceMetricsOverride',
+        { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false },
+        sessionId
+      );
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    };
+    const atPhone = async () => {
+      await cdp.send(
+        'Emulation.setDeviceMetricsOverride',
+        { width: 375, height: 812, deviceScaleFactor: 1, mobile: true },
+        sessionId
+      );
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    };
+
+    // The menu of "Create item" opens towards the middle of the window, so its
+    // last entry is not cut off by the edge of the window.
+    await atDesktop();
+    await gotoPath('/vault');
+    await waitFor(`!!document.querySelector('.desktop-create-trigger')`, 'the create button', 20000).catch(
+      () => false
+    );
+    await evaluate(`(() => {
+      const trigger = document.querySelector('.desktop-create-trigger');
+      if (!trigger) return false;
+      trigger.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.create-menu-item')`, 'the menu of the create button', 5000).catch(
+      () => false
+    );
+    const createMenuAt1440 = await evaluate(`(() => {
+      const items = [...document.querySelectorAll('.create-menu-item')].map((item) => {
+        const box = item.getBoundingClientRect();
+        return { text: (item.textContent || '').trim(), left: box.left, right: box.right };
+      });
+      return { viewport: window.innerWidth, items };
+    })()`);
+    checks.ok(
+      'the menu of the create button stays inside the window',
+      (createMenuAt1440?.items?.length || 0) > 0 &&
+        createMenuAt1440.items.every((item) => item.right <= createMenuAt1440.viewport + 0.5),
+      JSON.stringify(createMenuAt1440 || {})
+    );
+    await evaluate(`(() => {
+      const trigger = document.querySelector('.desktop-create-trigger');
+      if (trigger) trigger.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // The generator keeps its content inside its cards on a phone, so the copy
+    // button next to the regenerate button is there to be used.
+    await atPhone();
+    await goTo('/generator');
+    await waitFor(`!!document.querySelector('.generator-output-card')`, 'the generator page', 20000).catch(
+      () => false
+    );
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const generatorAt375 = await evaluate(`(() => {
+      const cards = [...document.querySelectorAll('.generator-output-card, .generator-options-card')];
+      const outside = [];
+      for (const card of cards) {
+        const cardBox = card.getBoundingClientRect();
+        for (const element of card.querySelectorAll('*')) {
+          const box = element.getBoundingClientRect();
+          if (!box.width) continue;
+          if (box.right > window.innerWidth + 0.5 || box.right > cardBox.right + 0.5) {
+            outside.push({
+              cls: String(element.getAttribute('class') || ''),
+              right: Math.round(box.right),
+              cardRight: Math.round(cardBox.right),
+            });
+          }
+        }
+      }
+      const buttons = [...document.querySelectorAll('.generator-actions .btn')].map((button) => {
+        const box = button.getBoundingClientRect();
+        return {
+          text: (button.textContent || '').trim(),
+          left: box.left,
+          right: box.right,
+          top: box.top,
+          bottom: box.bottom,
+        };
+      });
+      return { viewport: window.innerWidth, outside, buttons };
+    })()`);
+    checks.ok(
+      'the generator keeps its content inside its cards on a phone',
+      generatorAt375?.outside?.length === 0,
+      JSON.stringify(generatorAt375?.outside || [])
+    );
+    const copyButton = generatorAt375?.buttons?.find((button) => button.text.startsWith('Copy'));
+    checks.ok(
+      'the copy button of the generator is visible next to the regenerate button on a phone',
+      !!copyButton && copyButton.left >= 0 && copyButton.right <= generatorAt375.viewport + 0.5,
+      JSON.stringify(generatorAt375?.buttons || [])
+    );
+    await atDesktop();
+
+    // The icon of the search field of the log center stands in front of the
+    // text, so the text starts behind the icon and not under it.
+    await atPhone();
+    await gotoPath('/logs');
+    await waitFor(`!!document.querySelector('.log-search-input')`, 'the log center', 20000).catch(() => false);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const logSearchAt375 = await evaluate(`(() => {
+      const input = document.querySelector('.log-search-input');
+      const icon = document.querySelector('.log-search-field .input-leading-icon');
+      if (!input || !icon) return null;
+      const style = getComputedStyle(input);
+      const inputBox = input.getBoundingClientRect();
+      const iconBox = icon.getBoundingClientRect();
+      return {
+        paddingLeft: style.paddingLeft,
+        iconRight: iconBox.left + iconBox.width,
+        textStart: inputBox.left + parseFloat(style.paddingLeft),
+      };
+    })()`);
+    checks.ok(
+      'the icon of the search field of the log center does not cover its text on a phone',
+      !!logSearchAt375 && logSearchAt375.iconRight <= logSearchAt375.textStart + 0.5,
+      JSON.stringify(logSearchAt375 || {})
+    );
+
+    // The small controls of the pages are big enough for a finger.
+    for (const page of [
+      { path: '/vault', selector: '.list-quick-filters button' },
+      { path: '/settings/domain-rules', selector: '.domain-rule-expand-btn', icon: true },
+      { path: '/settings/security/device-management', selector: '.detail-icon-action', icon: true },
+      { path: '/backup', selector: '.backup-interval-preset' },
+      { path: '/generator', selector: '.generator-history-toggle' },
+    ]) {
+      await goTo(page.path);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const small = await evaluate(`(() => [...document.querySelectorAll(${JSON.stringify(page.selector)})]
+        .filter((element) => element.offsetParent !== null)
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          return {
+            text: (element.textContent || '').trim().slice(0, 20),
+            height: box.height,
+            width: box.width,
+          };
+        }))()`);
+      checks.ok(
+        `every ${page.selector} of ${page.path} is big enough for a finger on a phone`,
+        Array.isArray(small) &&
+          small.every((element) => element.height >= 44 && (!page.icon || element.width >= 44)),
+        JSON.stringify(small || [])
+      );
+    }
+    await atDesktop();
+
+    // The reveal button of the password stays on the row of the password on a
+    // phone: the button shares the line with the value of the password.
+    await atPhone();
+    await gotoPath('/vault');
+    await waitFor(`!!document.querySelector('.list-item .row-main')`, 'the vault list', 20000).catch(() => false);
+    await evaluate(`(() => {
+      const rows = [...document.querySelectorAll('.list-item .row-main')];
+      const target = rows.find((row) => (row.textContent || '').includes('UI Shared Login'));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(
+      `!!document.querySelector('[role="group"][aria-label="Login Credentials"]')`,
+      'the detail of the item',
+      15000
+    ).catch(() => false);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const revealAt375 = await evaluate(`(() => {
+      const card = document.querySelector('[role="group"][aria-label="Login Credentials"]');
+      const row = card && [...card.querySelectorAll('.kv-field')].find(
+        (entry) => (entry.querySelector('.kv-field-label')?.textContent || '').trim() === 'Password'
+      );
+      const value = row && row.querySelector('.kv-field-value');
+      const button = row && row.querySelector('.kv-actions .btn');
+      if (!value || !button) return null;
+      const valueBox = value.getBoundingClientRect();
+      const buttonBox = button.getBoundingClientRect();
+      return {
+        value: { top: valueBox.top, bottom: valueBox.bottom },
+        button: { top: buttonBox.top, bottom: buttonBox.bottom },
+        sameRow: buttonBox.top < valueBox.bottom && buttonBox.bottom > valueBox.top,
+      };
+    })()`);
+    checks.ok(
+      'the reveal button of the password stays on the row of the password on a phone',
+      !!revealAt375 && revealAt375.sameRow,
+      JSON.stringify(revealAt375 || {})
+    );
+    await atDesktop();
+
     return checks.finish() ? 0 : 1;
   } finally {
     if (browser) await browser.stop();
