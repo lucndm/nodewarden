@@ -1767,7 +1767,9 @@ input[type='file'].input::file-selector-button {
 
 /* ── field rows ── */
 /* Proton puts a small field icon on the left, the label above its value and
-   the row actions on the right. */
+   the row actions on the right. The actions stay on the row of the value on
+   a phone too: the value column gives up the room it needs instead of
+   pushing the actions onto a line of their own. */
 .kv-field {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1818,17 +1820,6 @@ input[type='file'].input::file-selector-button {
 
 .kv-field-value > strong {
   font-weight: 600;
-}
-
-@media (max-width: 640px) {
-  .kv-field {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .kv-field .kv-actions {
-    grid-column: 2;
-    justify-content: flex-start;
-  }
 }
 
 /* ── metadata group ── */
@@ -1924,6 +1915,25 @@ input[type='file'].input::file-selector-button {
   .detail-icon-action,
   .list-icon-btn,
   .mobile-fab-trigger {
+    min-width: 44px;
+  }
+
+  /* The small controls of the list, of the domain rules, of the backup and of
+     the generator are targets of their own, so they grow as well. */
+  .list-quick-filters button,
+  .domain-rule-expand-btn,
+  .domain-rule-mini-btn,
+  .domain-rule-icon-btn,
+  .backup-interval-preset,
+  .generator-history-toggle,
+  .detail-icon-action {
+    min-height: 44px;
+  }
+
+  /* A button that shows nothing but an icon needs a square target. */
+  .domain-rule-expand-btn,
+  .domain-rule-mini-btn,
+  .domain-rule-icon-btn {
     min-width: 44px;
   }
 }
