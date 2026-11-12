@@ -1,5 +1,5 @@
 import type { ComponentChildren, RefObject } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { memo } from 'preact/compat';
 import { createPortal } from 'preact/compat';
 import {
@@ -26,14 +26,18 @@ import {
   X,
 } from 'lucide-preact';
 import LoadingState from '@/components/LoadingState';
+import ItemContextMenu from '@/components/vault/ItemContextMenu';
 import type { Cipher } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import { looksLikeCipherString } from '@/lib/app-support';
+import { cipherCanEdit, type ItemMenuAction } from '@/lib/item-menu';
 import {
   CreateTypeIcon,
   getCreateTypeOptions,
   getDuplicateDetectionOptions,
   getVaultSortOptions,
+  isCipherDeleted,
+  MOBILE_LAYOUT_QUERY,
   relativeDayLabel,
   sortTimeValue,
   VaultListIcon,
@@ -104,6 +108,8 @@ interface VaultListPanelProps {
   onScroll: (top: number) => void;
   onToggleSelected: (cipherId: string, checked: boolean) => void;
   onSelectCipher: (cipherId: string) => void;
+  /** The user chose an action in the menu of an item. */
+  onItemAction: (cipherId: string, action: ItemMenuAction) => void;
   listSubtitle: (cipher: Cipher) => string;
 }
 
@@ -116,6 +122,7 @@ interface CipherListItemProps {
   dayLabel?: string;
   onToggleSelected: (cipherId: string, checked: boolean) => void;
   onSelectCipher: (cipherId: string) => void;
+  onOpenMenu: (cipher: Cipher, x: number, y: number, row: HTMLButtonElement | null) => void;
 }
 
 type MobileFilterMenuKey = 'duplicate' | 'menu' | 'type' | 'tag';
@@ -137,6 +144,13 @@ function dateGroupLabel(cipher: Cipher, previous?: Cipher): string | undefined {
   return relativeDayLabel(time, { today: t('txt_today'), yesterday: t('txt_yesterday') });
 }
 
+// The menu opens with the keyboard wherever the keyboard reaches: a touch
+// screen does not take the keys away, only the narrow layout does.
+function keyboardMenuAllowed(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return !window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+}
+
 const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) {
   const duplicateGroupHue = props.duplicateGroupIndex === null ? null : (props.duplicateGroupIndex * 137.508) % 360;
   const tags = (props.cipher.tags || []).filter((tag) => tag && !looksLikeCipherString(tag));
@@ -149,6 +163,12 @@ const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) 
         if (target.closest('.row-check')) return;
         props.onSelectCipher(props.cipher.id);
       }}
+      onContextMenu={(event) => {
+        // The browser menu would cover the item, and the app has its own.
+        event.preventDefault();
+        const row = event.currentTarget.querySelector('.row-main');
+        props.onOpenMenu(props.cipher, event.clientX, event.clientY, row instanceof HTMLButtonElement ? row : null);
+      }}
     >
       {props.dayLabel && <span className="list-day-label">{props.dayLabel}</span>}
       <input
@@ -158,7 +178,19 @@ const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) 
         onClick={(event) => event.stopPropagation()}
         onInput={(e) => props.onToggleSelected(props.cipher.id, (e.currentTarget as HTMLInputElement).checked)}
       />
-      <button type="button" className="row-main" onClick={() => props.onSelectCipher(props.cipher.id)}>
+      <button
+        type="button"
+        className="row-main"
+        onClick={() => props.onSelectCipher(props.cipher.id)}
+        onKeyDown={(event) => {
+          if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return;
+          if (!keyboardMenuAllowed()) return;
+          event.preventDefault();
+          // The menu opens at the corner of the row, under the last line.
+          const rect = event.currentTarget.getBoundingClientRect();
+          props.onOpenMenu(props.cipher, rect.left, rect.bottom, event.currentTarget);
+        }}
+      >
         <div className={`list-icon-wrap ${Number(props.cipher.type || 1) === 3 ? 'card-list-icon-wrap' : ''}`}>
           <VaultListIcon cipher={props.cipher} />
         </div>
@@ -183,6 +215,10 @@ const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) 
 export default function VaultListPanel(props: VaultListPanelProps) {
   const [mobileFilterOpen, setMobileFilterOpen] = useState<MobileFilterMenuKey | null>(null);
   const mobileFilterRef = useRef<HTMLDivElement | null>(null);
+  // The item whose menu is open, and where the pointer was when it opened.
+  const [itemMenu, setItemMenu] = useState<{ cipher: Cipher; x: number; y: number } | null>(null);
+  // The row of the item, so the focus can go back to it when the menu closes.
+  const itemMenuRowRef = useRef<HTMLButtonElement | null>(null);
   const createTypeOptions = getCreateTypeOptions();
   const duplicateDetectionOptions = getDuplicateDetectionOptions();
   const vaultSortOptions = getVaultSortOptions();
@@ -242,6 +278,28 @@ export default function VaultListPanel(props: VaultListPanelProps) {
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [mobileFilterOpen]);
+
+  // The menu of an item opens on the item itself, so the detail view and the
+  // list show the same item while the menu is open.
+  const openItemMenu = useCallback((cipher: Cipher, x: number, y: number, row: HTMLButtonElement | null) => {
+    itemMenuRowRef.current = row;
+    props.onSelectCipher(cipher.id);
+    setItemMenu({ cipher, x, y });
+  }, [props.onSelectCipher]);
+
+  const closeItemMenu = useCallback(() => setItemMenu(null), []);
+
+  // The focus goes back to the row of the item when the menu closes, unless
+  // the action that closed it has already moved the focus somewhere else.
+  useEffect(() => {
+    if (itemMenu) return;
+    const row = itemMenuRowRef.current;
+    itemMenuRowRef.current = null;
+    if (!row) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    row.focus();
+  }, [itemMenu]);
 
   const renderMobileFilterMenu = (
     key: MobileFilterMenuKey,
@@ -506,12 +564,28 @@ export default function VaultListPanel(props: VaultListPanelProps) {
                 subtitle={props.listSubtitle(cipher)}
                 onToggleSelected={props.onToggleSelected}
                 onSelectCipher={props.onSelectCipher}
+                onOpenMenu={openItemMenu}
               />
             ))}
           </div>
         )}
         {!props.loading && !props.error && !props.filteredCiphers.length && <div className="empty">{t('txt_no_items')}</div>}
       </div>
+      {itemMenu && (
+        <ItemContextMenu
+          cipher={itemMenu.cipher}
+          x={itemMenu.x}
+          y={itemMenu.y}
+          trash={isCipherDeleted(itemMenu.cipher)}
+          canEdit={cipherCanEdit(itemMenu.cipher)}
+          onAction={(action) => {
+            const cipherId = itemMenu.cipher.id;
+            closeItemMenu();
+            props.onItemAction(cipherId, action);
+          }}
+          onClose={closeItemMenu}
+        />
+      )}
     </section>
   );
 }

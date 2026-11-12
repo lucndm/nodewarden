@@ -26,6 +26,7 @@ import {
   draftFromCipher,
   driversLicenseListSubtitle,
   buildCipherDuplicateSignatures,
+  copyToClipboard,
   firstCipherUri,
   firstPasskeyCreationTime,
   isCipherVisibleInArchive,
@@ -39,6 +40,7 @@ import {
 } from '@/components/vault/vault-page-helpers';
 import { calcTotpNow, type TotpCodeResult } from '@/lib/crypto';
 import { computeSshFingerprint, generateDefaultSshKeyMaterial } from '@/lib/ssh';
+import { cipherIsArchived, type ItemMenuAction } from '@/lib/item-menu';
 import { ChevronLeft } from 'lucide-preact';
 import type { CipherUsageMap } from '@/lib/api/vault';
 import type { ItemHistoryEntry, ItemHistoryVersion } from '@/lib/item-history';
@@ -61,6 +63,8 @@ interface VaultPageProps {
   onTrackPasswordCopy: (cipherId: string) => void;
   /** Keeps an item out of the password check, or puts it back in. */
   onToggleScanExclusion: (cipherId: string, exclude: boolean) => void;
+  /** Marks an item as a favorite, or takes the mark away. */
+  onToggleFavorite: (cipherId: string, favorite: boolean) => Promise<void>;
   onRefresh: () => Promise<void>;
   /** The actions an owner or an admin takes on an organization. */
   organizationActions: OrganizationActions;
@@ -160,6 +164,10 @@ export default function VaultPage(props: VaultPageProps) {
   const [repromptOpen, setRepromptOpen] = useState(false);
   const [repromptPassword, setRepromptPassword] = useState('');
   const [repromptApprovedCipherId, setRepromptApprovedCipherId] = useState<string | null>(null);
+  // The copy the master password is asked for before it happens.
+  const [pendingCopy, setPendingCopy] = useState<{ cipherId: string; action: ItemMenuAction } | null>(null);
+  // The history the detail view has to open, and the moment it was asked for.
+  const [historyRequest, setHistoryRequest] = useState<{ cipherId: string; nonce: number } | null>(null);
   const [pendingDeletePasskeyIndex, setPendingDeletePasskeyIndex] = useState<number | null>(null);
   const [isMobileLayout, setIsMobileLayout] = useState(getInitialIsMobileLayout);
   const [mobilePanel, setMobilePanel] = useState<'list' | 'detail' | 'edit'>('list');
@@ -1072,6 +1080,82 @@ const folderName = useCallback((id: string | null | undefined): string => {
     }
   }
 
+  async function copyCipherPassword(cipher: Cipher): Promise<void> {
+    const copied = await copyToClipboard(cipher.login?.decPassword || '');
+    if (copied) props.onTrackPasswordCopy(cipher.id);
+  }
+
+  async function copyCipherTotp(cipher: Cipher): Promise<void> {
+    let code = '';
+    try {
+      const totp = await calcTotpNow(cipher.login?.decTotp || '');
+      code = totp?.code || '';
+    } catch {
+      // A secret that cannot be read leaves nothing to copy.
+    }
+    if (!code) {
+      // The copy failed, and the user is told so instead of seeing nothing.
+      props.onNotify('error', t('txt_nothing_to_copy'));
+      return;
+    }
+    await copyToClipboard(code);
+  }
+
+  // The menu of an item asks for an action on that item. The item is the one
+  // that was selected when the menu opened, so the detail view shows it too.
+  function handleItemAction(cipherId: string, action: ItemMenuAction): void {
+    const cipher = cipherById.get(cipherId);
+    if (!cipher) return;
+    const repromptLocked = Number(cipher.reprompt || 0) === 1 && repromptApprovedCipherId !== cipher.id;
+    if ((action === 'copy-password' || action === 'copy-totp') && repromptLocked) {
+      // The master password is asked for first, and the copy follows it.
+      setPendingCopy({ cipherId, action });
+      setRepromptOpen(true);
+      return;
+    }
+    switch (action) {
+      case 'copy-username':
+        void copyToClipboard(cipher.login?.decUsername || '');
+        break;
+      case 'copy-password':
+        void copyCipherPassword(cipher);
+        break;
+      case 'copy-totp':
+        void copyCipherTotp(cipher);
+        break;
+      case 'edit':
+        startEdit();
+        break;
+      case 'move-to-tag':
+        setSelectedMap({ [cipher.id]: true });
+        setMoveFolderId('__none__');
+        setMoveOpen(true);
+        break;
+      case 'toggle-favorite':
+        void props.onToggleFavorite(cipher.id, !cipher.favorite);
+        break;
+      case 'view-history':
+        setHistoryRequest({ cipherId: cipher.id, nonce: Date.now() });
+        break;
+      case 'toggle-archive':
+        if (cipherIsArchived(cipher)) void handleUnarchiveSelected(cipher);
+        else setPendingArchive(cipher);
+        break;
+      case 'move-to-trash':
+        setPendingDelete(cipher);
+        break;
+      case 'toggle-scan-exclusion':
+        props.onToggleScanExclusion(cipher.id, !getPasswordSecurityExclusions().includes(cipher.id));
+        break;
+      case 'restore':
+        void handleRestoreSelected(cipher);
+        break;
+      case 'delete-permanently':
+        setPendingDelete(cipher);
+        break;
+    }
+  }
+
   async function confirmBulkDelete(): Promise<void> {
     const ids = Object.entries(selectedMap)
       .filter(([, selected]) => selected)
@@ -1134,6 +1218,16 @@ const folderName = useCallback((id: string | null | undefined): string => {
       setRepromptApprovedCipherId(selectedCipher.id);
       setRepromptOpen(false);
       setRepromptPassword('');
+      // The copy the master password was asked for happens now.
+      const pending = pendingCopy;
+      setPendingCopy(null);
+      if (pending) {
+        const cipher = cipherById.get(pending.cipherId);
+        if (cipher) {
+          if (pending.action === 'copy-password') void copyCipherPassword(cipher);
+          else void copyCipherTotp(cipher);
+        }
+      }
     } catch (error) {
       props.onNotify('error', error instanceof Error ? error.message : t('txt_unlock_failed'));
     } finally {
@@ -1511,6 +1605,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
           onScroll={handleListScroll}
           onToggleSelected={handleToggleSelected}
           onSelectCipher={handleSelectCipher}
+          onItemAction={handleItemAction}
           listSubtitle={listSubtitle}
         />
 
@@ -1583,6 +1678,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 usageError={props.cipherUsageError}
                 sharedWith={sharedWithByCipher.get(selectedCipher.id) ?? null}
                 onPasswordCopied={props.onTrackPasswordCopy}
+                historyRequest={historyRequest}
                 onToggleScanExclusion={props.onToggleScanExclusion}
                 scanExcluded={scanExcluded}
                 hiddenFieldVisibleMap={hiddenFieldVisibleMap}

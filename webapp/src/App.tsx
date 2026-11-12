@@ -34,7 +34,7 @@ import {
 import { clearAuditLogs, exportAuditLogs, getAuditLogSettings, listAdminInvites, listAdminUsers, listAuditLogs, saveAuditLogSettings, type AuditLogFilters } from '@/lib/api/admin';
 import { getDomainRules, saveDomainRules } from '@/lib/api/domains';
 import { getSendById, getSends } from '@/lib/api/send';
-import { getCipherById, getCipherUsage, getFolderById, mergeCipherUsageEntry, recordCipherUsage, repairCipherKeyMismatches, repairCipherUriChecksums, type CipherUsageMap } from '@/lib/api/vault';
+import { getCipherById, getCipherUsage, getFolderById, mergeCipherUsageEntry, recordCipherUsage, repairCipherKeyMismatches, repairCipherUriChecksums, updateCipherPartial, type CipherUsageMap } from '@/lib/api/vault';
 import { getScanExclusions } from '@/lib/api/security';
 import {
   excludeFromPasswordScan,
@@ -1228,6 +1228,24 @@ export default function App() {
     }
   }
 
+  // A favorite is a flag on the item, so only that part of it is written and
+  // the vault is read again to show the new mark.
+  async function toggleFavorite(cipherId: string, favorite: boolean) {
+    if (IS_DEMO_MODE) return;
+    const id = String(cipherId || '').trim();
+    if (!id) return;
+    try {
+      await updateCipherPartial(authedFetch, id, { favorite });
+      await queryClient.invalidateQueries({ queryKey: ['vault-core', vaultCacheKey] });
+      dispatchAppNotify('success', favorite ? t('txt_added_to_favorites') : t('txt_removed_from_favorites'));
+    } catch (error) {
+      dispatchAppNotify(
+        'error',
+        error instanceof Error && error.message ? error.message : t('txt_update_item_failed')
+      );
+    }
+  }
+
   // A successful login password copy bumps the counter of that cipher. The
   // copy has already happened by then, so a failed request only warns about
   // the missing count - it never takes the copied password back.
@@ -2327,6 +2345,7 @@ export default function App() {
       organizationsQuery.isError || collectionsQuery.isError ? t('txt_collection_load_failed') : '',
     onTrackPasswordCopy: (cipherId: string) => { void trackPasswordCopy(cipherId); },
     onToggleScanExclusion: (cipherId: string, exclude: boolean) => { void toggleScanExclusion(cipherId, exclude); },
+    onToggleFavorite: (cipherId: string, favorite: boolean) => toggleFavorite(cipherId, favorite),
     organizationActions,
     currentUserId: String(profile?.id || ''),
     users: usersQuery.data || [],
