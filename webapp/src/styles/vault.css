@@ -5,6 +5,11 @@
 
 @media (min-width: 1181px) {
   .vault-grid { grid-template-rows: auto minmax(0, 1fr); }
+  /* The sends page has a sidebar of its own beside the list and the detail. */
+  .vault-grid.sends-grid {
+    grid-template-columns: 220px minmax(320px, 36%) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
   #vault-workspace-toolbar { grid-column: 1 / -1; min-width: 0; }
   .vault-workspace-search { display: flex; align-items: center; gap: 12px; padding: 0 4px 4px; }
   .vault-workspace-search .search-input-wrap { flex: 1; }
@@ -1311,6 +1316,12 @@ select.input.duplicate-mode-toolbar-select {
 .totp-codes-list {
   @apply grid w-full items-start gap-2.5;
   grid-template-columns: repeat(var(--totp-columns, 1), minmax(0, 1fr));
+}
+
+/* The empty block of the codes has no row of its own, so it sits in the
+   middle of the whole list instead of in the first column of it. */
+.totp-codes-list > .empty {
+  grid-column: 1 / -1;
 }
 
 .totp-code-row {

@@ -202,7 +202,12 @@ export default function TotpCodesPage(props: TotpCodesPageProps) {
           style={{ '--totp-columns': String(columnCount) } as Record<string, string>}
         >
           {!totpItems.length && props.loading && <LoadingState lines={6} />}
-          {!totpItems.length && !props.loading && <div className="empty">{t('txt_no_verification_codes')}</div>}
+          {!totpItems.length && !props.loading && (
+            <div className="empty">
+              <p>{t('txt_no_verification_codes')}</p>
+              <p className="field-help">{t('txt_totp_empty_help')}</p>
+            </div>
+          )}
           {totpItems.map((cipher) => (
             <TotpRow
               key={cipher.id}

@@ -42,12 +42,43 @@ import {
   createAccountPasskeyCredential,
   createTwoFactorPasskeyCredential,
 } from '@/lib/account-passkeys';
-import { t } from '@/lib/i18n';
+import { t, translateServerError } from '@/lib/i18n';
 import type { AppConfirmState } from '@/components/AppGlobalOverlays';
 import type { AuthedFetch } from '@/lib/api/shared';
 import type { AccountPasskeyCredential, AuthorizedDevice, Profile, SessionState, TwoFactorPasskeySettings, YubiKeyOtpSettings } from '@/lib/types';
 
 type Notify = (type: 'success' | 'error' | 'warning', text: string) => void;
+
+// The server answers the email change in English. These are the answers of
+// that flow, so the web vault can say what went wrong in its own language.
+const EMAIL_CHANGE_ERROR_KEYS: Record<string, string> = {
+  'Invalid password': 'txt_email_change_wrong_password',
+  'Email already in use': 'txt_email_change_address_in_use',
+  'Invalid email address': 'txt_sso_error_invalid_email',
+  'The new email is the current email': 'txt_email_change_same_email',
+  'The code could not be sent; try again later': 'txt_email_change_code_throttled',
+  'The code has expired; ask for a new one': 'txt_email_change_code_expired',
+  'Too many wrong codes; ask for a new one': 'txt_email_change_too_many_codes',
+  'Token mismatch': 'txt_email_change_code_mismatch',
+  'Email change mismatch': 'txt_email_change_request_missing',
+  'No email change pending': 'txt_email_change_request_missing',
+};
+
+function emailChangeErrorMessage(message: string): string {
+  const normalized = String(message || '').trim();
+  // The client that reads the answer translates it before it gets here, so
+  // the table is looked up with the answer of the server and with the
+  // answer the vault would show for it.
+  const table: Record<string, string> = {};
+  for (const [serverText, key] of Object.entries(EMAIL_CHANGE_ERROR_KEYS)) {
+    table[serverText] = key;
+    const translated = translateServerError(serverText, serverText);
+    if (translated !== serverText) table[translated] = key;
+  }
+  const key = table[normalized];
+  if (key) return t(key);
+  return translateServerError(normalized, t('txt_email_change_failed'));
+}
 
 interface UseAccountSecurityActionsOptions {
   authedFetch: AuthedFetch;
@@ -158,7 +189,7 @@ export default function useAccountSecurityActions(options: UseAccountSecurityAct
           onNotify('success', t('txt_email_change_code_sent'));
           return true;
         } catch (error) {
-          onNotify('error', error instanceof Error ? error.message : t('txt_email_change_failed'));
+          onNotify('error', emailChangeErrorMessage(error instanceof Error ? error.message : ''));
           return false;
         }
       },
@@ -183,7 +214,7 @@ export default function useAccountSecurityActions(options: UseAccountSecurityAct
           onLogoutNow();
           return true;
         } catch (error) {
-          onNotify('error', error instanceof Error ? error.message : t('txt_email_change_failed'));
+          onNotify('error', emailChangeErrorMessage(error instanceof Error ? error.message : ''));
           return false;
         }
       },
