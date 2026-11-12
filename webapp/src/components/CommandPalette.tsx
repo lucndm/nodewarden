@@ -148,8 +148,9 @@ export default function CommandPalette(props: CommandPaletteProps) {
   }
 
   function openItem(cipherId: string): void {
+    // The URL names the item to open. The page reads it, so the item opens
+    // whenever the page reads the URL.
     navigate(`/vault?cipher=${encodeURIComponent(cipherId)}`);
-    window.dispatchEvent(new CustomEvent('nodewarden:focus-cipher', { detail: cipherId }));
     props.onClose();
   }
 
@@ -163,13 +164,12 @@ export default function CommandPalette(props: CommandPaletteProps) {
       return;
     }
     if (entry.kind === 'page') {
+      // The URL names the tab of the settings page to open. The page reads
+      // it, so the tab opens whenever the page reads the URL.
       const target = entry.settingsSection
         ? `${entry.href}?section=${encodeURIComponent(entry.settingsSection)}`
         : entry.href;
       navigate(target);
-      if (entry.settingsSection) {
-        window.dispatchEvent(new CustomEvent('nodewarden:settings-section', { detail: entry.settingsSection }));
-      }
       props.onClose();
       return;
     }

@@ -2488,6 +2488,45 @@ async function main() {
       JSON.stringify(settingsTab || {})
     );
 
+    // The tab of the settings page opens again when it was changed by hand
+    // in between. The URL names the tab, so the tab opens whenever the URL
+    // names it.
+    const clickedAppearance = await evaluate(`(() => {
+      const tab = [...document.querySelectorAll('.settings-category-tab')].find(
+        (entry) => (entry.textContent || '').trim() === 'Appearance'
+      );
+      if (!tab) return false;
+      tab.click();
+      return true;
+    })()`);
+    await waitFor(
+      `(document.querySelector('.settings-category-tab.active')?.textContent || '').trim() === 'Appearance'`,
+      'the appearance tab',
+      5000
+    ).catch(() => false);
+    await openPalette();
+    await typeInPalette('two step');
+    await waitFor(
+      `[...document.querySelectorAll('.palette-card [role="option"]')].some((row) => (row.querySelector('.palette-row-label')?.textContent || '').trim() === 'Two-step login')`,
+      'the two step tab in the palette',
+      10000
+    ).catch(() => false);
+    await pressKey(enterKey);
+    await waitFor(
+      `(document.querySelector('.settings-category-tab.active')?.textContent || '').trim() === 'Two-step login'`,
+      'the two step tab again',
+      15000
+    ).catch(() => false);
+    const reopenedTab = await evaluate(`(() => ({
+      active: (document.querySelector('.settings-category-tab.active')?.textContent || '').trim(),
+      palette: !!document.querySelector('.palette-card[role="dialog"]'),
+    }))()`);
+    checks.ok(
+      'the tab of the settings page opens again after it was changed by hand',
+      clickedAppearance && reopenedTab?.active === 'Two-step login' && reopenedTab?.palette === false,
+      JSON.stringify(reopenedTab || {})
+    );
+
     // An item of the palette opens in the vault.
     await openPalette();
     await typeInPalette('UI Shared');
