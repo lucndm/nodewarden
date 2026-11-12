@@ -1688,6 +1688,22 @@ export async function unarchiveCipher(authedFetch: AuthedFetch, cipherId: string
   return (await parseJson<Cipher>(resp))!;
 }
 
+// The favorite flag and the folder of an item, without touching the rest.
+export async function updateCipherPartial(
+  authedFetch: AuthedFetch,
+  cipherId: string,
+  patch: { favorite?: boolean; folderId?: string | null }
+): Promise<void> {
+  const id = String(cipherId || '').trim();
+  if (!id) throw new Error('Cipher id is required');
+  const resp = await authedFetch(`/api/ciphers/${encodeURIComponent(id)}/partial`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Update item failed'));
+}
+
 export async function bulkDeleteCiphers(authedFetch: AuthedFetch, ids: string[]): Promise<void> {
   const uniqueIds = Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean)));
   for (const chunk of chunkArray(uniqueIds, BULK_API_CHUNK_SIZE)) {

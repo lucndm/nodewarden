@@ -64,6 +64,8 @@ export interface AppMainRoutesProps {
   onTrackPasswordCopy: (cipherId: string) => void;
   /** Keeps an item out of the password check, or puts it back in. */
   onToggleScanExclusion: (cipherId: string, exclude: boolean) => void;
+  /** Marks an item as a favorite, or takes the mark away. */
+  onToggleFavorite: (cipherId: string, favorite: boolean) => Promise<void>;
   /** The actions an owner or an admin takes on an organization. */
   organizationActions: OrganizationActions;
   /** The member who is looking at the vault. */
@@ -294,6 +296,7 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             collectionsError={props.collectionsError}
             onTrackPasswordCopy={props.onTrackPasswordCopy}
             onToggleScanExclusion={props.onToggleScanExclusion}
+            onToggleFavorite={props.onToggleFavorite}
             organizationActions={props.organizationActions}
             currentUserId={props.currentUserId}
             onRefresh={props.onRefreshVault}

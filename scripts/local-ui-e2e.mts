@@ -2168,6 +2168,203 @@ async function main() {
       JSON.stringify(customFields || {})
     );
 
+    // The menu of an item opens with the right mouse button, offers the
+    // copies the item holds and stays inside the window. The mouse speaks to
+    // the page through the input domain, so the copy is a real user gesture.
+    const itemRowPoint = async (name) => {
+      const found = await evaluate(`(() => {
+        const rows = [...document.querySelectorAll('.list-item .row-main')];
+        const target = rows.find((row) => (row.textContent || '').includes(${JSON.stringify(name)}));
+        if (!target) return false;
+        target.scrollIntoView({ block: 'center' });
+        return true;
+      })()`);
+      if (!found) return null;
+      // The list is virtual, so the row is measured after the scroll.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return evaluate(`(() => {
+        const rows = [...document.querySelectorAll('.list-item .row-main')];
+        const target = rows.find((row) => (row.textContent || '').includes(${JSON.stringify(name)}));
+        if (!target) return null;
+        const box = target.getBoundingClientRect();
+        if (!box.width || !box.height) return null;
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      })()`);
+    };
+    const pressMouse = async (point, button) => {
+      const mouse = { x: point.x, y: point.y, button, clickCount: 1 };
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...mouse }, sessionId);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...mouse }, sessionId);
+    };
+    const openItemMenu = async (name) => {
+      const point = await itemRowPoint(name);
+      if (!point) return false;
+      await pressMouse(point, 'right');
+      return true;
+    };
+    const clickMenuEntry = async (label) => {
+      const point = await evaluate(`(() => {
+        const menu = document.querySelector('.item-context-menu[role="menu"]');
+        const entry = menu && [...menu.querySelectorAll('[role="menuitem"]')].find(
+          (item) => (item.textContent || '').trim() === ${JSON.stringify(label)}
+        );
+        if (!entry) return null;
+        const box = entry.getBoundingClientRect();
+        if (!box.width || !box.height) return null;
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      })()`);
+      if (!point) return false;
+      await pressMouse(point, 'left');
+      return true;
+    };
+    const menuEntries = () =>
+      evaluate(`(() => {
+        const menu = document.querySelector('.item-context-menu[role="menu"]');
+        if (!menu) return null;
+        const box = menu.getBoundingClientRect();
+        return {
+          entries: [...menu.querySelectorAll('[role="menuitem"]')].map((entry) => (entry.textContent || '').trim()),
+          inside:
+            box.left >= 0 &&
+            box.top >= 0 &&
+            box.right <= window.innerWidth &&
+            box.bottom <= window.innerHeight,
+        };
+      })()`);
+
+    await openItemMenu('UI Shared Login');
+    await waitFor(`!!document.querySelector('.item-context-menu[role="menu"]')`, 'the menu of the item', 10000).catch(
+      () => false
+    );
+    const openedMenu = await menuEntries();
+    checks.ok(
+      'the right mouse button opens the menu of the item and the menu stays inside the window',
+      !!openedMenu?.entries?.includes('Copy password') && openedMenu?.inside === true,
+      JSON.stringify(openedMenu || {})
+    );
+
+    // The toast of the earlier copy is closed, so the next one is the toast of
+    // this copy and not the one that is still there.
+    await evaluate(`(() => {
+      for (const button of [...document.querySelectorAll('.toast-close')]) button.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    await clickMenuEntry('Copy password');
+    await waitFor(
+      `[...document.querySelectorAll('.toast-item.success .toast-text')].some((toast) => (toast.textContent || '').trim() === 'Copied')`,
+      'the toast of the copy out of the menu',
+      10000
+    ).catch(() => false);
+    const afterMenuCopy = await evaluate(`(() => ({
+      toasts: [...document.querySelectorAll('.toast-item .toast-text')].map((toast) => (toast.textContent || '').trim()),
+      menuOpen: !!document.querySelector('.item-context-menu[role="menu"]'),
+    }))()`);
+    checks.ok(
+      'the copy out of the menu says that it was copied and closes the menu',
+      afterMenuCopy?.toasts?.includes('Copied') && afterMenuCopy?.menuOpen === false,
+      JSON.stringify(afterMenuCopy || {})
+    );
+
+    // The escape key closes the menu again.
+    await openItemMenu('UI Shared Login');
+    await waitFor(`!!document.querySelector('.item-context-menu[role="menu"]')`, 'the menu of the item again', 10000).catch(
+      () => false
+    );
+    const menuBeforeEscape = await evaluate(`!!document.querySelector('.item-context-menu[role="menu"]')`);
+    const escapeKey = { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 };
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...escapeKey }, sessionId);
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...escapeKey }, sessionId);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const menuAfterEscape = await evaluate(`!!document.querySelector('.item-context-menu[role="menu"]')`);
+    checks.ok(
+      'the escape key closes the menu',
+      menuBeforeEscape === true && menuAfterEscape === false,
+      `menu open before: ${menuBeforeEscape}, after: ${menuAfterEscape}`
+    );
+
+    // The item can be marked as a favorite and taken back.
+    await openItemMenu('UI Shared Login');
+    await waitFor(`!!document.querySelector('.item-context-menu[role="menu"]')`, 'the menu of the favorite', 10000).catch(
+      () => false
+    );
+    await clickMenuEntry('Add to favorites');
+    await waitFor(
+      `[...document.querySelectorAll('.toast-item.success .toast-text')].some((toast) => (toast.textContent || '').trim() === 'Added to favorites')`,
+      'the toast of the favorite',
+      10000
+    ).catch(() => false);
+    // The toast is read while it is there, so it is not gone before the check.
+    const favoriteToast = await evaluate(
+      `[...document.querySelectorAll('.toast-item .toast-text')].map((toast) => (toast.textContent || '').trim())`
+    );
+    checks.ok(
+      'the menu says that the item is a favorite now',
+      favoriteToast.includes('Added to favorites'),
+      JSON.stringify(favoriteToast)
+    );
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.sidebar .tree-btn')].find(
+        (entry) => (entry.textContent || '').trim() === 'Favorites'
+      );
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(
+      `[...document.querySelectorAll('.list-item .row-main')].some((row) => (row.textContent || '').includes('UI Shared Login'))`,
+      'the item in the favorites',
+      15000
+    ).catch(() => false);
+    const favoriteRows = await evaluate(
+      `[...document.querySelectorAll('.list-item .row-main')].map((row) => (row.textContent || '').trim())`
+    );
+    checks.ok(
+      'the favorite shows in the favorites of the sidebar',
+      favoriteRows.some((text) => text.includes('UI Shared Login')),
+      JSON.stringify(favoriteRows)
+    );
+
+    await openItemMenu('UI Shared Login');
+    await waitFor(
+      `!!document.querySelector('.item-context-menu[role="menu"]')`,
+      'the menu of the removed favorite',
+      10000
+    ).catch(() => false);
+    await clickMenuEntry('Remove from favorites');
+    await waitFor(
+      `[...document.querySelectorAll('.toast-item.success .toast-text')].some((toast) => (toast.textContent || '').trim() === 'Removed from favorites')`,
+      'the toast of the removed favorite',
+      10000
+    ).catch(() => false);
+    await waitFor(
+      `![...document.querySelectorAll('.list-item .row-main')].some((row) => (row.textContent || '').includes('UI Shared Login'))`,
+      'the item to leave the favorites',
+      15000
+    ).catch(() => false);
+    const afterFavoriteRemoved = await evaluate(`(() => ({
+      toasts: [...document.querySelectorAll('.toast-item .toast-text')].map((toast) => (toast.textContent || '').trim()),
+      rows: [...document.querySelectorAll('.list-item .row-main')].map((row) => (row.textContent || '').trim()),
+    }))()`);
+    checks.ok(
+      'the favorite can be taken away again',
+      afterFavoriteRemoved?.toasts?.includes('Removed from favorites') &&
+        !afterFavoriteRemoved?.rows?.some((text) => text.includes('UI Shared Login')),
+      JSON.stringify(afterFavoriteRemoved || {})
+    );
+
+    // The list is left on every item, so the run ends where it began.
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('.sidebar .tree-btn')].find(
+        (entry) => (entry.textContent || '').trim() === 'All Items'
+      );
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
     return checks.finish() ? 0 : 1;
   } finally {
     if (browser) await browser.stop();

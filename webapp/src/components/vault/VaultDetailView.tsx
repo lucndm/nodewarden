@@ -50,6 +50,8 @@ interface VaultDetailViewProps {
   usageAvailable: boolean;
   usageError: boolean;
   onPasswordCopied: (cipherId: string) => void;
+  /** The history of an item that has to be opened, with the moment it was asked for. */
+  historyRequest?: { cipherId: string; nonce: number } | null;
   /** Whether the item is kept out of the password check. */
   scanExcluded: boolean;
   /** Keeps the item out of the password check, or puts it back in. */
@@ -254,6 +256,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement | null>(null);
   const itemHistoryRequestRef = useRef(0);
+  const historyRequestNonceRef = useRef(0);
   const [passwordHistoryOpen, setPasswordHistoryOpen] = useState(false);
   const [itemHistoryOpen, setItemHistoryOpen] = useState(false);
   const [itemHistoryEntries, setItemHistoryEntries] = useState<ItemHistoryEntry[]>([]);
@@ -418,6 +421,16 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
       if (itemHistoryRequestRef.current === token) setItemHistoryLoading(false);
     }
   };
+
+  // The list asks for the history of an item, and the view opens it.
+  useEffect(() => {
+    const request = props.historyRequest;
+    if (!request) return;
+    if (request.cipherId !== props.selectedCipher.id) return;
+    if (request.nonce === historyRequestNonceRef.current) return;
+    historyRequestNonceRef.current = request.nonce;
+    void openItemHistory();
+  }, [props.historyRequest, props.selectedCipher.id]);
 
   const selectItemHistoryVersion = async (versionId: string) => {
     const token = ++itemHistoryRequestRef.current;
