@@ -350,10 +350,6 @@ export default function DomainRulesPage(props: DomainRulesPageProps) {
             <RefreshCw size={14} className="btn-icon" />
             {t('txt_sync')}
           </button>
-          <a className="btn btn-secondary" href={CUSTOM_GLOBAL_DOMAINS_PR_URL} target="_blank" rel="noreferrer">
-            <ExternalLink size={14} className="btn-icon" />
-            {t('txt_submit_pr')}
-          </a>
         </div>
       </div>
 
@@ -504,6 +500,13 @@ export default function DomainRulesPage(props: DomainRulesPageProps) {
               />
             </div>
           </div>
+
+          <p className="domain-rules-suggest">
+            <a className="domain-rules-suggest-link" href={CUSTOM_GLOBAL_DOMAINS_PR_URL} target="_blank" rel="noreferrer">
+              <ExternalLink size={12} />
+              {t('txt_domain_rules_suggest_global')}
+            </a>
+          </p>
 
           <div className="domain-rules-table">
             {filteredGlobals.map((entry) => (

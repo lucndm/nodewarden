@@ -1695,6 +1695,15 @@ input[type='file'].input::file-selector-button {
   color: var(--danger);
 }
 
+/* The items of a menu that end something say so in the danger colour. */
+.sort-menu-item.danger {
+  color: var(--danger);
+}
+
+:root[data-theme='dark'] .sort-menu-item.danger {
+  color: var(--danger);
+}
+
 /* ── create menu ── */
 /* Proton gives every item type its own tinted round icon. */
 .create-menu-item {
@@ -1878,4 +1887,35 @@ input[type='file'].input::file-selector-button {
   border-color: color-mix(in srgb, var(--primary) 58%, var(--line));
   color: var(--primary-strong);
   text-decoration: none;
+}
+
+/* ── touch targets ── */
+/* Fingers need a 44px target, so the controls grow on a phone and on a
+   touch screen. The block comes after the rules of the media queries that
+   set a smaller height, so it is the one that counts. */
+@media (max-width: 640px), (pointer: coarse) {
+  .btn,
+  .btn.small,
+  .input,
+  .search-input,
+  select.input,
+  .backup-detail-panel > .section-head .actions .btn,
+  .admin-invites-head-actions .btn {
+    height: auto;
+    min-height: 44px;
+  }
+
+  .side-link,
+  .tree-btn,
+  .mobile-tab,
+  .settings-category-tab,
+  .sort-menu-item {
+    min-height: 44px;
+  }
+
+  .detail-icon-action,
+  .list-icon-btn,
+  .mobile-fab-trigger {
+    min-width: 44px;
+  }
 }

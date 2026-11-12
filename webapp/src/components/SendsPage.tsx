@@ -233,6 +233,15 @@ export default function SendsPage(props: SendsPageProps) {
     }
   }
 
+  function startNewSend(): void {
+    setIsCreating(true);
+    setIsEditing(true);
+    setDraft(buildDefaultDraft());
+    setShowPassword(false);
+    if (isMobileLayout) setMobilePanel('edit');
+    setMobileSidebarOpen(false);
+  }
+
   function getAccessUrl(send: Send): string {
     const rawUrl = send.shareUrl || `/send/${send.accessId}`;
     if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
@@ -248,7 +257,7 @@ export default function SendsPage(props: SendsPageProps) {
   }
 
   return (
-    <div className={`vault-grid ${isMobileLayout ? `mobile-panel-${mobilePanel}` : ''}`}>
+    <div className={`vault-grid sends-grid ${isMobileLayout ? `mobile-panel-${mobilePanel}` : ''}`}>
       {isMobileLayout && (
         <div
           className={`mobile-sidebar-mask ${mobileSidebarOpen ? 'open' : ''}`}
@@ -300,22 +309,25 @@ export default function SendsPage(props: SendsPageProps) {
           </button>
         </div>
         <div className="toolbar actions">
-          <button type="button" className="btn btn-danger small" disabled={!selectedCount || busy} onClick={() => void removeSelected()}>
-            <Trash2 size={14} className="btn-icon" /> {t('txt_delete_selected')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary small"
-            disabled={!filteredSends.length}
-            onClick={() => {
-              const map: Record<string, boolean> = {};
-              for (const send of filteredSends) map[send.id] = true;
-              setSelectedMap(map);
-            }}
-          >
-            <CheckCheck size={14} className="btn-icon" />
-            {t('txt_select_all')}
-          </button>
+          {selectedCount > 0 && (
+            <button type="button" className="btn btn-danger small" disabled={busy} onClick={() => void removeSelected()}>
+              <Trash2 size={14} className="btn-icon" /> {t('txt_delete_selected')}
+            </button>
+          )}
+          {filteredSends.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-secondary small"
+              onClick={() => {
+                const map: Record<string, boolean> = {};
+                for (const send of filteredSends) map[send.id] = true;
+                setSelectedMap(map);
+              }}
+            >
+              <CheckCheck size={14} className="btn-icon" />
+              {t('txt_select_all')}
+            </button>
+          )}
           {!!selectedCount && (
             <button type="button" className="btn btn-secondary small" onClick={() => setSelectedMap({})}>
               <X size={14} className="btn-icon" />
@@ -326,18 +338,12 @@ export default function SendsPage(props: SendsPageProps) {
             type="button"
             className="btn btn-primary small mobile-fab-trigger"
             disabled={busy}
-            aria-label={t('txt_add')}
-            title={t('txt_add')}
-            onClick={() => {
-              setIsCreating(true);
-              setIsEditing(true);
-              setDraft(buildDefaultDraft());
-              setShowPassword(false);
-              if (isMobileLayout) setMobilePanel('edit');
-              setMobileSidebarOpen(false);
-            }}
+            aria-label={t('txt_new_send')}
+            title={t('txt_new_send')}
+            onClick={startNewSend}
           >
             <Plus size={14} className="btn-icon" />
+            {t('txt_new_send')}
           </button>
         </div>
         <div className="list-panel">
@@ -396,7 +402,18 @@ export default function SendsPage(props: SendsPageProps) {
               </button>
             </div>
           ))}
-          {!props.loading && !filteredSends.length && <div className="empty">{t('txt_no_sends')}</div>}
+          {!props.loading && !filteredSends.length && (
+            props.sends.length === 0 && !search.trim() && typeFilter === 'all' ? (
+              <div className="empty">
+                <p>{t('txt_sends_empty_help')}</p>
+                <button type="button" className="btn btn-primary small" onClick={startNewSend}>
+                  {t('txt_new_send')}
+                </button>
+              </div>
+            ) : (
+              <div className="empty">{t('txt_no_sends')}</div>
+            )
+          )}
         </div>
       </section>
 

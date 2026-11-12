@@ -992,80 +992,80 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
         </div>
       </section>
 
-      <section className="card import-export-panel">
-        <h3>{t('txt_folder_legacy_title')}</h3>
-        <p className="backup-inline-note">{t('txt_folder_legacy_hint')}</p>
-        {!folderInventoryReady ? (
-          <p className="backup-inline-note">{t('txt_loading')}</p>
-        ) : folderInventory.length === 0 ? (
-          <p className="backup-inline-note">{t('txt_folder_legacy_none')}</p>
-        ) : (
-          <>
-            <p>{t('txt_folder_legacy_detected', { count: String(folderInventory.length) })}</p>
-            <ul className="field-help">
-              {folderInventory.map((entry) => {
-                const labelKey = FOLDER_STATE_LABEL_KEYS[entry.state];
-                return (
-                  <li key={entry.id}>
-                    {entry.name}
-                    {labelKey ? ` - ${t(labelKey)}` : ''}
-                  </li>
-                );
-              })}
-            </ul>
-            <label className="checkbox-inline">
-              <input
-                type="checkbox"
-                checked={folderBackupAcknowledged}
-                disabled={isConvertingFolders}
-                onInput={(e) => setFolderBackupAcknowledged((e.currentTarget as HTMLInputElement).checked)}
-              />
-              <span>{t('txt_folder_legacy_backup_ack')}</span>
-            </label>
-            <div className="actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!folderBackupAcknowledged || isConvertingFolders}
-                onClick={() => setFolderConvertDialogOpen(true)}
-              >
-                {isConvertingFolders ? t('txt_loading') : t('txt_folder_legacy_convert')}
-              </button>
+      {(!folderInventoryReady || folderInventory.length > 0) && (
+        <section className="card import-export-panel">
+          <h3>{t('txt_folder_legacy_title')}</h3>
+          <p className="backup-inline-note">{t('txt_folder_legacy_hint')}</p>
+          {!folderInventoryReady ? (
+            <p className="backup-inline-note">{t('txt_loading')}</p>
+          ) : (
+            <>
+              <p>{t('txt_folder_legacy_detected', { count: String(folderInventory.length) })}</p>
+              <ul className="field-help">
+                {folderInventory.map((entry) => {
+                  const labelKey = FOLDER_STATE_LABEL_KEYS[entry.state];
+                  return (
+                    <li key={entry.id}>
+                      {entry.name}
+                      {labelKey ? ` - ${t(labelKey)}` : ''}
+                    </li>
+                  );
+                })}
+              </ul>
+              <label className="checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={folderBackupAcknowledged}
+                  disabled={isConvertingFolders}
+                  onInput={(e) => setFolderBackupAcknowledged((e.currentTarget as HTMLInputElement).checked)}
+                />
+                <span>{t('txt_folder_legacy_backup_ack')}</span>
+              </label>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!folderBackupAcknowledged || isConvertingFolders}
+                  onClick={() => setFolderConvertDialogOpen(true)}
+                >
+                  {isConvertingFolders ? t('txt_loading') : t('txt_folder_legacy_convert')}
+                </button>
+              </div>
+            </>
+          )}
+          {folderConversionResult && (
+            <div className="field-help">
+              <p>
+                {t('txt_folder_legacy_result', {
+                  converted: String(folderConversionResult.converted),
+                  skipped: String(folderConversionResult.skipped.length),
+                  failed: String(folderConversionResult.failed.length),
+                })}
+              </p>
+              {folderConversionResult.skipped.length > 0 && (
+                <>
+                  <p>{t('txt_folder_legacy_skipped_title', { count: String(folderConversionResult.skipped.length) })}</p>
+                  <ul>
+                    {folderConversionResult.skipped.map((skip) => (
+                      <li key={skip.id}>{skip.name}: {skip.reason}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {folderConversionResult.failed.length > 0 && (
+                <>
+                  <p>{t('txt_folder_legacy_failed_title', { count: String(folderConversionResult.failed.length) })}</p>
+                  <ul>
+                    {folderConversionResult.failed.map((failure) => (
+                      <li key={failure.id}>{failure.name}: {failure.reason}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
-          </>
-        )}
-        {folderConversionResult && (
-          <div className="field-help">
-            <p>
-              {t('txt_folder_legacy_result', {
-                converted: String(folderConversionResult.converted),
-                skipped: String(folderConversionResult.skipped.length),
-                failed: String(folderConversionResult.failed.length),
-              })}
-            </p>
-            {folderConversionResult.skipped.length > 0 && (
-              <>
-                <p>{t('txt_folder_legacy_skipped_title', { count: String(folderConversionResult.skipped.length) })}</p>
-                <ul>
-                  {folderConversionResult.skipped.map((skip) => (
-                    <li key={skip.id}>{skip.name}: {skip.reason}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {folderConversionResult.failed.length > 0 && (
-              <>
-                <p>{t('txt_folder_legacy_failed_title', { count: String(folderConversionResult.failed.length) })}</p>
-                <ul>
-                  {folderConversionResult.failed.map((failure) => (
-                    <li key={failure.id}>{failure.name}: {failure.reason}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
       </div>
 
       <ConfirmDialog

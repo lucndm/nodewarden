@@ -596,33 +596,43 @@ export default function EmergencyAccessSettings(props: EmergencyAccessSettingsPr
       <section className="settings-submodule">
         <h4>{t('txt_emergency_access_invite_title')}</h4>
         <p className="muted-inline settings-field-note">{t('txt_emergency_access_invite_help')}</p>
+        <div className="settings-vertical-fields">
+          <label className="field">
+            <span>{t('txt_email')}</span>
+            <input
+              className="input"
+              type="email"
+              value={email}
+              onInput={(e) => setEmail((e.currentTarget as HTMLInputElement).value)}
+            />
+          </label>
+          <label className="field">
+            <span>{t('txt_emergency_access_type_label')}</span>
+            <select
+              className="input"
+              value={grantType}
+              onInput={(e) => setGrantType(Number((e.currentTarget as HTMLSelectElement).value))}
+            >
+              <option value={0}>{t('txt_emergency_access_type_view')}</option>
+              <option value={1}>{t('txt_emergency_access_type_takeover')}</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>{t('txt_emergency_access_wait_label')}</span>
+            <select
+              className="input"
+              value={waitDays}
+              onInput={(e) => setWaitDays(Number((e.currentTarget as HTMLSelectElement).value))}
+            >
+              {[1, 3, 7, 14, 30, 90].map((days) => (
+                <option key={days} value={days}>
+                  {t('txt_emergency_access_wait_days', { value: String(days) })}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="actions">
-          <input
-            className="input"
-            type="email"
-            placeholder={t('txt_email')}
-            value={email}
-            onInput={(e) => setEmail((e.currentTarget as HTMLInputElement).value)}
-          />
-          <select
-            className="input"
-            value={grantType}
-            onInput={(e) => setGrantType(Number((e.currentTarget as HTMLSelectElement).value))}
-          >
-            <option value={0}>{t('txt_emergency_access_type_view')}</option>
-            <option value={1}>{t('txt_emergency_access_type_takeover')}</option>
-          </select>
-          <select
-            className="input"
-            value={waitDays}
-            onInput={(e) => setWaitDays(Number((e.currentTarget as HTMLSelectElement).value))}
-          >
-            {[1, 3, 7, 14, 30, 90].map((days) => (
-              <option key={days} value={days}>
-                {t('txt_emergency_access_wait_days', { value: String(days) })}
-              </option>
-            ))}
-          </select>
           <button
             type="button"
             className="btn btn-primary"
