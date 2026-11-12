@@ -2126,6 +2126,28 @@ async function main() {
       }
       return true;
     };
+    // The detail of the item is re-rendered now and then, and the card of the
+    // credentials is gone for a moment while it happens. Every step that
+    // touches the card waits for it, so no step reads a page that is being
+    // rebuilt. The expression of the browser is a fixed text, so nothing of
+    // the run is built into the code that the page runs.
+    const waitForSharedDetail = async () => {
+      await waitFor(
+        `(() => {
+          const card = document.querySelector('[role="group"][aria-label="Login Credentials"]');
+          if (!card) return false;
+          const titled = [...document.querySelectorAll('.detail-item-title')].some(
+            (element) => (element.textContent || '').includes('UI Shared Login')
+          );
+          if (!titled) return false;
+          return [...card.querySelectorAll('.kv-copyable')].some(
+            (row) => (row.querySelector('.kv-field-label')?.textContent || '').trim() === 'Password'
+          );
+        })()`,
+        'the detail of the shared login',
+        10000
+      ).catch(() => false);
+    };
     await pressRow('Username', 'click');
     await waitFor(
       `[...document.querySelectorAll('.toast-item.success .toast-text')].some((toast) => (toast.textContent || '').trim() === 'Copied')`,
@@ -2150,12 +2172,20 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     // The password row copies when it is keyed, and the password stays masked.
+    // The card is awaited before the row is pressed: a re-render of the detail
+    // takes the card away for a moment, and a key press that lands in that
+    // moment copies nothing.
+    await waitForSharedDetail();
     await pressRow('Password', 'key');
     await waitFor(
       `[...document.querySelectorAll('.toast-item.success .toast-text')].some((toast) => (toast.textContent || '').trim() === 'Copied')`,
       'the toast of the keyed copy',
       10000
     ).catch(() => false);
+    // The card is read after the copy, so it is awaited again: a re-render of
+    // the detail can still be running. The copy is not tried a second time,
+    // so the check keeps asking for one copy that says that it was copied.
+    await waitForSharedDetail();
     const afterKey = await evaluate(`(() => {
       const card = document.querySelector('[role="group"][aria-label="Login Credentials"]');
       const row = card && [...card.querySelectorAll('.kv-copyable')].find(
@@ -2173,8 +2203,9 @@ async function main() {
       JSON.stringify(afterKey || {})
     );
 
-    // A field with a name the detail knows shows the canonical label, and the
-    // leftovers of a filled form wait in the collapsed area.
+    // The custom fields live in the same detail, so the card is awaited again
+    // before they are read.
+    await waitForSharedDetail();
     const customFields = await evaluate(`(() => {
       const labelOf = (card) => (card.querySelector('.custom-field-label')?.textContent || '').trim();
       const cards = [...document.querySelectorAll('.custom-field-card')];
@@ -2187,6 +2218,8 @@ async function main() {
         shownLabels: cards.filter((card) => !card.closest('details.detail-more-info')).map(labelOf),
       };
     })()`);
+    // A field with a name the detail knows shows the canonical label, and the
+    // leftovers of a filled form wait in the collapsed area.
     checks.ok(
       'a field with a known name shows the canonical label',
       customFields?.emailValue === 'shared@example.test' && customFields?.emailInMoreInfo === false,
@@ -3108,6 +3141,69 @@ async function main() {
       'the reveal button of the password stays on the row of the password on a phone',
       !!revealAt375 && revealAt375.sameRow,
       JSON.stringify(revealAt375 || {})
+    );
+    await atDesktop();
+
+    // The targets of the vault and of the backup are big enough for a finger
+    // on a phone. Only the visible ones are measured, so the check says
+    // nothing about the elements that are hidden. The code that the browser
+    // runs is a fixed text, so nothing of the run is built into it.
+    await atPhone();
+    await goTo('/vault');
+    await waitFor(`!!document.querySelector('.list-item .row-main')`, 'the vault list', 20000).catch(() => false);
+    // The detail of an item covers the list on a phone, so it is closed
+    // before the list is measured.
+    await evaluate(`(() => {
+      const back = document.querySelector('.mobile-panel-back');
+      if (!back) return false;
+      back.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const vaultTargets = await evaluate(`(() => {
+      const visible = (element) => {
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+      };
+      const measure = (selector) => [...document.querySelectorAll(selector)]
+        .filter(visible)
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          return {
+            text: (element.textContent || '').trim().slice(0, 20),
+            height: Math.round(box.height * 100) / 100,
+            width: Math.round(box.width * 100) / 100,
+          };
+        });
+      return {
+        filters: measure('.mobile-vault-filter-trigger'),
+        rows: measure('.list-item .row-main'),
+      };
+    })()`);
+    await goTo('/backup');
+    await waitFor(`!!document.querySelector('.backup-help-trigger')`, 'the help button of the backup', 20000).catch(
+      () => false
+    );
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const backupHelp = await evaluate(`(() => [...document.querySelectorAll('.backup-help-trigger')]
+      .filter((element) => {
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+      })
+      .map((element) => {
+        const box = element.getBoundingClientRect();
+        return {
+          text: (element.textContent || '').trim().slice(0, 20),
+          height: Math.round(box.height * 100) / 100,
+          width: Math.round(box.width * 100) / 100,
+        };
+      }))()`);
+    checks.ok(
+      'the targets of the vault and of the backup are big enough for a finger on a phone',
+      vaultTargets.filters.every((element) => element.height >= 44) &&
+        vaultTargets.rows.every((element) => element.height >= 44) &&
+        backupHelp.every((element) => element.height >= 44 && element.width >= 44),
+      JSON.stringify({ vault: vaultTargets, backup: backupHelp })
     );
     await atDesktop();
 
