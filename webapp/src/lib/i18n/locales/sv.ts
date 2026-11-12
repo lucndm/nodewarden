@@ -1795,6 +1795,12 @@ Object.assign(sv, {
   "txt_totp_empty_help": "Lägg till en autentiseringsnyckel på en inloggningspost så ser du dess koder här.",
   "txt_emergency_access_type_label": "Vad de får göra",
   "txt_emergency_access_wait_label": "Väntan innan åtkomst",
+  "txt_command_palette": "Sök sidor, objekt och fält",
+  "txt_palette_pages": "Sidor",
+  "txt_palette_items": "Objekt",
+  "txt_palette_fields": "Fält",
+  "txt_palette_hint": "↑↓ flytta · Enter öppna · Esc stänga",
+  "txt_palette_no_results": "Inga resultat",
 });
 
 export default sv;

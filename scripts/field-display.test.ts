@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { normalizeLabel, parseNote, presentField, usernameKind } from '../webapp/src/lib/field-display';
+import en from '../webapp/src/lib/i18n/locales/en';
 
 test('labels are matched without case, diacritics and separators', () => {
   assert.equal(normalizeLabel('Họ và tên'), 'ho va ten');
@@ -21,9 +22,15 @@ test('a known label resolves to its canonical kind', () => {
   assert.equal(presentField('calling code', 0).kind, 'other');
 });
 
-test('a canonical kind carries the label key of the field kind', () => {
-  assert.equal(presentField('E-mail', 0).labelKey, 'txt_field_kind_email');
+test('a canonical kind carries a label key that the locales know', () => {
+  // A kind without a key of its own carries none, and every other kind names
+  // a key that is translated, so a raw key never reaches the screen.
   assert.equal(presentField('calling code', 0).labelKey, null);
+  for (const label of ['E-mail', 'sdt', 'Ngap cap', 'CCCD', 'username', 'website', 'one time code']) {
+    const key = presentField(label, 0).labelKey;
+    assert.ok(key, `${label} should carry a label key`);
+    assert.ok(en[key], `${key} is not translated`);
+  }
 });
 
 test('a label that looks like a secret is masked', () => {

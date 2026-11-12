@@ -40,6 +40,8 @@ const intentionallyEnglishKeys = new Set([
   // "Organisationen"/"Organizations" differ, but the singular is a technical
   // term the German and French files keep as they are.
   'txt_organizations',
+  // "Pages" is the same word in French and English.
+  'txt_palette_pages',
 ]);
 const intentionallyEnglishPrefixes = [
   'txt_log_action_',

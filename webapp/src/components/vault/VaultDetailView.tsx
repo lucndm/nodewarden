@@ -124,13 +124,6 @@ const FIELD_KIND_ICONS: Record<FieldKind, LucideIcon> = {
   other: List,
 };
 
-/* The email and the phone already have a label in every locale file, so those
-   two kinds reuse them instead of adding a second copy of the same word. */
-const FIELD_KIND_LABEL_KEYS: Partial<Record<FieldKind, string>> = {
-  email: 'txt_email',
-  phone: 'txt_phone',
-};
-
 /* A value that can be copied is a click target: the row itself copies, so the
    copy button is only a hint that shows up while the row is hovered. */
 function CopyTarget(props: { className: string; label: string; onCopy: () => void; children: ComponentChildren }) {
@@ -524,7 +517,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
   // one. The stored name stays available as the tooltip of the label.
   const renderCustomField = (entry: CustomFieldEntry) => {
     const { index, type, name, value, presentation } = entry;
-    const labelKey = presentation.labelKey ? FIELD_KIND_LABEL_KEYS[presentation.kind] ?? presentation.labelKey : null;
+    const labelKey = presentation.labelKey;
     const label = labelKey ? t(labelKey) : name || t('txt_field');
     const KindIcon = FIELD_KIND_ICONS[presentation.kind];
     const labelTitle = labelKey ? name : undefined;

@@ -2698,6 +2698,8 @@ export default function App() {
         onLogout={handleLogout}
         onToggleTheme={handleToggleTheme}
         onToggleMobileSidebar={() => setMobileSidebarToggleKey((key) => key + 1)}
+        paletteCiphers={decryptedCiphers}
+        onTrackPasswordCopy={(cipherId: string) => { void trackPasswordCopy(cipherId); }}
         mainRoutesProps={effectiveMainRoutesProps}
       />
 

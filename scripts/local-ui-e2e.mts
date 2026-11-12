@@ -2365,6 +2365,197 @@ async function main() {
     })()`);
     await new Promise((resolve) => setTimeout(resolve, 400));
 
+    // The command palette opens with the keyboard and searches the pages, the
+    // items and the fields. The keys go through the input domain, so the
+    // shortcut and the dialog behave the way they do for a person.
+    const pressKey = async (key) => {
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...key }, sessionId);
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...key }, sessionId);
+    };
+    const enterKey = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
+    const arrowDownKey = { key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40 };
+    const arrowUpKey = { key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 };
+    // The second bit of the modifier mask is the control key.
+    const ctrlPKey = { key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80, nativeVirtualKeyCode: 80, modifiers: 2 };
+    const paletteDialog = () => evaluate(`!!document.querySelector('.palette-card[role="dialog"]')`);
+    const paletteRows = () =>
+      evaluate(`[...document.querySelectorAll('.palette-card [role="option"]')].map((row) => ({
+        label: (row.querySelector('.palette-row-label')?.textContent || '').trim(),
+        hint: (row.querySelector('.palette-row-hint')?.textContent || '').trim(),
+        selected: row.getAttribute('aria-selected') === 'true',
+      }))`);
+    const openPalette = async () => {
+      await pressKey(ctrlPKey);
+      await waitFor(`!!document.querySelector('.palette-card[role="dialog"]')`, 'the command palette', 10000).catch(
+        () => false
+      );
+      await waitFor(
+        `document.activeElement && document.activeElement.getAttribute('role') === 'combobox'`,
+        'the focus in the command palette',
+        10000
+      ).catch(() => false);
+    };
+    // The text is typed into the input the way a person types it.
+    const typeInPalette = async (text) => {
+      await cdp.send('Input.insertText', { text }, sessionId);
+    };
+    // The selection walks to the wanted row with the arrow keys, so the row is
+    // picked the way a person picks it.
+    const pickRow = async (label) => {
+      const rows = await paletteRows();
+      const wanted = rows.findIndex((row) => row.label === label);
+      if (wanted < 0) return false;
+      let active = rows.findIndex((row) => row.selected);
+      let guard = rows.length + 2;
+      while (active !== wanted && guard > 0) {
+        await pressKey(active < wanted ? arrowDownKey : arrowUpKey);
+        guard -= 1;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        active = (await paletteRows()).findIndex((row) => row.selected);
+      }
+      return active === wanted;
+    };
+
+    await openPalette();
+    const openedPalette = await evaluate(`(() => {
+      const card = document.querySelector('.palette-card[role="dialog"]');
+      const input = card && card.querySelector('[role="combobox"]');
+      return {
+        modal: card?.getAttribute('aria-modal') || '',
+        combobox: !!input,
+        focused: document.activeElement === input,
+        expanded: input?.getAttribute('aria-expanded') || '',
+        listbox: !!card?.querySelector('[role="listbox"]'),
+        options: card ? card.querySelectorAll('[role="option"]').length : 0,
+      };
+    })()`);
+    checks.ok(
+      'the control key with P opens the palette and puts the focus in its input',
+      openedPalette?.modal === 'true' &&
+        openedPalette?.combobox === true &&
+        openedPalette?.focused === true &&
+        openedPalette?.expanded === 'true' &&
+        openedPalette?.listbox === true &&
+        openedPalette?.options > 0,
+      JSON.stringify(openedPalette || {})
+    );
+
+    // A page of the palette opens that page.
+    await typeInPalette('device');
+    await waitFor(
+      `[...document.querySelectorAll('.palette-card [role="option"]')].some((row) => (row.querySelector('.palette-row-label')?.textContent || '').trim() === 'Device Management')`,
+      'the device management page in the palette',
+      10000
+    ).catch(() => false);
+    await pressKey(enterKey);
+    await waitFor(
+      `window.location.pathname === '/settings/security/device-management'`,
+      'the device management page',
+      15000
+    ).catch(() => false);
+    const devicePage = await evaluate(`(() => ({
+      path: window.location.pathname,
+      palette: !!document.querySelector('.palette-card[role="dialog"]'),
+      devices: (document.body.textContent || '').includes('Authorized Devices'),
+    }))()`);
+    checks.ok(
+      'the page of the palette opens that page and closes the palette',
+      devicePage?.path === '/settings/security/device-management' &&
+        devicePage?.palette === false &&
+        devicePage?.devices === true,
+      JSON.stringify(devicePage || {})
+    );
+
+    // A tab of the settings page opens that tab.
+    await openPalette();
+    await typeInPalette('two step');
+    await waitFor(
+      `[...document.querySelectorAll('.palette-card [role="option"]')].some((row) => (row.querySelector('.palette-row-label')?.textContent || '').trim() === 'Two-step login')`,
+      'the two step tab in the palette',
+      10000
+    ).catch(() => false);
+    await pressKey(enterKey);
+    await waitFor(`window.location.pathname === '/settings/account'`, 'the settings page', 15000).catch(() => false);
+    const settingsTab = await evaluate(`(() => ({
+      path: window.location.pathname,
+      section: new URLSearchParams(window.location.search).get('section') || '',
+      active: (document.querySelector('.settings-category-tab.active')?.textContent || '').trim(),
+      palette: !!document.querySelector('.palette-card[role="dialog"]'),
+    }))()`);
+    checks.ok(
+      'the tab of the settings page opens that tab',
+      settingsTab?.active === 'Two-step login' && settingsTab?.palette === false,
+      JSON.stringify(settingsTab || {})
+    );
+
+    // An item of the palette opens in the vault.
+    await openPalette();
+    await typeInPalette('UI Shared');
+    await waitFor(
+      `[...document.querySelectorAll('.palette-card [role="option"]')].some((row) => (row.querySelector('.palette-row-label')?.textContent || '').trim() === 'UI Shared Login')`,
+      'the item in the palette',
+      10000
+    ).catch(() => false);
+    const pickedItem = await pickRow('UI Shared Login');
+    await pressKey(enterKey);
+    await waitFor(
+      `(document.querySelector('.detail-item-title')?.textContent || '').trim() === 'UI Shared Login'`,
+      'the detail of the item',
+      15000
+    ).catch(() => false);
+    const itemDetail = await evaluate(`(() => ({
+      path: window.location.pathname,
+      title: (document.querySelector('.detail-item-title')?.textContent || '').trim(),
+      palette: !!document.querySelector('.palette-card[role="dialog"]'),
+    }))()`);
+    checks.ok(
+      'the item of the palette opens in the vault',
+      pickedItem &&
+        itemDetail?.path === '/vault' &&
+        itemDetail?.title === 'UI Shared Login' &&
+        itemDetail?.palette === false,
+      JSON.stringify(itemDetail || {})
+    );
+
+    // A field of the palette copies its value.
+    await openPalette();
+    await typeInPalette('UI Shared user');
+    await waitFor(
+      `[...document.querySelectorAll('.palette-card [role="option"]')].some((row) => (row.querySelector('.palette-row-label')?.textContent || '').trim() === 'Username')`,
+      'the username field in the palette',
+      10000
+    ).catch(() => false);
+    const pickedField = await pickRow('Username');
+    await pressKey(enterKey);
+    await waitFor(
+      `[...document.querySelectorAll('.toast-item.success .toast-text')].some((toast) => (toast.textContent || '').trim() === 'Copied')`,
+      'the toast of the copy',
+      10000
+    ).catch(() => false);
+    const copyToast = await evaluate(`(() => ({
+      toasts: [...document.querySelectorAll('.toast-item .toast-text')].map((toast) => (toast.textContent || '').trim()),
+      palette: !!document.querySelector('.palette-card[role="dialog"]'),
+    }))()`);
+    checks.ok(
+      'the field of the palette copies its value',
+      pickedField && copyToast?.toasts?.includes('Copied') && copyToast?.palette === false,
+      JSON.stringify(copyToast || {})
+    );
+
+    // The escape key closes the palette.
+    await openPalette();
+    const paletteBeforeEscape = await paletteDialog();
+    await pressKey(escapeKey);
+    await waitFor(`!document.querySelector('.palette-card[role="dialog"]')`, 'the closed palette', 5000).catch(
+      () => false
+    );
+    const paletteAfterEscape = await paletteDialog();
+    checks.ok(
+      'the escape key closes the palette',
+      paletteBeforeEscape === true && paletteAfterEscape === false,
+      `palette open before: ${paletteBeforeEscape}, after: ${paletteAfterEscape}`
+    );
+
     return checks.finish() ? 0 : 1;
   } finally {
     if (browser) await browser.stop();

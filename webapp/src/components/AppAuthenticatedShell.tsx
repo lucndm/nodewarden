@@ -1,13 +1,15 @@
 import { ChevronDown, Clock3, Folder as FolderIcon, KeyRound, Lock, LogOut, Send as SendIcon, Settings as SettingsIcon, ShieldUser, Sparkles } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { Link } from 'wouter';
 import AppMainRoutes from '@/components/AppMainRoutes';
+import CommandPalette from '@/components/CommandPalette';
 import NetworkStatusBadge from '@/components/NetworkStatusBadge';
 import ThemeSwitch from '@/components/ThemeSwitch';
 import type { AppMainRoutesProps } from '@/components/AppMainRoutes';
+import type { PageEntry } from '@/lib/command-palette';
 import { t } from '@/lib/i18n';
-import type { Profile } from '@/lib/types';
+import type { Cipher, Profile } from '@/lib/types';
 
 interface AppAuthenticatedShellProps {
   profile: Profile | null;
@@ -25,6 +27,9 @@ interface AppAuthenticatedShellProps {
   onLogout: () => void;
   onToggleTheme: () => void;
   onToggleMobileSidebar: () => void;
+  /** The items the palette searches. */
+  paletteCiphers: Cipher[];
+  onTrackPasswordCopy?: (cipherId: string) => void;
   mainRoutesProps: AppMainRoutesProps;
 }
 
@@ -70,6 +75,56 @@ export default function AppAuthenticatedShell(props: AppAuthenticatedShellProps)
   const isAdmin = isAdminProfile(props.profile);
   const deviceManagementActive = props.location === DEVICE_MANAGEMENT_ROUTE || props.location === LEGACY_DEVICE_MANAGEMENT_ROUTE;
   const [expandedGroups, setExpandedGroups] = useState<ExpandedGroups>(readExpandedGroups);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteSignal, setPaletteSignal] = useState(0);
+
+  // The pages of the palette follow the menu: only the destinations the
+  // member may open are listed, and the tabs of the settings page lead to
+  // their section.
+  const settingsLabel = t('nav_account_settings');
+  const palettePages: PageEntry[] = [
+    { id: 'vault', label: t('nav_vault_items'), href: '/vault' },
+    { id: 'sends', label: t('nav_sends'), href: '/sends' },
+    { id: 'verification-code', label: t('txt_verification_code'), href: '/vault/totp' },
+    { id: 'generator', label: t('nav_generator'), href: '/generator' },
+    { id: 'password-security', label: t('nav_password_security'), href: '/security/password-health' },
+    { id: 'import-export', label: t('nav_import_export'), href: props.importRoute },
+    { id: 'account-settings', label: settingsLabel, href: props.settingsAccountRoute },
+    { id: 'device-management', label: t('nav_device_management'), href: DEVICE_MANAGEMENT_ROUTE },
+    { id: 'domain-rules', label: t('nav_domain_rules'), href: '/settings/domain-rules' },
+  ];
+  if (isAdmin) {
+    palettePages.push(
+      { id: 'cloud-backup', label: t('nav_backup_strategy'), href: '/backup' },
+      { id: 'admin-panel', label: t('nav_admin_panel'), href: '/admin' },
+      { id: 'log-center', label: t('nav_log_center'), href: '/logs' },
+    );
+  }
+  palettePages.push(
+    { id: 'settings-appearance', label: t('txt_settings_appearance'), hint: settingsLabel, href: props.settingsAccountRoute, settingsSection: 'appearance' },
+    { id: 'settings-session', label: t('txt_session_timeout'), hint: settingsLabel, href: props.settingsAccountRoute, settingsSection: 'session' },
+    { id: 'settings-master-password', label: t('txt_master_password'), hint: settingsLabel, href: props.settingsAccountRoute, settingsSection: 'masterPassword' },
+    { id: 'settings-two-step', label: t('txt_two_step_login'), hint: settingsLabel, href: props.settingsAccountRoute, settingsSection: 'twoStep' },
+    { id: 'settings-keys', label: t('txt_keys'), hint: settingsLabel, href: props.settingsAccountRoute, settingsSection: 'keys' },
+    { id: 'settings-sso', label: t('txt_sso_account_title'), hint: settingsLabel, href: props.settingsAccountRoute, settingsSection: 'sso' },
+    { id: 'settings-emergency-access', label: t('txt_emergency_access_title'), hint: settingsLabel, href: props.settingsAccountRoute, settingsSection: 'emergencyAccess' },
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented) return;
+      if (!event.ctrlKey && !event.metaKey) return;
+      if (event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== 'p') return;
+      // Another dialog is open: the shortcut belongs to that dialog.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]:not(.palette-card)')) return;
+      event.preventDefault();
+      setPaletteOpen(true);
+      setPaletteSignal((signal) => signal + 1);
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
 
   function toggleGroup(group: NavGroup): void {
     setExpandedGroups((current) => {
@@ -169,6 +224,14 @@ export default function AppAuthenticatedShell(props: AppAuthenticatedShellProps)
 
   return (
     <div className="app-page">
+      <CommandPalette
+        open={paletteOpen}
+        pages={palettePages}
+        ciphers={props.paletteCiphers}
+        focusSignal={paletteSignal}
+        onClose={() => setPaletteOpen(false)}
+        onTrackPasswordCopy={props.onTrackPasswordCopy}
+      />
       <div className={`app-shell ${props.location === '/vault' ? 'vault-route' : ''}`}>
         <header className="topbar">
           <div className="brand">

@@ -388,3 +388,97 @@
 .org-group-check {
   @apply flex items-center gap-2 text-sm;
 }
+
+/* The command palette: pages, items and the fields of the items. */
+.palette-mask {
+  @apply fixed inset-0 flex justify-center p-4;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: var(--overlay-strong);
+  z-index: 1400;
+  animation: fade-in var(--dur-medium) var(--ease-smooth) both;
+}
+
+.palette-card {
+  @apply flex flex-col overflow-hidden;
+  width: min(640px, 100vw - 32px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  color: var(--text);
+}
+
+.palette-input {
+  @apply w-full border-0 bg-transparent text-base;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  outline: none;
+}
+
+.palette-input::placeholder {
+  color: var(--muted);
+}
+
+.palette-list {
+  @apply overflow-y-auto;
+  max-height: 60vh;
+  padding: 6px;
+}
+
+.palette-group-title {
+  @apply px-2.5 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider;
+  color: var(--muted);
+}
+
+.palette-row {
+  @apply flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent text-left;
+  padding: 8px 10px;
+  color: var(--text);
+}
+
+.palette-row.active {
+  background: var(--accent-soft);
+}
+
+.palette-row-icon {
+  @apply flex-none;
+  color: var(--muted);
+}
+
+.palette-row-label {
+  @apply min-w-0 flex-1 truncate text-sm font-semibold;
+}
+
+.palette-row-hint {
+  @apply flex-none truncate text-xs;
+  max-width: 40%;
+  color: var(--muted);
+}
+
+.palette-row-copy {
+  @apply flex-none text-xs;
+  color: var(--muted);
+}
+
+.palette-empty {
+  @apply px-4 py-6 text-center text-sm;
+  color: var(--muted);
+}
+
+.palette-footer {
+  @apply border-t px-4 py-2 text-xs;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .palette-mask {
+    padding-top: 8vh;
+  }
+
+  .palette-row-hint {
+    max-width: 30%;
+  }
+}

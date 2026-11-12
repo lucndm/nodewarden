@@ -125,6 +125,9 @@ export default function VaultPage(props: VaultPageProps) {
   const [selectedCipherId, setSelectedCipherId] = useState('');
   const [selectedMap, setSelectedMap] = useState<Record<string, boolean>>({});
   const pendingFocusCipherIdRef = useRef<string | null>(null);
+  // Rises when an item is asked for from outside the page, so the effects
+  // that open it run again.
+  const [focusSignal, setFocusSignal] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -646,6 +649,18 @@ export default function VaultPage(props: VaultPageProps) {
     pendingFocusCipherIdRef.current = focusId;
   }, []);
 
+  // The palette asks for an item while the page is already open.
+  useEffect(() => {
+    const focusCipher = (event: Event): void => {
+      const focusId = String((event as CustomEvent<string>).detail || '').trim();
+      if (!focusId) return;
+      pendingFocusCipherIdRef.current = focusId;
+      setFocusSignal((signal) => signal + 1);
+    };
+    window.addEventListener('nodewarden:focus-cipher', focusCipher);
+    return () => window.removeEventListener('nodewarden:focus-cipher', focusCipher);
+  }, []);
+
   useEffect(() => {
     const focusId = pendingFocusCipherIdRef.current;
     if (!focusId) return;
@@ -668,7 +683,7 @@ export default function VaultPage(props: VaultPageProps) {
     setIsEditing(false);
     setIsCreating(false);
     setDraft(null);
-  }, [cipherById, props.ciphers.length, props.loading]);
+  }, [cipherById, props.ciphers.length, props.loading, focusSignal]);
 
   useEffect(() => {
     if (isCreating) return;
@@ -701,7 +716,7 @@ export default function VaultPage(props: VaultPageProps) {
     if (!selectedCipherId || !filteredCipherIds.has(selectedCipherId)) {
       setSelectedCipherId(filteredCiphers[0].id);
     }
-  }, [filteredCiphers, filteredCipherIds, selectedCipherId, isCreating, isMobileLayout]);
+  }, [filteredCiphers, filteredCipherIds, selectedCipherId, isCreating, isMobileLayout, focusSignal]);
 
   const selectedCipher = useMemo(() => cipherById.get(selectedCipherId) || null, [cipherById, selectedCipherId]);
   // Whether the item on screen is kept out of the password check. The list
