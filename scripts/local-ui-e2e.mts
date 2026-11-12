@@ -988,6 +988,36 @@ async function main() {
     );
     checks.ok('the shared item is still readable after the rotation', true);
 
+    // The name of a collection is sealed with the organization key, and the
+    // rotation sealed it again with the new one: the sidebar shows the name
+    // and not the ciphertext it was before.
+    const sidebarDeadline = Date.now() + 20000;
+    while (Date.now() < sidebarDeadline) {
+      const names = await evaluate(
+        `[...document.querySelectorAll('.sidebar .tree-btn')].map((button) => button.textContent.trim())`
+      ).catch(() => []);
+      if (Array.isArray(names) && names.some((name) => name.includes(seeded.collectionName))) break;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    const sidebarCollections = await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll('.sidebar .tree-btn')];
+      const names = buttons.map((button) => button.textContent.trim());
+      return {
+        names,
+        ciphertext: names.filter((text) => /^\\d\\.[A-Za-z0-9+/=]{8,}/.test(text)),
+      };
+    })()`);
+    checks.ok(
+      'the sidebar shows the collection name after the rotation',
+      sidebarCollections.names.some((text) => text.includes(seeded.collectionName)),
+      JSON.stringify(sidebarCollections.names).slice(0, 300)
+    );
+    checks.ok(
+      'and no collection is left as ciphertext',
+      sidebarCollections.ciphertext.length === 0,
+      JSON.stringify(sidebarCollections.ciphertext).slice(0, 300)
+    );
+
     // The audit log can be taken out of the app as a file, for whoever has
     // to read it outside.
     await evaluate(`(() => {

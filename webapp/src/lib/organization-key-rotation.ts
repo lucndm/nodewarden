@@ -60,6 +60,18 @@ export interface RotationAttachmentInput {
   key: string | null;
 }
 
+/**
+ * A collection of the organization: its name as the server stores it.
+ *
+ * The name is sealed with the organization key, so a rotation has to seal it
+ * again with the new one. A collection created before the names were
+ * encrypted still carries a plain name.
+ */
+export interface RotationCollectionInput {
+  id: string;
+  name: string;
+}
+
 /** One entry of the item's history, sealed with the item key. */
 export interface RotationVersionInput {
   id: string;
@@ -74,6 +86,15 @@ export interface RotationResult {
   organizationPrivateKey: string | null;
   /** The new organization key, wrapped for each member. */
   memberKeys: Array<{ membershipId: string; key: string }>;
+  /** Each collection, with its name sealed with the new organization key. */
+  collections: Array<{ id: string; name: string }>;
+  /**
+   * The collections whose name could not be read with the old key.
+   *
+   * Their name is kept as it was: it was broken before the rotation, and one
+   * unreadable name must not stop the rotation of the whole organization.
+   */
+  unreadableCollections: number;
   /** Each item with its new key and its re-encrypted name, notes and payload. */
   ciphers: Array<{
     id: string;
@@ -236,6 +257,8 @@ export async function rotateOrganizationKey(input: {
   organizationPrivateKey: string | null;
   members: RotationMemberInput[];
   ciphers: RotationCipherInput[];
+  /** The collections of the organization, with the name as it is stored. */
+  collections: RotationCollectionInput[];
 }): Promise<RotationResult> {
   const oldKey = splitKey(input.oldOrganizationKey);
   const newOrganizationKey = randomKey();
@@ -255,6 +278,34 @@ export async function rotateOrganizationKey(input: {
       membershipId: member.membershipId,
       key: await wrapKeyForMember(newOrganizationKey, member.publicKey),
     });
+  }
+
+  // The name of a collection is sealed with the organization key, so it is
+  // sealed again with the new one: a name left under the old key is a name
+  // the official clients cannot read.
+  const collections: RotationResult['collections'] = [];
+  let unreadableCollections = 0;
+  for (const collection of input.collections) {
+    if (!looksLikeCipherString(collection.name)) {
+      // A collection created before the names were encrypted still carries a
+      // plain name, and it is sealed with the new key as well.
+      collections.push({
+        id: collection.id,
+        name: await encryptBw(new TextEncoder().encode(collection.name), newKey.encKey, newKey.macKey),
+      });
+      continue;
+    }
+    let plain: Uint8Array;
+    try {
+      plain = await decryptBw(collection.name, oldKey.encKey, oldKey.macKey);
+    } catch {
+      // The name was already broken, before this rotation. It stays as it is:
+      // one unreadable name must not stop the rotation of the organization.
+      collections.push({ id: collection.id, name: collection.name });
+      unreadableCollections += 1;
+      continue;
+    }
+    collections.push({ id: collection.id, name: await encryptBw(plain, newKey.encKey, newKey.macKey) });
   }
 
   const ciphers: RotationResult['ciphers'] = [];
@@ -323,7 +374,7 @@ export async function rotateOrganizationKey(input: {
     });
   }
 
-  return { organizationPrivateKey, memberKeys, ciphers };
+  return { organizationPrivateKey, memberKeys, collections, unreadableCollections, ciphers };
 }
 
 /**
@@ -382,7 +433,9 @@ export async function applyOrganizationKeyRotation(input: {
   organizationPrivateKey: string | null;
   members: RotationMemberInput[];
   ciphers: RotationCipherInput[];
-}): Promise<{ members: number; ciphers: number; rotatedAt: string }> {
+  /** The collections of the organization, with the name as it is stored. */
+  collections: RotationCollectionInput[];
+}): Promise<{ members: number; ciphers: number; collections: number; rotatedAt: string }> {
   const oldOrganizationKey = await openOrganizationKey({
     encryptedPrivateKey: input.encryptedPrivateKey,
     userEncKey: input.userEncKey,
@@ -395,6 +448,7 @@ export async function applyOrganizationKeyRotation(input: {
     organizationPrivateKey: input.organizationPrivateKey,
     members: input.members,
     ciphers: input.ciphers,
+    collections: input.collections,
   });
 
   const response = await input.authedFetch(
@@ -405,6 +459,10 @@ export async function applyOrganizationKeyRotation(input: {
       body: JSON.stringify({
         privateKey: rotated.organizationPrivateKey,
         members: rotated.memberKeys,
+        // The collection names travel with the keys: this is the request that
+        // replaces the key, and a name left under the old key is a name the
+        // clients cannot read.
+        collections: rotated.collections,
         ciphers: rotated.ciphers.map((entry) => ({
           id: entry.id,
           key: entry.key,
@@ -429,5 +487,5 @@ export async function applyOrganizationKeyRotation(input: {
   if (!response.ok) {
     throw new Error(`Rotation failed: ${response.status}`);
   }
-  return (await response.json()) as { members: number; ciphers: number; rotatedAt: string };
+  return (await response.json()) as { members: number; ciphers: number; collections: number; rotatedAt: string };
 }

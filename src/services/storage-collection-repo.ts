@@ -951,6 +951,30 @@ export async function getOrganizationIdByCipherIds(
   return organizationByCipher;
 }
 
+/**
+ * Every collection of one organization, with the name it is stored under.
+ *
+ * The name of a collection is protected by the organization key, so a key
+ * rotation has to read them all: the ones left under the old key are names
+ * nobody can read.
+ */
+export async function getOrganizationCollections(
+  db: D1Database,
+  orgId: string
+): Promise<Collection[]> {
+  const res = await db
+    .prepare('SELECT id, org_id, name, created_at, updated_at FROM collections WHERE org_id = ? ORDER BY name ASC')
+    .bind(orgId)
+    .all<{ id: string; org_id: string; name: string; created_at: string; updated_at: string }>();
+  return (res.results || []).map((row) => ({
+    id: row.id,
+    orgId: row.org_id,
+    name: row.name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
 /** The collections of one organization that these ids name. */
 export async function getOrganizationCollectionIds(
   db: D1Database,
@@ -1293,6 +1317,14 @@ export interface OrganizationKeyRotation {
   privateKey?: string | null;
   /** The new organization key, wrapped for each remaining member. */
   memberKeys: Array<{ membershipId: string; key: string }>;
+  /**
+   * The name of each collection, sealed with the new organization key.
+   *
+   * A collection name is protected by the organization key like every other
+   * name of a shared item, so a rotation that left it behind would leave a
+   * name the clients cannot read.
+   */
+  collectionNames?: Array<{ id: string; name: string }>;
   /** Each shared item, with its item key re-wrapped under the new key. */
   cipherKeys: Array<{ cipherId: string; key: string | null; name?: string | null; notes?: string | null; data: string }>;
   /** Each attachment's key, re-sealed under its item's new key. */
@@ -1336,6 +1368,16 @@ export async function rotateOrganizationKey(
       db
         .prepare('UPDATE organization_users SET key = ?, updated_at = ? WHERE id = ? AND org_id = ?')
         .bind(member.key, rotation.now, member.membershipId, rotation.orgId)
+    );
+  }
+  // The collection names are sealed with the organization key, so they are
+  // replaced in the same batch: a rotation that changed the key but left a
+  // name behind would leave it readable only under the old key.
+  for (const collection of rotation.collectionNames ?? []) {
+    statements.push(
+      db
+        .prepare('UPDATE collections SET name = ?, updated_at = ? WHERE id = ? AND org_id = ?')
+        .bind(collection.name, rotation.now, collection.id, rotation.orgId)
     );
   }
   for (const cipher of rotation.cipherKeys) {

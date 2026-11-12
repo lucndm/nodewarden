@@ -89,6 +89,7 @@ test('a rotation leaves the new key to every remaining member and to nobody else
         },
       },
     ],
+    collections: [],
   });
 
   // Each member opens the new organization key with their own private key.
@@ -155,6 +156,7 @@ test('an item that used the organization key directly gets its own key', async (
     members: [{ membershipId: 'owner', publicKey: owner.publicKey }],
     // No `key`: this item's payload is protected by the organization key.
     ciphers: [{ id: 'cipher-legacy', key: null, name: null, notes: encryptedNotes, data: {} }],
+    collections: [],
   });
 
   const newOrganizationKey = await unwrapForMember(owner.privateKey, result.memberKeys[0].key);
@@ -187,10 +189,96 @@ test('a payload that cannot be read stops the rotation', async () => {
         organizationPrivateKey: null,
         members: [{ membershipId: 'owner', publicKey: owner.publicKey }],
         ciphers: [{ id: 'cipher-1', key: wrappedItemKey, name: foreign, notes: null, data: {} }],
+        collections: [],
       }),
     /Could not read the encrypted value/,
     'a half-rotated payload must never be produced'
   );
+});
+
+test('a collection name is sealed again with the new key', async () => {
+  const owner = await memberKeyPair();
+  const oldOrganizationKey = randomKey();
+  const oldHalves = halves(oldOrganizationKey);
+  // The name of a collection is sealed with the organization key, like every
+  // other name of a shared item.
+  const encryptedName = await encryptBw(
+    new TextEncoder().encode('UI Shared'),
+    oldHalves.encKey,
+    oldHalves.macKey
+  );
+
+  const result = await rotateOrganizationKey({
+    oldOrganizationKey,
+    organizationPrivateKey: null,
+    members: [{ membershipId: 'owner', publicKey: owner.publicKey }],
+    ciphers: [],
+    collections: [{ id: 'col-1', name: encryptedName }],
+  });
+
+  const newOrganizationKey = await unwrapForMember(owner.privateKey, result.memberKeys[0].key);
+  const newHalves = halves(newOrganizationKey);
+  assert.equal(result.collections.length, 1);
+  assert.equal(
+    new TextDecoder().decode(
+      await decryptBw(result.collections[0].name, newHalves.encKey, newHalves.macKey)
+    ),
+    'UI Shared',
+    'the new key opens the name'
+  );
+  await assert.rejects(
+    () => decryptBw(result.collections[0].name, oldHalves.encKey, oldHalves.macKey),
+    'the old organization key must not read the name'
+  );
+  assert.equal(result.unreadableCollections, 0);
+});
+
+test('a collection name that is still plain text is sealed with the new key', async () => {
+  const owner = await memberKeyPair();
+  const oldOrganizationKey = randomKey();
+
+  const result = await rotateOrganizationKey({
+    oldOrganizationKey,
+    organizationPrivateKey: null,
+    members: [{ membershipId: 'owner', publicKey: owner.publicKey }],
+    ciphers: [],
+    // A collection created before the names were encrypted.
+    collections: [{ id: 'col-legacy', name: 'Default' }],
+  });
+
+  const newOrganizationKey = await unwrapForMember(owner.privateKey, result.memberKeys[0].key);
+  const newHalves = halves(newOrganizationKey);
+  assert.match(result.collections[0].name, /^\d+\./, 'the name is an encrypted string now');
+  assert.equal(
+    new TextDecoder().decode(
+      await decryptBw(result.collections[0].name, newHalves.encKey, newHalves.macKey)
+    ),
+    'Default'
+  );
+});
+
+test('a collection name that cannot be read stays as it is', async () => {
+  const owner = await memberKeyPair();
+  const oldOrganizationKey = randomKey();
+  // A well-formed encrypted string that was made with another key: the name
+  // was broken before this rotation.
+  const otherHalves = halves(randomKey());
+  const broken = await encryptBw(
+    new TextEncoder().encode('someone else'),
+    otherHalves.encKey,
+    otherHalves.macKey
+  );
+
+  const result = await rotateOrganizationKey({
+    oldOrganizationKey,
+    organizationPrivateKey: null,
+    members: [{ membershipId: 'owner', publicKey: owner.publicKey }],
+    ciphers: [],
+    collections: [{ id: 'col-broken', name: broken }],
+  });
+
+  assert.equal(result.collections[0].name, broken, 'the broken name is kept as it was');
+  assert.equal(result.unreadableCollections, 1, 'and it is counted');
 });
 
 test('a member opens the organization key with their own private key', async () => {
@@ -469,6 +557,7 @@ test('the whole rotation runs through the real endpoint', async () => {
   const rotationData = (await rotationResponse.json()) as {
     organization: { privateKey: string | null };
     members: Array<{ membershipId: string; publicKey: string | null }>;
+    collections: Array<{ id: string; name: string }>;
     ciphers: Array<{
       id: string;
       key: string | null;
@@ -500,6 +589,7 @@ test('the whole rotation runs through the real endpoint', async () => {
       membershipId: member.membershipId,
       publicKey: member.publicKey as string,
     })),
+    collections: rotationData.collections,
     ciphers: rotationData.ciphers.map((cipher) => ({
       id: cipher.id,
       key: cipher.key,
@@ -518,6 +608,37 @@ test('the whole rotation runs through the real endpoint', async () => {
   });
   assert.equal(result.members, 2);
   assert.equal(result.ciphers, 1);
+  assert.equal(result.collections, 1, 'the collection was written with the new key');
+
+  // The collection name is sealed with the organization key, and it was plain
+  // text before the rotation. It opens with the new key, and with no other.
+  const storedOwner = await storage.getOrganizationUserForUser('org-1', 'user-owner');
+  assert.ok(storedOwner?.key, 'the owner got the new key');
+  const rotatedOrganizationKey = await openOrganizationKey({
+    encryptedPrivateKey: await encryptBw(
+      new Uint8Array(await subtle.exportKey('pkcs8', owner.privateKey)),
+      ownerVault.encKey,
+      ownerVault.macKey
+    ),
+    userEncKey: ownerVault.encKey,
+    userMacKey: ownerVault.macKey,
+    wrappedOrganizationKey: storedOwner.key,
+  });
+  const rotatedHalves = halves(rotatedOrganizationKey);
+  const storedCollection = (await env.DB.prepare('SELECT name FROM collections WHERE id = ?')
+    .bind('col-1')
+    .first<{ name: string }>())!;
+  assert.equal(
+    new TextDecoder().decode(
+      await decryptBw(storedCollection.name, rotatedHalves.encKey, rotatedHalves.macKey)
+    ),
+    'Shared',
+    'the collection name is readable with the new organization key'
+  );
+  await assert.rejects(
+    () => decryptBw(storedCollection.name, organizationHalves.encKey, organizationHalves.macKey),
+    'the old organization key must not read the collection name'
+  );
 
   // The server stored the new material.
   const storedMembership = await storage.getOrganizationUserForUser('org-1', 'user-member');
@@ -599,4 +720,208 @@ test('the whole rotation runs through the real endpoint', async () => {
     () => decryptBw(versionRow.name, itemHalves.encKey, itemHalves.macKey),
     'the old item key must not read the history'
   );
+});
+
+/**
+ * A rotation fixture: an organization with two collections, and another
+ * organization with a collection of its own.
+ */
+async function rotationFixture() {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { sqliteD1 } = await import('./sqlite-d1');
+  const { ensureStorageSchema } = await import('../src/services/storage-schema');
+  const { StorageService } = await import('../src/services/storage');
+
+  const db = new DatabaseSync(':memory:');
+  await ensureStorageSchema(sqliteD1(db));
+  const env = { DB: sqliteD1(db) } as never;
+  const storage = new StorageService((env as { DB: never }).DB);
+  const now = '2026-11-07T00:00:00.000Z';
+
+  for (const [id, email] of [
+    ['user-owner', 'owner@example.test'],
+    ['user-other', 'other@example.test'],
+  ] as const) {
+    await storage.createUser({
+      id,
+      email,
+      name: null,
+      masterPasswordHint: null,
+      masterPasswordHash: 'hash',
+      key: 'key',
+      privateKey: null,
+      publicKey: 'public-key',
+      kdfType: 0,
+      kdfIterations: 600000,
+      kdfMemory: null,
+      kdfParallelism: null,
+      securityStamp: 'stamp',
+      role: 'user',
+      status: 'active',
+      verifyDevices: false,
+      totpSecret: null,
+      totpRecoveryCode: null,
+      yubikeyKey1: null,
+      yubikeyKey2: null,
+      yubikeyKey3: null,
+      yubikeyKey4: null,
+      yubikeyKey5: null,
+      yubikeyNfc: false,
+      apiKey: null,
+      userKeyId: null,
+      createdAt: now,
+      updatedAt: now,
+    } as never);
+  }
+
+  for (const [orgId, name] of [
+    ['org-1', 'Acme'],
+    ['org-2', 'Other'],
+  ] as const) {
+    await env.DB.prepare(
+      'INSERT INTO organizations (id, name, private_key, public_key, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?)'
+    )
+      .bind(orgId, name, 'public-key', now, now)
+      .run();
+  }
+  for (const [membershipId, userId, orgId] of [
+    ['ou-owner', 'user-owner', 'org-1'],
+    ['ou-other', 'user-other', 'org-2'],
+  ] as const) {
+    await env.DB.prepare(
+      'INSERT INTO organization_users (id, user_id, org_id, type, status, key, created_at, updated_at) VALUES (?, ?, ?, 0, 2, ?, ?, ?)'
+    )
+      .bind(membershipId, userId, orgId, '4.wrapped-key', now, now)
+      .run();
+  }
+  for (const [id, orgId, name] of [
+    ['col-1', 'org-1', '2.old|one|one'],
+    ['col-2', 'org-1', '2.old|two|two'],
+    ['col-other', 'org-2', '2.old|oth|oth'],
+  ] as const) {
+    await env.DB.prepare(
+      'INSERT INTO collections (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+    )
+      .bind(id, orgId, name, now, now)
+      .run();
+  }
+
+  return { env, storage, now };
+}
+
+/** The owner's client asking the server to replace the key. */
+async function rotateKey(env: unknown, body: unknown): Promise<Response> {
+  const { handleRotateOrganizationKey } = await import('../src/handlers/organizations');
+  return handleRotateOrganizationKey(
+    new Request('https://vault.example.test/api/organizations/org-1/rotate-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    env as never,
+    'user-owner',
+    'org-1'
+  );
+}
+
+test('the rotation data carries the collections of the organization', async () => {
+  const { env } = await rotationFixture();
+  const { handleGetOrganizationRotationData } = await import('../src/handlers/organizations');
+  const response = await handleGetOrganizationRotationData(
+    new Request('https://vault.example.test/api/organizations/org-1/rotation-data'),
+    env,
+    'user-owner',
+    'org-1'
+  );
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { collections: Array<{ id: string; name: string }> };
+  assert.deepEqual(
+    body.collections.map((entry) => entry.id).sort(),
+    ['col-1', 'col-2'],
+    'the collections of the organization are there'
+  );
+  assert.ok(
+    !body.collections.some((entry) => entry.id === 'col-other'),
+    'a collection of another organization is not'
+  );
+});
+
+test('a rotation that names every collection writes the names', async () => {
+  const { env } = await rotationFixture();
+  const response = await rotateKey(env, {
+    members: [{ membershipId: 'ou-owner', key: '4.new-key' }],
+    collections: [
+      { id: 'col-1', name: '2.new|one|one' },
+      { id: 'col-2', name: '2.new|two|two' },
+    ],
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { collections: number };
+  assert.equal(body.collections, 2, 'both collections were written');
+  const collection = (await env.DB.prepare('SELECT name FROM collections WHERE id = ?')
+    .bind('col-1')
+    .first<{ name: string }>())!;
+  assert.equal(collection.name, '2.new|one|one', 'the name is the one the client sent');
+});
+
+test('a rotation that leaves a collection out writes nothing', async () => {
+  const { env } = await rotationFixture();
+  const response = await rotateKey(env, {
+    members: [{ membershipId: 'ou-owner', key: '4.new-key' }],
+    // The second collection of the organization is missing.
+    collections: [{ id: 'col-1', name: '2.new|one|one' }],
+  });
+  assert.equal(response.status, 400);
+  const body = (await response.json()) as { error: string };
+  assert.match(body.error, /Every collection has to be re-encrypted with the new key/);
+  const membership = (await env.DB.prepare('SELECT key FROM organization_users WHERE id = ?')
+    .bind('ou-owner')
+    .first<{ key: string }>())!;
+  assert.equal(membership.key, '4.wrapped-key', 'the member keeps the key it had');
+  const collection = (await env.DB.prepare('SELECT name FROM collections WHERE id = ?')
+    .bind('col-1')
+    .first<{ name: string }>())!;
+  assert.equal(collection.name, '2.old|one|one', 'the collection keeps its name');
+});
+
+test('a collection of another organization is refused', async () => {
+  const { env } = await rotationFixture();
+  const response = await rotateKey(env, {
+    members: [{ membershipId: 'ou-owner', key: '4.new-key' }],
+    collections: [
+      { id: 'col-1', name: '2.new|one|one' },
+      { id: 'col-2', name: '2.new|two|two' },
+      { id: 'col-other', name: '2.new|oth|oth' },
+    ],
+  });
+  assert.equal(response.status, 400);
+  const membership = (await env.DB.prepare('SELECT key FROM organization_users WHERE id = ?')
+    .bind('ou-owner')
+    .first<{ key: string }>())!;
+  assert.equal(membership.key, '4.wrapped-key', 'the member keeps the key it had');
+  const collection = (await env.DB.prepare('SELECT name FROM collections WHERE id = ?')
+    .bind('col-other')
+    .first<{ name: string }>())!;
+  assert.equal(collection.name, '2.old|oth|oth', 'the collection of the other organization is untouched');
+});
+
+test('a collection name that is not encrypted is refused', async () => {
+  const { env } = await rotationFixture();
+  const response = await rotateKey(env, {
+    members: [{ membershipId: 'ou-owner', key: '4.new-key' }],
+    collections: [
+      { id: 'col-1', name: '2.new|one|one' },
+      // A plain name: the server cannot tell it from a broken one.
+      { id: 'col-2', name: 'Shared' },
+    ],
+  });
+  assert.equal(response.status, 400);
+  const membership = (await env.DB.prepare('SELECT key FROM organization_users WHERE id = ?')
+    .bind('ou-owner')
+    .first<{ key: string }>())!;
+  assert.equal(membership.key, '4.wrapped-key', 'the member keeps the key it had');
+  const collection = (await env.DB.prepare('SELECT name FROM collections WHERE id = ?')
+    .bind('col-2')
+    .first<{ name: string }>())!;
+  assert.equal(collection.name, '2.old|two|two', 'the collection keeps its name');
 });

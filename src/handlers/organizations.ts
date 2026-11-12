@@ -40,6 +40,7 @@ const ROTATION_NOTES_MAX = 65_536;
 const ROTATION_DATA_MAX = 65_536;
 const ROTATION_MAX_CIPHERS = 200;
 const ROTATION_MAX_MEMBERS = 200;
+const ROTATION_MAX_COLLECTIONS = 1000;
 const ROTATION_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 
 // The formats an organization export can use. The other formats carry
@@ -691,6 +692,10 @@ export async function handleGetOrganizationRotationData(
   }));
 
   const ciphers = await storage.getOrganizationCiphersForRotation(orgId);
+  // The name of a collection is sealed with the organization key, so the
+  // rotation needs them all: the ones left under the old key are names the
+  // clients cannot read.
+  const collections = await storage.getOrganizationCollections(orgId);
 
   return jsonResponse(
     {
@@ -701,6 +706,10 @@ export async function handleGetOrganizationRotationData(
         privateKey: organization.privateKey,
       },
       members,
+      collections: collections.map((collection) => ({
+        id: collection.id,
+        name: collection.name,
+      })),
       ciphers: ciphers.map((cipher) => ({
         id: cipher.id,
         key: cipher.key,
@@ -1175,6 +1184,7 @@ interface RotateKeyBody {
   privateKey?: unknown;
   members?: unknown;
   ciphers?: unknown;
+  collections?: unknown;
 }
 
 // POST /api/organizations/:orgId/rotate-key
@@ -1261,6 +1271,28 @@ export async function handleRotateOrganizationKey(
         }))
         .filter((entry) => entry.cipherId && entry.data)
     : [];
+  // The name of a collection is sealed with the organization key, so a
+  // rotation carries the names again, sealed with the new key. A name that is
+  // not an encrypted string is refused: the server cannot tell a name it
+  // never encrypted from one that is broken.
+  let collectionsInvalid = false;
+  const collections: Array<{ id: string; name: string }> = [];
+  if (body.collections !== undefined) {
+    if (!Array.isArray(body.collections)) {
+      collectionsInvalid = true;
+    } else {
+      for (const entry of body.collections as unknown[]) {
+        const raw = entry as { id?: unknown; name?: unknown };
+        const id = text(raw?.id).trim();
+        const name = strict(raw?.name, ROTATION_FIELD_MAX).trim();
+        if (!id || !isValidEncString(name)) {
+          collectionsInvalid = true;
+          break;
+        }
+        collections.push({ id, name });
+      }
+    }
+  }
   const membersTooLong = Array.isArray(body.members)
     ? body.members.some((entry) => {
         const key = (entry as { key?: unknown })?.key;
@@ -1275,11 +1307,18 @@ export async function handleRotateOrganizationKey(
   if (!members.length && !ciphers.length && privateKey === undefined) {
     return errorResponse('Nothing to rotate', 400);
   }
+  if (collectionsInvalid) {
+    return errorResponse(COLLECTION_NAME_NOT_ENCRYPTED, 400);
+  }
 
   // A rotation is one bounded write. Without a ceiling an owner could use it to
   // push an arbitrarily large body into the database in a single call; the
   // client sends the organization in batches instead.
-  if (ciphers.length > ROTATION_MAX_CIPHERS || members.length > ROTATION_MAX_MEMBERS) {
+  if (
+    ciphers.length > ROTATION_MAX_CIPHERS ||
+    members.length > ROTATION_MAX_MEMBERS ||
+    collections.length > ROTATION_MAX_COLLECTIONS
+  ) {
     return errorResponse('Rotate fewer items at a time', 413);
   }
   const totalBytes = ciphers.reduce(
@@ -1295,7 +1334,9 @@ export async function handleRotateOrganizationKey(
           inner + version.data.length + (version.name?.length ?? 0) + (version.notes?.length ?? 0) + (version.key?.length ?? 0),
         0
       ),
-    members.reduce((sum, entry) => sum + entry.key.length, 0) + (privateKey?.length ?? 0)
+    members.reduce((sum, entry) => sum + entry.key.length, 0) +
+    collections.reduce((sum, entry) => sum + entry.name.length, 0) +
+    (privateKey?.length ?? 0)
   );
   if (totalBytes > ROTATION_MAX_TOTAL_BYTES) {
     return errorResponse('Rotate fewer items at a time', 413);
@@ -1322,11 +1363,31 @@ export async function handleRotateOrganizationKey(
     }
   }
 
+  // Every collection named must be one of this organization's, and a request
+  // that changes the key has to name all of them: a collection left under the
+  // old key is a name nobody can read.
+  const organizationCollections = await storage.getOrganizationCollections(orgId);
+  const organizationCollectionIds = new Set(organizationCollections.map((collection) => collection.id));
+  const rotatedCollectionIds = new Set(collections.map((collection) => collection.id));
+  for (const collection of collections) {
+    if (!organizationCollectionIds.has(collection.id)) {
+      return errorResponse('Collection not found', 400);
+    }
+  }
+  if (members.length) {
+    for (const collection of organizationCollections) {
+      if (!rotatedCollectionIds.has(collection.id)) {
+        return errorResponse('Every collection has to be re-encrypted with the new key', 400);
+      }
+    }
+  }
+
   const now = new Date().toISOString();
   await storage.rotateOrganizationKey({
     orgId,
     privateKey,
     memberKeys: members,
+    collectionNames: collections,
     cipherKeys: ciphers.map((entry) => ({
       cipherId: entry.cipherId,
       key: entry.key,
@@ -1369,6 +1430,7 @@ export async function handleRotateOrganizationKey(
       rotatedAt: now,
       members: members.length,
       ciphers: ciphers.length,
+      collections: collections.length,
     },
     200
   );

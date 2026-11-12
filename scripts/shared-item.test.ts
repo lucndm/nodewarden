@@ -568,6 +568,12 @@ test('a key rotation replaces the key of every member and every shared item', as
         { membershipId: writerMembership.id, key: ENC('org-key-for-writer-2') },
       ],
       ciphers: [{ id: created.id, key: ENC('item-key-2'), data: JSON.stringify({ login: {}, tags: [] }) }],
+      // The collection names are sealed with the organization key, so a
+      // rotation that changes the key has to carry them.
+      collections: [
+        { id: COL_SHARED, name: ENC('Shared') },
+        { id: COL_READONLY, name: ENC('Read only') },
+      ],
     }
   );
   assert.equal(rotation.status, 200);
@@ -677,6 +683,10 @@ test('removing a member flags the key rotation, and rotating clears it', async (
   const rotation = await call(env, `https://vault.example.test/api/organizations/${ORG}/rotate-key`, 'POST', OWNER, {
     members: [{ membershipId: (await storage.getOrganizationUserForUser(ORG, OWNER))!.id, key: ENC('rotated') }],
     ciphers: [],
+    collections: [
+      { id: COL_SHARED, name: ENC('Shared') },
+      { id: COL_READONLY, name: ENC('Read only') },
+    ],
   });
   assert.equal(rotation.status, 200);
 

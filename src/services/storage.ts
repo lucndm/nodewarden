@@ -201,6 +201,7 @@ import {
   getCollectionRights as listStoredCollectionRights,
   getCollectionRightsForCollections as listStoredCollectionRightsForCollections,
   getOrganizationCollectionIds as listStoredOrganizationCollectionIds,
+  getOrganizationCollections as listStoredOrganizationCollections,
   getOrganizationCiphersForRotation as listStoredOrganizationCiphersForRotation,
   getOrganizationIdByCipherIds as listStoredOrganizationIdByCipherIds,
   setCipherCollections as setStoredCipherCollections,
@@ -898,6 +899,11 @@ export class StorageService {
 
   async getOrganizationCollectionIds(orgId: string, collectionIds: string[]) {
     return listStoredOrganizationCollectionIds(this.db, this.sqlChunkSize.bind(this), orgId, collectionIds);
+  }
+
+  /** Every collection of an organization, with the name it is stored under. */
+  async getOrganizationCollections(orgId: string): Promise<Collection[]> {
+    return listStoredOrganizationCollections(this.db, orgId);
   }
 
   async getCollectionIdsForCipher(cipherId: string): Promise<string[]> {
