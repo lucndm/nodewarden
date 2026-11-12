@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'preact/hooks';
 import { ChevronLeft, ChevronRight, Database, Download, RefreshCw, Save, Search, Server, Settings2, ShieldAlert, Smartphone, Trash2, UserRound } from 'lucide-preact';
 import LoadingState from '@/components/LoadingState';
 import type { AuditLogFilters } from '@/lib/api/admin';
+import { deviceTypeName } from '@/lib/device-types';
 import { t } from '@/lib/i18n';
 import type { AuditLogCategory, AuditLogEntry, AuditLogLevel, AuditLogListResult, AuditLogSettings } from '@/lib/types';
 
@@ -155,6 +156,10 @@ function formatMetaValueForKey(key: string, value: unknown): string {
   }
   if (key === 'type' && typeof value === 'string') {
     return formatTargetType(value);
+  }
+  if (key === 'deviceType') {
+    const type = typeof value === 'number' ? value : typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value) : null;
+    if (type !== null) return deviceTypeName(type);
   }
   return formatMetaValue(value);
 }

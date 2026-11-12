@@ -696,6 +696,15 @@
   margin-top: 14px;
 }
 
+.settings-vertical-fields + .actions {
+  margin-top: 14px;
+}
+
+/* A note under a heading keeps the fields that follow it apart. */
+.settings-submodule > .field-help {
+  @apply mb-3;
+}
+
 .settings-category-panel > .settings-section-stack > .settings-submodule:only-child {
   border-bottom: 0;
   padding-bottom: 0;
@@ -793,6 +802,13 @@
   border-color: color-mix(in srgb, var(--success) 28%, var(--line));
   background: color-mix(in srgb, var(--success) 10%, var(--panel));
   color: var(--success);
+}
+
+.two-step-off-badge {
+  @apply inline-flex min-h-6 items-center rounded-md border px-2 text-xs font-extrabold leading-none;
+  border-color: var(--line);
+  background: var(--panel-subtle);
+  color: var(--muted);
 }
 
 .totp-manage-dialog-body {
@@ -2056,6 +2072,22 @@
 
 .domain-rules-heading-actions {
   @apply flex flex-wrap items-center justify-end gap-2;
+}
+
+/* The link to the preset list is a quiet line under the heading, not a
+   button in the toolbar. */
+.domain-rules-suggest {
+  @apply mb-3 text-sm;
+}
+
+.domain-rules-suggest-link {
+  @apply inline-flex items-center gap-1 font-semibold;
+  color: var(--primary-strong);
+  text-decoration: underline;
+}
+
+.domain-rules-suggest-link:hover {
+  color: var(--primary-hover);
 }
 
 .domain-rules-filter {

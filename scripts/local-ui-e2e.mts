@@ -1487,6 +1487,28 @@ async function main() {
       'the change email form',
       20000
     );
+    // The change email form asks for the code only when the server really
+    // sent one. A request that fails leaves the form as it was, so nobody is
+    // asked for a code that does not exist.
+    const changeEmailForm = `(() => {
+      const section = [...document.querySelectorAll('.settings-submodule')].find((s) => (s.querySelector('h3')?.textContent || '').trim().toLowerCase() === 'change email');
+      if (!section) return null;
+      const inputs = [...section.querySelectorAll('input')];
+      const email = inputs.find((input) => input.type === 'email');
+      const button = [...section.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Send code');
+      return {
+        inputs: inputs.length,
+        emailReadOnly: !!email && email.readOnly,
+        sendDisabled: !!button && button.disabled,
+        toast: (document.querySelector('.toast-item.error .toast-text')?.textContent || '').trim(),
+      };
+    })()`;
+    const emptyChangeEmail = await evaluate(changeEmailForm);
+    checks.ok(
+      'the send code button waits for the form to be filled',
+      emptyChangeEmail?.sendDisabled === true,
+      JSON.stringify(emptyChangeEmail || {})
+    );
     const emailChangeSent = await evaluate(`(() => {
       const section = [...document.querySelectorAll('.settings-submodule')].find((s) => (s.querySelector('h3')?.textContent || '').trim().toLowerCase() === 'change email');
       if (!section) return false;
@@ -1500,6 +1522,20 @@ async function main() {
       if (!email || !password) return false;
       setValue(email, 'another-address@example.test');
       setValue(password, 'Wrong-Master-Password-2026!');
+      return true;
+    })()`);
+    // The button stays off until the form holds an address and a password,
+    // so the request goes only when the form is ready for it.
+    await waitFor(
+      `(() => {
+        const section = [...document.querySelectorAll('.settings-submodule')].find((s) => (s.querySelector('h3')?.textContent || '').trim().toLowerCase() === 'change email');
+        const button = section ? [...section.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Send code') : null;
+        return !!button && !button.disabled;
+      })()`,
+      'the send code button to be ready'
+    );
+    await evaluate(`(() => {
+      const section = [...document.querySelectorAll('.settings-submodule')].find((s) => (s.querySelector('h3')?.textContent || '').trim().toLowerCase() === 'change email');
       const button = [...section.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Send code');
       if (!button) return false;
       button.click();
@@ -1507,23 +1543,26 @@ async function main() {
     })()`);
     // The answer of the server takes a moment, so the form is watched until
     // the request is over.
-    const readEmailForm = async () => evaluate(`(() => {
-      const section = [...document.querySelectorAll('.settings-submodule')].find((s) => (s.querySelector('h3')?.textContent || '').trim().toLowerCase() === 'change email');
-      return {
-        inputs: section ? section.querySelectorAll('input').length : -1,
-        answered: !!document.querySelector('.toast-item.error'),
-      };
-    })()`);
-    let emailForm = await readEmailForm();
+    let emailForm = await evaluate(changeEmailForm);
     const emailDeadline = Date.now() + 15000;
-    while (!emailForm.answered && Date.now() < emailDeadline) {
+    while (!emailForm?.toast && Date.now() < emailDeadline) {
       await new Promise((resolve) => setTimeout(resolve, 250));
-      emailForm = await readEmailForm();
+      emailForm = await evaluate(changeEmailForm);
     }
     checks.ok(
       'the change email form does not ask for a code the server did not send',
-      emailChangeSent === true && emailForm.inputs === 2,
-      `sent=${emailChangeSent} inputs=${emailForm.inputs}`
+      emailChangeSent === true && emailForm?.inputs === 2,
+      `sent=${emailChangeSent} inputs=${emailForm?.inputs}`
+    );
+    checks.ok(
+      'the wrong master password is named in the language of the vault',
+      emailForm?.toast === 'Wrong master password.',
+      emailForm?.toast || ''
+    );
+    checks.ok(
+      'the address stays editable while there is no code',
+      emailForm?.emailReadOnly === false,
+      JSON.stringify(emailForm || {})
     );
 
     // The backup page opens on the destination that is selected. A
@@ -1616,6 +1655,237 @@ async function main() {
       !emergencyCopy.includes('Nobody is emailed'),
       emergencyCopy.slice(-300)
     );
+
+    // The pages that were audited one more time: the two-step login says
+    // which providers are off, the devices keep the actions that end
+    // everything out of sight, the sends stand next to their list, the codes
+    // say where they come from, the log names the device instead of a
+    // number, the import page leaves out what there is nothing to fix about,
+    // the domain rules point at the preset list, and the emergency access
+    // form names its fields.
+    const gotoPath = async (href) => {
+      await evaluate(`(() => {
+        for (const trigger of [...document.querySelectorAll('.side-group-trigger')]) {
+          if (trigger.getAttribute('aria-expanded') === 'false') trigger.click();
+        }
+        return true;
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const clicked = await evaluate(`(() => {
+        const link = [...document.querySelectorAll('a')].find((a) => a.getAttribute('href') === ${JSON.stringify(href)});
+        if (!link) return false;
+        link.click();
+        return true;
+      })()`);
+      if (!clicked) throw new Error(`no link to ${href}`);
+    };
+
+    // The two-step login page says which providers are off.
+    await evaluate(`(() => {
+      const tab = [...document.querySelectorAll('.settings-category-tab')].find((b) => b.textContent.trim() === 'Two-step login');
+      if (!tab) return false;
+      tab.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.two-step-provider-list')`, 'the two-step login providers', 20000);
+    const offBadges = await evaluate(`document.querySelectorAll('.two-step-off-badge').length`);
+    checks.ok(
+      'the two-step login page says which providers are off',
+      offBadges > 0,
+      `off badges=${offBadges}`
+    );
+
+    // The devices keep the actions that end everything in the overflow menu.
+    await gotoPath('/settings/security/device-management');
+    await waitFor(`!!document.querySelector('.authorized-devices-table')`, 'the device management table', 20000);
+    const removeAllBefore = await evaluate(
+      `[...document.querySelectorAll('.section-head button')].some((b) => (b.textContent || '').trim() === 'Remove all devices')`
+    );
+    checks.ok(
+      'the device toolbar does not offer the actions that end everything',
+      removeAllBefore === false,
+      `shown=${removeAllBefore}`
+    );
+    await evaluate(`(() => {
+      const button = document.querySelector('.sort-menu-wrap .detail-icon-action');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.sort-menu[role=menu]')`, 'the overflow menu of the devices', 10000);
+    const removeAllInMenu = await evaluate(
+      `[...document.querySelectorAll('.sort-menu-item')].some((b) => (b.textContent || '').trim() === 'Remove all devices')`
+    );
+    checks.ok(
+      'the overflow menu of the devices holds the actions that end everything',
+      removeAllInMenu === true,
+      `shown=${removeAllInMenu}`
+    );
+    const deviceHeader = await evaluate(`(() => {
+      const head = document.querySelector('.authorized-devices-table thead');
+      if (!head) return '';
+      const copy = head.cloneNode(true);
+      for (const hidden of copy.querySelectorAll('.sr-only')) hidden.remove();
+      return (copy.textContent || '').replace(/\\s+/g, ' ').trim();
+    })()`);
+    checks.ok(
+      'the table of the devices does not run the column titles together',
+      !deviceHeader.includes('SelectDevice'),
+      deviceHeader
+    );
+
+    // The sends stand next to their list, and an empty list says what a send
+    // is and offers to make one.
+    await gotoPath('/sends');
+    await waitFor(`!!document.querySelector('.sends-grid .detail-col')`, 'the sends page', 20000);
+    const sendsLayout = await evaluate(`(() => {
+      const list = document.querySelector('.sends-grid .list-col');
+      const detail = document.querySelector('.sends-grid .detail-col');
+      if (!list || !detail) return null;
+      return { listTop: list.getBoundingClientRect().top, detailTop: detail.getBoundingClientRect().top };
+    })()`);
+    checks.ok(
+      'the detail of a send stands next to its list',
+      !!sendsLayout && Math.abs(sendsLayout.listTop - sendsLayout.detailTop) <= 2,
+      JSON.stringify(sendsLayout || {})
+    );
+    const sendButtons = await evaluate(`(() => {
+      const texts = [...document.querySelectorAll('button')].map((b) => (b.textContent || '').trim());
+      return { newSend: texts.includes('New Send'), selectAll: texts.includes('Select All') };
+    })()`);
+    checks.ok(
+      'the empty sends page offers a send and keeps the bulk actions away',
+      sendButtons?.newSend === true && sendButtons?.selectAll === false,
+      JSON.stringify(sendButtons || {})
+    );
+
+    // The verification codes say where they come from.
+    await gotoPath('/vault/totp');
+    await waitFor(`!!document.querySelector('.totp-codes-page')`, 'the verification code page', 20000);
+    await waitFor(
+      `document.body.textContent.includes('Add an authenticator key to a login item to see its codes here.')`,
+      'the help of the empty codes',
+      20000
+    );
+    const totpText = await evaluate('document.body.textContent');
+    checks.ok(
+      'the verification code page says where the codes come from',
+      totpText.includes('Add an authenticator key to a login item to see its codes here.'),
+      totpText.slice(-200)
+    );
+
+    // The log names the device instead of showing its number.
+    await gotoPath('/logs');
+    await waitFor(`!!document.querySelector('.log-list')`, 'the log center', 20000);
+    const logRows = await evaluate(`document.querySelectorAll('.log-row').length`);
+    const deviceTypes = [];
+    for (let index = 0; index < Math.min(logRows, 10); index += 1) {
+      await evaluate(`(() => {
+        const row = document.querySelectorAll('.log-row')[${index}];
+        if (row) row.click();
+        return true;
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const value = await evaluate(`(() => {
+        const cell = [...document.querySelectorAll('.log-detail-json dt')].find((dt) => (dt.textContent || '').trim() === 'Device type');
+        if (!cell) return '';
+        const value = cell.parentElement ? cell.parentElement.querySelector('dd') : null;
+        return value ? (value.textContent || '').trim() : '';
+      })()`);
+      if (value) deviceTypes.push(value);
+    }
+    checks.ok(
+      'the log center names the device instead of showing its number',
+      deviceTypes.every((value) => !/^\d+$/.test(value)),
+      JSON.stringify(deviceTypes)
+    );
+
+    // The import page leaves out the folder card when no folder needs to be
+    // fixed.
+    await gotoPath('/backup/import-export');
+    await waitFor(`!!document.querySelector('.import-export-panels')`, 'the import and export page', 20000);
+    let folderCardGone = true;
+    try {
+      await waitFor(
+        `!document.body.textContent.includes('Folder compatibility')`,
+        'the folder compatibility card to go away',
+        10000
+      );
+    } catch {
+      folderCardGone = false;
+    }
+    checks.ok(
+      'the import page leaves out the folder card when no folder needs to be fixed',
+      folderCardGone,
+      `shown=${!folderCardGone}`
+    );
+
+    // The domain rules point at the preset list instead of offering a pull
+    // request in the toolbar.
+    await gotoPath('/settings/domain-rules');
+    await waitFor(`!!document.querySelector('.domain-rules-page')`, 'the domain rules page', 20000);
+    const domainRules = await evaluate(`(() => {
+      const texts = [...document.querySelectorAll('button, a')].map((el) => (el.textContent || '').trim());
+      return {
+        submitPr: texts.includes('Submit PR'),
+        suggest: texts.includes('Suggest a site for the preset list'),
+      };
+    })()`);
+    checks.ok(
+      'the domain rules page does not offer a pull request in the toolbar',
+      domainRules?.submitPr === false,
+      JSON.stringify(domainRules || {})
+    );
+    checks.ok(
+      'the domain rules page says where a new site is suggested',
+      domainRules?.suggest === true,
+      JSON.stringify(domainRules || {})
+    );
+
+    // The emergency access form names its fields.
+    await gotoPath('/settings/account');
+    await waitFor(`!!document.querySelector('.settings-category-tab')`, 'the settings page', 20000);
+    await evaluate(`(() => {
+      const tab = [...document.querySelectorAll('.settings-category-tab')].find((b) => b.textContent.trim() === 'Emergency access');
+      if (!tab) return false;
+      tab.click();
+      return true;
+    })()`);
+    await waitFor(`!!document.querySelector('.emergency-access-list, .settings-submodule')`, 'the emergency access section', 20000);
+    const emergencyLabels = await evaluate(`[...document.querySelectorAll('label.field')].map((label) => {
+      const span = label.querySelector('span');
+      return span ? (span.textContent || '').trim() : '';
+    })`);
+    checks.ok(
+      'the emergency access form names its fields',
+      ['Email', 'What they can do', 'Wait before access'].every((label) => emergencyLabels.includes(label)),
+      JSON.stringify(emergencyLabels)
+    );
+
+    // On a phone the controls are big enough for a finger.
+    await cdp.send(
+      'Emulation.setDeviceMetricsOverride',
+      { width: 375, height: 812, deviceScaleFactor: 1, mobile: true },
+      sessionId
+    );
+    for (const page of [
+      { path: '/settings/account', marker: '.settings-category-tab' },
+      { path: '/sends', marker: '.sends-grid' },
+    ]) {
+      await gotoPath(page.path);
+      await waitFor(`!!document.querySelector(${JSON.stringify(page.marker)})`, `the page at ${page.path}`, 20000);
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const smallButtons = await evaluate(`(() => [...document.querySelectorAll('.btn')]
+        .filter((button) => button.offsetParent !== null)
+        .map((button) => ({ text: (button.textContent || '').trim().slice(0, 40), height: button.getBoundingClientRect().height }))
+        .filter((button) => button.height < 44))()`);
+      checks.ok(
+        `every button of ${page.path} is big enough for a finger on a phone`,
+        Array.isArray(smallButtons) && smallButtons.length === 0,
+        JSON.stringify(smallButtons)
+      );
+    }
+    await cdp.send('Emulation.clearDeviceMetricsOverride', {}, sessionId);
 
     return checks.finish() ? 0 : 1;
   } finally {

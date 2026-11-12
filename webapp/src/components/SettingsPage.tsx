@@ -753,54 +753,76 @@ export default function SettingsPage(props: SettingsPageProps) {
 
               <section className="settings-submodule">
                 <h3>{t('txt_change_email')}</h3>
-                <label className="field">
-                  <span>{t('txt_new_email')}</span>
-                  <input
-                    className="input"
-                    type="email"
-                    value={emailChangeAddress}
-                    onInput={(e) => setEmailChangeAddress((e.currentTarget as HTMLInputElement).value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>{t('txt_current_password')}</span>
-                  <input
-                    className="input"
-                    type="password"
-                    value={emailChangePassword}
-                    onInput={(e) => setEmailChangePassword((e.currentTarget as HTMLInputElement).value)}
-                  />
-                </label>
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={emailChangeBusy}
-                    onClick={() => void sendEmailChangeCode()}
-                  >
-                    {t('txt_send_code')}
-                  </button>
-                </div>
-                {emailChangeCodeSent && (
-                  <>
+                <p className="field-help">{t('txt_change_email_help', { email: props.profile.email })}</p>
+                <div className="settings-vertical-fields">
+                  <label className="field">
+                    <span>{t('txt_new_email')}</span>
+                    <input
+                      className="input"
+                      type="email"
+                      readOnly={emailChangeCodeSent}
+                      value={emailChangeAddress}
+                      onInput={(e) => setEmailChangeAddress((e.currentTarget as HTMLInputElement).value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t('txt_current_password')}</span>
+                    <input
+                      className="input"
+                      type="password"
+                      readOnly={emailChangeCodeSent}
+                      value={emailChangePassword}
+                      onInput={(e) => setEmailChangePassword((e.currentTarget as HTMLInputElement).value)}
+                    />
+                  </label>
+                  {emailChangeCodeSent && (
                     <label className="field">
                       <span>{t('txt_email_change_code')}</span>
                       <input
                         className="input"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        pattern="[0-9]*"
                         value={emailChangeCode}
                         onInput={(e) => setEmailChangeCode((e.currentTarget as HTMLInputElement).value)}
                       />
                     </label>
+                  )}
+                </div>
+                <div className="actions">
+                  {emailChangeCodeSent ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setEmailChangeCodeSent(false);
+                        setEmailChangeCode('');
+                      }}
+                    >
+                      {t('txt_change_email_use_another')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={emailChangeBusy || !emailChangeAddress.trim() || !emailChangePassword}
+                      onClick={() => void sendEmailChangeCode()}
+                    >
+                      {t('txt_send_code')}
+                    </button>
+                  )}
+                  {emailChangeCodeSent && (
                     <button
                       type="button"
                       className="btn btn-danger"
-                      disabled={emailChangeBusy}
+                      disabled={emailChangeBusy || !/^\d{6}$/.test(emailChangeCode.trim())}
                       onClick={() => void submitEmailChange()}
                     >
                       {t('txt_change_email')}
                     </button>
-                  </>
-                )}
+                  )}
+                </div>
               </section>
 
               <section className="settings-submodule">
@@ -936,7 +958,11 @@ export default function SettingsPage(props: SettingsPageProps) {
                     <div className="two-step-provider-copy">
                       <div className="two-step-provider-title">
                         <strong>{t('txt_authenticator_app')}</strong>
-                        {totpLocked && <span className="two-step-enabled-badge">{t('txt_enabled')}</span>}
+                        {totpLocked ? (
+                          <span className="two-step-enabled-badge">{t('txt_enabled')}</span>
+                        ) : (
+                          <span className="two-step-off-badge">{t('txt_two_step_off')}</span>
+                        )}
                       </div>
                       <span>{t('txt_authenticator_app_help')}</span>
                     </div>
@@ -952,7 +978,11 @@ export default function SettingsPage(props: SettingsPageProps) {
                     <div className="two-step-provider-copy">
                       <div className="two-step-provider-title">
                         <strong>{t('txt_passkeys')}</strong>
-                        {twoFactorPasskeyEnabled && <span className="two-step-enabled-badge">{t('txt_enabled')}</span>}
+                        {twoFactorPasskeyEnabled ? (
+                          <span className="two-step-enabled-badge">{t('txt_enabled')}</span>
+                        ) : (
+                          <span className="two-step-off-badge">{t('txt_two_step_off')}</span>
+                        )}
                       </div>
                       <span>{t('txt_passkey_provider_help')}</span>
                     </div>
@@ -966,7 +996,11 @@ export default function SettingsPage(props: SettingsPageProps) {
                     <div className="two-step-provider-copy">
                       <div className="two-step-provider-title">
                         <strong>{t('txt_yubico_otp_security_key')}</strong>
-                        {yubiKeyEnabled && <span className="two-step-enabled-badge">{t('txt_enabled')}</span>}
+                        {yubiKeyEnabled ? (
+                          <span className="two-step-enabled-badge">{t('txt_enabled')}</span>
+                        ) : (
+                          <span className="two-step-off-badge">{t('txt_two_step_off')}</span>
+                        )}
                       </div>
                       <span>{t('txt_yubico_otp_security_key_help')}</span>
                     </div>

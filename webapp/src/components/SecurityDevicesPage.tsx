@@ -1,9 +1,10 @@
-import { useState } from 'preact/hooks';
-import { CheckSquare, Clock3, Pencil, RefreshCw, ShieldCheck, ShieldOff, Trash2 } from 'lucide-preact';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { CheckSquare, Clock3, MoreVertical, Pencil, RefreshCw, ShieldCheck, ShieldOff, Trash2 } from 'lucide-preact';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import LoadingState from '@/components/LoadingState';
 import PendingAuthRequestsPanel from '@/components/PendingAuthRequestsPanel';
 import type { AuthRequest, AuthorizedDevice } from '@/lib/types';
+import { deviceTypeName } from '@/lib/device-types';
 import { t } from '@/lib/i18n';
 
 interface SecurityDevicesPageProps {
@@ -40,32 +41,13 @@ function isPermanentTrust(value: string | null | undefined): boolean {
   return !Number.isNaN(date.getTime()) && date.getUTCFullYear() >= 2099;
 }
 
-function mapDeviceTypeName(type: number): string {
-  switch (type) {
-    case 0: return t('txt_android');
-    case 1: return t('txt_ios');
-    case 2: return t('txt_chrome_extension');
-    case 3: return t('txt_firefox_extension');
-    case 4: return t('txt_opera_extension');
-    case 5: return t('txt_edge_extension');
-    case 6: return t('txt_windows_desktop');
-    case 7: return t('txt_macos_desktop');
-    case 8: return t('txt_linux_desktop');
-    case 9: return t('txt_chrome_browser');
-    case 10: return t('txt_firefox_browser');
-    case 11: return t('txt_opera_browser');
-    case 12: return t('txt_edge_browser');
-    case 13: return t('txt_ie_browser');
-    case 14: return t('txt_web');
-    default: return t('txt_type_type', { type });
-  }
-}
-
 export default function SecurityDevicesPage(props: SecurityDevicesPageProps) {
   const [editingDevice, setEditingDevice] = useState<AuthorizedDevice | null>(null);
   const [deviceNote, setDeviceNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement | null>(null);
   const currentDeviceIdentifier = props.currentDeviceIdentifier;
   const selectableDevices = props.devices.filter((device) => (
     device.identifier !== currentDeviceIdentifier
@@ -73,6 +55,25 @@ export default function SecurityDevicesPage(props: SecurityDevicesPageProps) {
   const selectedDeviceIdSet = new Set(selectedDeviceIds);
   const selectedDevices = selectableDevices.filter((device) => selectedDeviceIdSet.has(device.identifier));
   const allSelectableSelected = selectableDevices.length > 0 && selectedDevices.length === selectableDevices.length;
+
+  // The overflow menu closes on outside click and on Escape, like the other
+  // menus in the vault.
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const onPointerDown = (event: Event) => {
+      const target = event.target as Node | null;
+      if (overflowRef.current && target && !overflowRef.current.contains(target)) setOverflowOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOverflowOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [overflowOpen]);
 
   async function handleSaveDeviceNote(): Promise<void> {
     if (!editingDevice || savingNote) return;
@@ -135,26 +136,62 @@ export default function SecurityDevicesPage(props: SecurityDevicesPageProps) {
                 <CheckSquare size={14} className="btn-icon" />
                 {allSelectableSelected ? t('txt_clear_selection') : t('txt_select_all')}
               </button>
-              <button
-                type="button"
-                className="btn btn-danger small"
-                disabled={selectedDevices.length === 0}
-                onClick={() => {
-                  props.onRemoveSelectedDevices(selectedDevices);
-                  setSelectedDeviceIds([]);
-                }}
-              >
-                <Trash2 size={14} className="btn-icon" />
-                {t('txt_remove_selected_devices', { count: selectedDevices.length })}
-              </button>
-              <button type="button" className="btn btn-danger small" onClick={props.onRevokeAll}>
-                <ShieldOff size={14} className="btn-icon" />
-                {t('txt_revoke_all_trusted')}
-              </button>
-              <button type="button" className="btn btn-danger small" onClick={props.onRemoveAll}>
-                <Trash2 size={14} className="btn-icon" />
-                {t('txt_remove_all_devices')}
-              </button>
+              {selectedDevices.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-danger small"
+                  onClick={() => {
+                    props.onRemoveSelectedDevices(selectedDevices);
+                    setSelectedDeviceIds([]);
+                  }}
+                >
+                  <Trash2 size={14} className="btn-icon" />
+                  {t('txt_remove_selected_devices', { count: selectedDevices.length })}
+                </button>
+              )}
+              <div className="sort-menu-wrap" ref={overflowRef}>
+                <button
+                  type="button"
+                  className="detail-icon-action"
+                  aria-haspopup="menu"
+                  aria-expanded={overflowOpen}
+                  aria-label={t('txt_actions')}
+                  title={t('txt_actions')}
+                  onClick={() => setOverflowOpen((open) => !open)}
+                >
+                  <MoreVertical size={16} />
+                </button>
+                {overflowOpen && (
+                  <div className="sort-menu" role="menu">
+                    <button
+                      type="button"
+                      className="sort-menu-item danger"
+                      role="menuitem"
+                      onClick={() => {
+                        setOverflowOpen(false);
+                        props.onRevokeAll();
+                      }}
+                    >
+                      <span>
+                        <ShieldOff size={14} /> {t('txt_revoke_all_trusted')}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="sort-menu-item danger"
+                      role="menuitem"
+                      onClick={() => {
+                        setOverflowOpen(false);
+                        props.onRemoveAll();
+                      }}
+                    >
+                      <span>
+                        <Trash2 size={14} /> {t('txt_remove_all_devices')}
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           {!!props.error && (
@@ -179,7 +216,7 @@ export default function SecurityDevicesPage(props: SecurityDevicesPageProps) {
           </colgroup>
           <thead>
             <tr>
-              <th>{t('txt_select')}</th>
+              <th><span className="sr-only">{t('txt_select')}</span></th>
               <th>{t('txt_device')}</th>
               <th>{t('txt_type')}</th>
               <th>{t('txt_status')}</th>
@@ -209,7 +246,7 @@ export default function SecurityDevicesPage(props: SecurityDevicesPageProps) {
                   )}
                   <div className="muted-inline">{device.identifier}</div>
                 </td>
-                <td data-label={t('txt_type')}>{mapDeviceTypeName(device.type)}</td>
+                <td data-label={t('txt_type')}>{deviceTypeName(device.type)}</td>
                 <td data-label={t('txt_status')}>
                   <span className={`device-status-pill ${device.online ? 'online' : 'offline'}`}>
                     {device.online ? t('txt_online') : t('txt_offline')}
@@ -229,45 +266,49 @@ export default function SecurityDevicesPage(props: SecurityDevicesPageProps) {
                 </td>
                 <td data-label={t('txt_actions')}>
                   <div className="actions authorized-devices-actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary small"
-                      disabled={!device.trusted}
-                      onClick={() => props.onRevokeTrust(device)}
-                    >
-                      <ShieldOff size={14} className="btn-icon" />
-                      {t('txt_untrust')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary small"
-                      disabled={!device.trusted || !device.trustedUntil || isPermanentTrust(device.trustedUntil)}
-                      onClick={() => props.onTrustPermanently(device)}
-                    >
-                      <ShieldCheck size={14} className="btn-icon" />
-                      {t('txt_trust_permanently')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary small"
-                      disabled={device.hasStoredDevice === false}
-                      onClick={() => {
-                        setEditingDevice(device);
-                        setDeviceNote(device.deviceNote || device.name || '');
-                      }}
-                    >
-                      <Pencil size={14} className="btn-icon" />
-                      {t('txt_device_note')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-danger small"
-                      disabled={device.hasStoredDevice === false}
-                      onClick={() => props.onRemoveDevice(device)}
-                    >
-                      <Trash2 size={14} className="btn-icon" />
-                      {t('txt_delete')}
-                    </button>
+                    {device.trusted && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary small"
+                        onClick={() => props.onRevokeTrust(device)}
+                      >
+                        <ShieldOff size={14} className="btn-icon" />
+                        {t('txt_untrust')}
+                      </button>
+                    )}
+                    {device.trusted && device.trustedUntil && !isPermanentTrust(device.trustedUntil) && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary small"
+                        onClick={() => props.onTrustPermanently(device)}
+                      >
+                        <ShieldCheck size={14} className="btn-icon" />
+                        {t('txt_trust_permanently')}
+                      </button>
+                    )}
+                    {device.hasStoredDevice !== false && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary small"
+                        onClick={() => {
+                          setEditingDevice(device);
+                          setDeviceNote(device.deviceNote || device.name || '');
+                        }}
+                      >
+                        <Pencil size={14} className="btn-icon" />
+                        {t('txt_device_note')}
+                      </button>
+                    )}
+                    {device.hasStoredDevice !== false && (
+                      <button
+                        type="button"
+                        className="btn btn-danger small"
+                        onClick={() => props.onRemoveDevice(device)}
+                      >
+                        <Trash2 size={14} className="btn-icon" />
+                        {t('txt_delete')}
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
