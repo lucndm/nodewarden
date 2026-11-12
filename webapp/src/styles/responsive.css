@@ -343,9 +343,10 @@
     grid-template-columns: minmax(0, 1fr) auto auto auto;
   }
 
+  /* The bulk actions keep the width of their own text and wrap onto the next
+     line, so no word runs into the button next to it. */
   .list-head.selection-mode {
-    @apply justify-stretch;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    @apply flex flex-wrap justify-stretch;
   }
 
   .list-count {
@@ -378,7 +379,7 @@
   }
 
   .list-head.selection-mode > .btn.small {
-    @apply h-[34px] min-w-0 w-full justify-center gap-1 px-2 text-[12px];
+    @apply h-[34px] flex-none justify-center gap-1 px-2 text-[12px];
   }
 
   .list-head.selection-mode > .btn.small .btn-icon {
