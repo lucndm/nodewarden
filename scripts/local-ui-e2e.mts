@@ -2952,15 +2952,37 @@ async function main() {
 
     // The small controls of the pages are big enough for a finger.
     for (const page of [
-      { path: '/vault', selector: '.list-quick-filters button' },
-      { path: '/settings/domain-rules', selector: '.domain-rule-expand-btn', icon: true },
-      { path: '/settings/security/device-management', selector: '.detail-icon-action', icon: true },
-      { path: '/backup', selector: '.backup-interval-preset' },
-      { path: '/generator', selector: '.generator-history-toggle' },
+      {
+        path: '/vault',
+        selector: '.list-quick-filters button',
+        query: "document.querySelectorAll('.list-quick-filters button')",
+      },
+      {
+        path: '/settings/domain-rules',
+        selector: '.domain-rule-expand-btn',
+        query: "document.querySelectorAll('.domain-rule-expand-btn')",
+        icon: true,
+      },
+      {
+        path: '/settings/security/device-management',
+        selector: '.detail-icon-action',
+        query: "document.querySelectorAll('.detail-icon-action')",
+        icon: true,
+      },
+      {
+        path: '/backup',
+        selector: '.backup-interval-preset',
+        query: "document.querySelectorAll('.backup-interval-preset')",
+      },
+      {
+        path: '/generator',
+        selector: '.generator-history-toggle',
+        query: "document.querySelectorAll('.generator-history-toggle')",
+      },
     ]) {
       await goTo(page.path);
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      const small = await evaluate(`(() => [...document.querySelectorAll(${JSON.stringify(page.selector)})]
+      const small = await evaluate(`(() => [...${page.query}]
         .filter((element) => element.offsetParent !== null)
         .map((element) => {
           const box = element.getBoundingClientRect();
