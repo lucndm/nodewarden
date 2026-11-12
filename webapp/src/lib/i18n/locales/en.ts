@@ -1874,6 +1874,12 @@ Object.assign(en, {
   "txt_totp_empty_help": "Add an authenticator key to a login item to see its codes here.",
   "txt_emergency_access_type_label": "What they can do",
   "txt_emergency_access_wait_label": "Wait before access",
+  "txt_command_palette": "Search pages, items and fields",
+  "txt_palette_pages": "Pages",
+  "txt_palette_items": "Items",
+  "txt_palette_fields": "Fields",
+  "txt_palette_hint": "↑↓ to move · Enter to open · Esc to close",
+  "txt_palette_no_results": "No results",
 });
 
 export default en;

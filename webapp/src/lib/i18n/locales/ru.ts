@@ -1795,6 +1795,12 @@ Object.assign(ru, {
   "txt_totp_empty_help": "Добавьте ключ аутентификатора к записи входа, чтобы видеть её коды здесь.",
   "txt_emergency_access_type_label": "Что они смогут делать",
   "txt_emergency_access_wait_label": "Ожидание перед доступом",
+  "txt_command_palette": "Поиск страниц, предметов и полей",
+  "txt_palette_pages": "Страницы",
+  "txt_palette_items": "Предметы",
+  "txt_palette_fields": "Поля",
+  "txt_palette_hint": "↑↓ — перемещение · Enter — открыть · Esc — закрыть",
+  "txt_palette_no_results": "Ничего не найдено",
 });
 
 export default ru;

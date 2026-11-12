@@ -1874,6 +1874,12 @@ Object.assign(zhTW, {
   "txt_totp_empty_help": "為登入項目加上驗證器金鑰，即可在此看到它的驗證碼。",
   "txt_emergency_access_type_label": "他們可以做什麼",
   "txt_emergency_access_wait_label": "存取前的等待時間",
+  "txt_command_palette": "搜尋頁面、項目和欄位",
+  "txt_palette_pages": "頁面",
+  "txt_palette_items": "項目",
+  "txt_palette_fields": "欄位",
+  "txt_palette_hint": "↑↓ 移動 · Enter 開啟 · Esc 關閉",
+  "txt_palette_no_results": "沒有結果",
 });
 
 export default zhTW;

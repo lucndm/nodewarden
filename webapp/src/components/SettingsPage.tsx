@@ -51,7 +51,15 @@ interface SettingsPageProps {
 }
 
 type ThemePreference = 'system' | 'light' | 'dark';
-type SettingsSection = 'appearance' | 'session' | 'masterPassword' | 'twoStep' | 'keys' | 'sso' | 'emergencyAccess';
+
+const SETTINGS_SECTION_IDS = ['appearance', 'session', 'masterPassword', 'twoStep', 'keys', 'sso', 'emergencyAccess'] as const;
+type SettingsSection = typeof SETTINGS_SECTION_IDS[number];
+
+// The section a link or an event names, when it is a section of this page.
+function settingsSectionFrom(value: string): SettingsSection | null {
+  const section = String(value || '').trim() as SettingsSection;
+  return SETTINGS_SECTION_IDS.includes(section) ? section : null;
+}
 
 type MasterPasswordPromptAction =
   | 'enableTotp'
@@ -198,6 +206,24 @@ export default function SettingsPage(props: SettingsPageProps) {
     if (activeSection !== 'sso') return;
     void refreshSsoStatus();
   }, [activeSection]);
+
+  // A link may name the section of the page it opens.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const section = settingsSectionFrom(new URLSearchParams(window.location.search || '').get('section') || '');
+    if (section) setActiveSection(section);
+  }, []);
+
+  // The palette opens a tab of the settings page.
+  useEffect(() => {
+    const openSection = (event: Event): void => {
+      const section = settingsSectionFrom((event as CustomEvent<string>).detail);
+      if (!section) return;
+      setActiveSection(section);
+    };
+    window.addEventListener('nodewarden:settings-section', openSection);
+    return () => window.removeEventListener('nodewarden:settings-section', openSection);
+  }, []);
 
   async function startSsoLink(): Promise<void> {
     if (!props.authedFetch) return;

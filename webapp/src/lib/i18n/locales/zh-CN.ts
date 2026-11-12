@@ -1824,6 +1824,12 @@ Object.assign(zhCN, {
   "txt_totp_empty_help": "为登录项添加验证器密钥，即可在此看到它的验证码。",
   "txt_emergency_access_type_label": "他们可以做什么",
   "txt_emergency_access_wait_label": "访问前的等待时间",
+  "txt_command_palette": "搜索页面、项目和字段",
+  "txt_palette_pages": "页面",
+  "txt_palette_items": "项目",
+  "txt_palette_fields": "字段",
+  "txt_palette_hint": "↑↓ 移动 · Enter 打开 · Esc 关闭",
+  "txt_palette_no_results": "没有结果",
 });
 
 export default zhCN;

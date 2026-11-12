@@ -1795,6 +1795,12 @@ Object.assign(es, {
   "txt_totp_empty_help": "Añade una clave de autenticación a un elemento de inicio de sesión para ver sus códigos aquí.",
   "txt_emergency_access_type_label": "Qué pueden hacer",
   "txt_emergency_access_wait_label": "Espera antes de acceder",
+  "txt_command_palette": "Buscar páginas, elementos y campos",
+  "txt_palette_pages": "Páginas",
+  "txt_palette_items": "Elementos",
+  "txt_palette_fields": "Campos",
+  "txt_palette_hint": "↑↓ para moverse · Enter para abrir · Esc para cerrar",
+  "txt_palette_no_results": "Sin resultados",
 });
 
 export default es;

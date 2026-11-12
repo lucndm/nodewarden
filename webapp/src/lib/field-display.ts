@@ -57,6 +57,13 @@ for (const [kind, labels] of Object.entries(LABELS_BY_KIND) as Array<[FieldKind,
   for (const label of labels) KIND_BY_LABEL[label] = kind;
 }
 
+// Two kinds have no key of their own and borrow the one of the field they
+// are.
+const LABEL_KEYS: Partial<Record<FieldKind, string>> = {
+  email: 'txt_email',
+  phone: 'txt_phone',
+};
+
 // A label that carries one of these words holds a secret even when it is
 // stored as plain text.
 const SECRET_LABEL_RE =
@@ -93,7 +100,7 @@ export function presentField(label: string, storedType: number): FieldPresentati
 
   return {
     kind,
-    labelKey: kind === 'other' ? null : `txt_field_kind_${kind}`,
+    labelKey: kind === 'other' ? null : LABEL_KEYS[kind] ?? `txt_field_kind_${kind}`,
     secret,
     noise: NOISE_LABEL_RE.test(normalized),
   };

@@ -1795,6 +1795,12 @@ Object.assign(fr, {
   "txt_totp_empty_help": "Ajoutez une clé d'authentification à un élément de connexion pour voir ses codes ici.",
   "txt_emergency_access_type_label": "Ce qu'ils peuvent faire",
   "txt_emergency_access_wait_label": "Délai avant l'accès",
+  "txt_command_palette": "Rechercher des pages, des éléments et des champs",
+  "txt_palette_pages": "Pages",
+  "txt_palette_items": "Éléments",
+  "txt_palette_fields": "Champs",
+  "txt_palette_hint": "↑↓ pour naviguer · Entrée pour ouvrir · Échap pour fermer",
+  "txt_palette_no_results": "Aucun résultat",
 });
 
 export default fr;

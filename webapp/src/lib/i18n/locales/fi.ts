@@ -1795,6 +1795,12 @@ Object.assign(fi, {
   "txt_totp_empty_help": "Lisää tunnistusavain kirjautumiskohteeseen, niin näet sen koodit täällä.",
   "txt_emergency_access_type_label": "Mitä he voivat tehdä",
   "txt_emergency_access_wait_label": "Odotus ennen kulkua",
+  "txt_command_palette": "Hae sivuja, nimikkeitä ja kenttiä",
+  "txt_palette_pages": "Sivut",
+  "txt_palette_items": "Nimikkeet",
+  "txt_palette_fields": "Kentät",
+  "txt_palette_hint": "↑↓ vaihda · Enter avaa · Esc sulje",
+  "txt_palette_no_results": "Ei tuloksia",
 });
 
 export default fi;

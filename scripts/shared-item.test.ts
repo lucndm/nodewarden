@@ -553,6 +553,9 @@ test('a key rotation replaces the key of every member and every shared item', as
   assert.ok(writerMembership);
 
   const beforeRevision = (await storage.getRevisionDate(READER));
+  // The rotation stamps the revision of every member; wait a few milliseconds
+  // so the new stamp does not fall in the same millisecond as the one above.
+  await new Promise((resolve) => setTimeout(resolve, 5));
   const rotation = await call(
     env,
     `https://vault.example.test/api/organizations/${ORG}/rotate-key`,

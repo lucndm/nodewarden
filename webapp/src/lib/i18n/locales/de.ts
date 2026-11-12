@@ -1795,6 +1795,12 @@ Object.assign(de, {
   "txt_totp_empty_help": "Füge einem Login-Eintrag einen Authenticator-Schlüssel hinzu, um seine Codes hier zu sehen.",
   "txt_emergency_access_type_label": "Was sie tun können",
   "txt_emergency_access_wait_label": "Wartezeit vor dem Zugriff",
+  "txt_command_palette": "Seiten, Einträge und Felder durchsuchen",
+  "txt_palette_pages": "Seiten",
+  "txt_palette_items": "Einträge",
+  "txt_palette_fields": "Felder",
+  "txt_palette_hint": "↑↓ wechseln · Enter öffnen · Esc schließen",
+  "txt_palette_no_results": "Keine Ergebnisse",
 });
 
 export default de;
