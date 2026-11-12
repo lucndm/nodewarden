@@ -378,6 +378,12 @@ async function seedVault(baseUrl) {
       collectionIds: [collectionId],
       key: await encryptBw(sharedItemKey, organizationKey.slice(0, 32), organizationKey.slice(32, 64)),
       login: { username: await sharedEncrypt('shared-user'), password: await sharedEncrypt('shared-pass') },
+      // One field with a name the detail knows and one leftover of a filled
+      // form, so both ways of showing a field can be checked.
+      fields: [
+        { type: 0, name: await sharedEncrypt('E-mail'), value: await sharedEncrypt('shared@example.test') },
+        { type: 0, name: await sharedEncrypt('remember me'), value: await sharedEncrypt('yes') },
+      ],
     },
   });
   if (shared.status !== 200) {
@@ -2002,6 +2008,164 @@ async function main() {
       'the log center names the export of the organization',
       logText.includes('Export organization vault'),
       logText.slice(0, 200)
+    );
+
+    // The detail of an item copies a field when its row is clicked or keyed,
+    // and the toast says that the value reached the clipboard. The clipboard
+    // only takes a write from the focused page, so the page is focused and
+    // allowed to write before the copy is made.
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, sessionId);
+    await cdp.send('Page.bringToFront', {}, sessionId);
+    await cdp
+      .send('Browser.setPermission', {
+        origin: worker.baseUrl,
+        permission: { name: 'clipboard-write' },
+        setting: 'granted',
+      })
+      .then(() =>
+        cdp.send('Browser.setPermission', {
+          origin: worker.baseUrl,
+          permission: { name: 'clipboard-write', allowWithoutSanitization: true },
+          setting: 'granted',
+        })
+      )
+      .catch(() =>
+        cdp.send('Browser.grantPermissions', {
+          origin: worker.baseUrl,
+          permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'],
+        })
+      )
+      .catch(() => {
+        // A browser that knows neither call lets the focused page write anyway.
+      });
+
+    await gotoPath('/vault');
+    await waitFor(`!!document.querySelector('.list-item .row-main')`, 'the vault list', 20000);
+    await evaluate(`(() => {
+      const rows = [...document.querySelectorAll('.list-item .row-main')];
+      const target = rows.find((row) => (row.textContent || '').includes('UI Shared Login'));
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`);
+    await waitFor(
+      `!!document.querySelector('[role="group"][aria-label="Login Credentials"]')`,
+      'the detail of the item',
+      15000
+    );
+
+    // The login card copies by clicking a row, so no copy button is left in it.
+    const loginCard = await evaluate(`(() => {
+      const card = document.querySelector('[role="group"][aria-label="Login Credentials"]');
+      if (!card) return null;
+      return {
+        copyButtons: [...card.querySelectorAll('button')].filter((button) => (button.textContent || '').trim() === 'Copy').length,
+        labels: [...card.querySelectorAll('.kv-copyable')].map((row) => (row.querySelector('.kv-field-label')?.textContent || '').trim()),
+      };
+    })()`);
+    checks.ok(
+      'the login card copies by clicking the row and keeps no copy button',
+      loginCard?.copyButtons === 0 && loginCard?.labels?.includes('Username') && loginCard?.labels?.includes('Password'),
+      JSON.stringify(loginCard || {})
+    );
+
+    // Clicking the username row puts the value into the clipboard.
+    // The clipboard takes a write only from a real user gesture, so the row is
+    // pressed through the input domain and not with element.click().
+    const pressRow = async (label, how) => {
+      const center = await evaluate(`(() => {
+        const card = document.querySelector('[role="group"][aria-label="Login Credentials"]');
+        const row = card && [...card.querySelectorAll('.kv-copyable')].find(
+          (entry) => (entry.querySelector('.kv-field-label')?.textContent || '').trim() === ${JSON.stringify(label)}
+        );
+        if (!row) return null;
+        row.scrollIntoView({ block: 'center' });
+        if (${JSON.stringify(how)} === 'key') row.focus();
+        const box = row.getBoundingClientRect();
+        return { x: box.left + 24, y: box.top + box.height / 2 };
+      })()`);
+      if (!center) return false;
+      if (how === 'key') {
+        const key = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...key }, sessionId);
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...key }, sessionId);
+      } else {
+        const mouse = { x: center.x, y: center.y, button: 'left', clickCount: 1 };
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...mouse }, sessionId);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...mouse }, sessionId);
+      }
+      return true;
+    };
+    await pressRow('Username', 'click');
+    await waitFor(
+      `[...document.querySelectorAll('.toast-item.success .toast-text')].some((toast) => (toast.textContent || '').trim() === 'Copied')`,
+      'the toast of the copy',
+      10000
+    ).catch(() => false);
+    const copyToasts = await evaluate(
+      `[...document.querySelectorAll('.toast-item .toast-text')].map((toast) => (toast.textContent || '').trim())`
+    );
+    checks.ok(
+      'clicking the username row says that it was copied',
+      copyToasts.includes('Copied'),
+      JSON.stringify(copyToasts)
+    );
+
+    // The toast of the copy is closed, so the next one is the toast of the
+    // password and not the one that is still there.
+    await evaluate(`(() => {
+      for (const button of [...document.querySelectorAll('.toast-close')]) button.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // The password row copies when it is keyed, and the password stays masked.
+    await pressRow('Password', 'key');
+    await waitFor(
+      `[...document.querySelectorAll('.toast-item.success .toast-text')].some((toast) => (toast.textContent || '').trim() === 'Copied')`,
+      'the toast of the keyed copy',
+      10000
+    ).catch(() => false);
+    const afterKey = await evaluate(`(() => {
+      const card = document.querySelector('[role="group"][aria-label="Login Credentials"]');
+      const row = card && [...card.querySelectorAll('.kv-copyable')].find(
+        (entry) => (entry.querySelector('.kv-field-label')?.textContent || '').trim() === 'Password'
+      );
+      return {
+        value: row ? (row.querySelector('.kv-field-value strong')?.textContent || '').trim() : '',
+        shown: (document.body.textContent || '').includes('shared-pass'),
+        toasts: [...document.querySelectorAll('.toast-item .toast-text')].map((toast) => (toast.textContent || '').trim()),
+      };
+    })()`);
+    checks.ok(
+      'keying the password row copies it and leaves the password masked',
+      afterKey?.toasts?.includes('Copied') && afterKey?.value?.startsWith('*') && afterKey?.shown === false,
+      JSON.stringify(afterKey || {})
+    );
+
+    // A field with a name the detail knows shows the canonical label, and the
+    // leftovers of a filled form wait in the collapsed area.
+    const customFields = await evaluate(`(() => {
+      const labelOf = (card) => (card.querySelector('.custom-field-label')?.textContent || '').trim();
+      const cards = [...document.querySelectorAll('.custom-field-card')];
+      const email = cards.find((card) => labelOf(card) === 'Email');
+      const more = document.querySelector('details.detail-more-info');
+      return {
+        emailValue: email ? (email.querySelector('.custom-field-value strong')?.textContent || '').trim() : '',
+        emailInMoreInfo: !!(email && email.closest('details.detail-more-info')),
+        moreInfoLabels: more ? [...more.querySelectorAll('.custom-field-label')].map((label) => (label.textContent || '').trim()) : [],
+        shownLabels: cards.filter((card) => !card.closest('details.detail-more-info')).map(labelOf),
+      };
+    })()`);
+    checks.ok(
+      'a field with a known name shows the canonical label',
+      customFields?.emailValue === 'shared@example.test' && customFields?.emailInMoreInfo === false,
+      JSON.stringify(customFields || {})
+    );
+    checks.ok(
+      'the leftovers of a filled form wait in the collapsed area',
+      customFields?.moreInfoLabels?.includes('remember me') && !customFields?.shownLabels?.includes('remember me'),
+      JSON.stringify(customFields || {})
     );
 
     return checks.finish() ? 0 : 1;

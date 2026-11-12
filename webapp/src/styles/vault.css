@@ -1620,6 +1620,127 @@ select.input.duplicate-mode-toolbar-select {
   text-decoration: underline;
 }
 
+/* An app is not a page: the row shows the package and copies it. */
+.detail-uri-app-icon {
+  @apply grid h-7 w-7 shrink-0 place-items-center rounded-full;
+  background: color-mix(in srgb, var(--primary) 12%, var(--panel-muted));
+  color: var(--primary-strong);
+}
+
+.detail-uri-app-body {
+  @apply grid min-w-0 flex-1 gap-0.5;
+}
+
+.detail-uri-app-label {
+  @apply text-xs font-medium;
+  color: var(--muted);
+}
+
+.detail-uri-app-value {
+  @apply min-w-0 break-words;
+}
+
+/* A plain address over http is not encrypted on the way. */
+.detail-uri-badge {
+  @apply shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold;
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: var(--warning);
+}
+
+/* A value that can be copied is the button itself. */
+.kv-copyable {
+  cursor: pointer;
+}
+
+.kv-copyable:hover {
+  background: var(--panel-subtle);
+}
+
+/* The copy hint sits behind the value, so the value stays on the right. */
+.kv-line.kv-copyable > strong {
+  margin-left: auto;
+}
+
+/* The copy button is a hint: it shows while the row is hovered or focused,
+   the row itself carries the accessible name. */
+.kv-copy-hint {
+  @apply inline-flex shrink-0 items-center;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.kv-copyable:hover .kv-copy-hint,
+.kv-copyable:focus-visible .kv-copy-hint,
+.kv-copyable:focus-within .kv-copy-hint {
+  opacity: 1;
+}
+
+/* The icon in front of the name of a custom field. */
+.custom-field-icon {
+  @apply mr-1.5 inline-flex items-center;
+  color: var(--muted-strong);
+}
+
+/* The leftovers of a form wait in a collapsed area at the bottom. */
+.detail-more-info > summary {
+  @apply cursor-pointer text-sm font-semibold;
+  color: var(--muted-strong);
+}
+
+.detail-more-info-body {
+  @apply mt-2 grid gap-0;
+}
+
+/* A note may hold a key or a list of codes next to its text. */
+.note-actions {
+  @apply mb-2 flex items-center gap-2;
+}
+
+.note-block {
+  @apply grid gap-2;
+}
+
+.note-block + .note-block,
+.note-block + .notes,
+.notes + .note-block,
+.notes + .note-pairs,
+.note-pairs + .notes,
+.note-pairs + .note-block {
+  margin-top: 10px;
+}
+
+.note-block-head {
+  @apply flex items-center gap-2;
+}
+
+/* The codes sit in a grid of monospace cells. */
+.note-codes {
+  @apply grid gap-1.5;
+  grid-template-columns: repeat(auto-fill, minmax(9ch, 1fr));
+}
+
+.note-code {
+  @apply break-all rounded-md border px-2 py-1 text-left font-mono text-xs;
+  border-color: var(--line-soft);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.note-code:hover {
+  border-color: var(--primary);
+}
+
+/* A key block scrolls sideways instead of pushing the page wide. */
+.note-pem {
+  @apply overflow-x-auto whitespace-pre rounded-lg border p-3 text-xs;
+  min-width: 0;
+  max-width: 100%;
+  border-color: var(--line-soft);
+  background: var(--panel-soft);
+  font-family: var(--font-mono);
+}
+
 @media (max-width: 640px) {
   .detail-uri-row {
     @apply flex-col items-stretch gap-2;

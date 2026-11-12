@@ -1,10 +1,13 @@
 import { createPortal } from 'preact/compat';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { Archive, BookOpen, CalendarPlus, Clipboard, Contact, CreditCard, Download, Eye, EyeOff, ExternalLink, Globe, History, IdCard, KeyRound, Landmark, List, Lock, MoreVertical, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, Sparkles, StickyNote, Tag, Terminal, Trash2, User, X } from 'lucide-preact';
+import { Archive, BookOpen, Building2, Calendar, CalendarPlus, Clipboard, Contact, Copy, CreditCard, Database, Download, Eye, EyeOff, ExternalLink, FolderTree, Globe, Hash, History, IdCard, KeyRound, Landmark, List, Lock, Mail, MapPin, MoreVertical, Paperclip, Pencil, Phone, RefreshCw, RotateCcw, Server, ShieldCheck, Smartphone, Sparkles, StickyNote, Tag, Terminal, Trash2, User, X } from 'lucide-preact';
+import type { LucideIcon } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import ItemHistoryDialog from '@/components/vault/ItemHistoryDialog';
 import { looksLikeCipherString } from '@/lib/app-support';
+import { parseNote, presentField, usernameKind } from '@/lib/field-display';
+import type { FieldKind, FieldPresentation } from '@/lib/field-display';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, passwordHealthState } from '@/lib/password-security';
 import {
@@ -14,7 +17,7 @@ import {
 } from '@/lib/password-security-cache';
 import type { CipherUsageEntry } from '@/lib/api/vault';
 import type { ItemHistoryEntry, ItemHistoryVersion } from '@/lib/item-history';
-import type { Cipher } from '@/lib/types';
+import type { Cipher, CustomFieldType } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import {
   CardBrandIcon,
@@ -86,6 +89,85 @@ function plainValue(decrypted: string | null | undefined, raw: string | null | u
   if (dec && !looksLikeCipherString(dec)) return dec;
   const value = String(raw ?? '');
   return looksLikeCipherString(value) ? '' : value;
+}
+
+/* Every kind gets an icon that says what the field holds. */
+const FIELD_KIND_ICONS: Record<FieldKind, LucideIcon> = {
+  email: Mail,
+  phone: Phone,
+  username: User,
+  fullName: User,
+  firstName: User,
+  lastName: User,
+  birthDate: Calendar,
+  address: MapPin,
+  city: MapPin,
+  country: Globe,
+  postalCode: Hash,
+  company: Building2,
+  nationalId: IdCard,
+  idIssueDate: Calendar,
+  taxCode: Hash,
+  socialInsurance: ShieldCheck,
+  healthInsurance: ShieldCheck,
+  hometown: MapPin,
+  permanentAddress: MapPin,
+  placeOfBirth: MapPin,
+  server: Server,
+  port: Hash,
+  database: Database,
+  path: FolderTree,
+  website: Globe,
+  oneTimeCode: KeyRound,
+  other: List,
+};
+
+/* The email and the phone already have a label in every locale file, so those
+   two kinds reuse them instead of adding a second copy of the same word. */
+const FIELD_KIND_LABEL_KEYS: Partial<Record<FieldKind, string>> = {
+  email: 'txt_email',
+  phone: 'txt_phone',
+};
+
+/* A value that can be copied is a click target: the row itself copies, so the
+   copy button is only a hint that shows up while the row is hovered. */
+function CopyTarget(props: { className: string; label: string; onCopy: () => void; children: ComponentChildren }) {
+  return (
+    <div
+      className={`kv-copyable ${props.className}`}
+      role="button"
+      tabIndex={0}
+      aria-label={t('txt_copy_field', { label: props.label })}
+      onClick={props.onCopy}
+      onKeyDown={(event) => {
+        // A key press on a button inside the row belongs to that button.
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        props.onCopy();
+      }}
+    >
+      {props.children}
+    </div>
+  );
+}
+
+/* The copy hint is decorative: the row carries the accessible name. */
+function CopyHint() {
+  return (
+    <span className="kv-copy-hint" aria-hidden="true">
+      <Copy size={14} className="btn-icon" />
+    </span>
+  );
+}
+
+/* One stored field with everything the view needs to show it. */
+interface CustomFieldEntry {
+  index: number;
+  type: CustomFieldType;
+  name: string;
+  value: string;
+  presentation: FieldPresentation;
 }
 
 /* Every card in the detail column opens with the same tinted icon and title. */
@@ -203,6 +285,36 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     () => (props.selectedCipher.login?.uris || []).map((uri) => plainValue(uri.decUri, uri.uri).trim()).filter((value) => !!value),
     [props.selectedCipher.login?.uris]
   );
+  // The username says what it is: an address, a phone number or a name.
+  const usernameValue = props.selectedCipher.login?.decUsername || '';
+  const usernameKindValue = usernameKind(usernameValue);
+  const usernameLabel = usernameKindValue === 'email' ? t('txt_email') : usernameKindValue === 'phone' ? t('txt_phone') : t('txt_username');
+  const UsernameIcon = usernameKindValue === 'email' ? Mail : usernameKindValue === 'phone' ? Phone : User;
+  // A note is not one blob of text: it may hold a key, a list of codes or
+  // labelled lines, and each part is presented on its own.
+  const noteText = plainValue(props.selectedCipher.decNotes, props.selectedCipher.notes);
+  const noteBlocks = useMemo(() => parseNote(noteText), [noteText]);
+  // The custom fields are sorted by what they are: the leftovers of a form go
+  // to the collapsed area at the bottom, the rest stays in the card.
+  const customFields = useMemo(() => {
+    const entries = (props.selectedCipher.fields || [])
+      .filter((field) => parseFieldType(field.type) !== 3)
+      .map((field, index) => {
+        const type = parseFieldType(field.type);
+        const name = plainValue(field.decName, field.name);
+        return {
+          index,
+          type,
+          name,
+          value: plainValue(field.decValue, field.value),
+          presentation: presentField(name, type),
+        };
+      });
+    return {
+      visible: entries.filter((entry) => !entry.presentation.noise),
+      noise: entries.filter((entry) => entry.presentation.noise),
+    };
+  }, [props.selectedCipher.fields]);
   // The password was replaced or the view was locked: what was revealed is
   // hidden again. Another item on screen is another view, mounted again, so
   // what is shown for an item does not have to be reset here: an effect that
@@ -349,12 +461,12 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
 
   // Secrets stay masked until the user reveals that one field. The masked text
   // never carries the secret in a title or an aria label.
-  const renderSecretLine = (key: string, label: string, value: string) => {
+  const renderSecretLine = (key: string, label: string, value: string, copyable = false) => {
     const secret = value || '';
     const isRevealed = !!revealedFields[key];
     const revealLabel = isRevealed ? t('txt_hide') : t('txt_reveal');
-    return (
-      <div className="kv-line">
+    const body = (
+      <>
         <span>{label}</span>
         <span className="kv-line-secret">
           <strong>{isRevealed ? secret : maskSecret(secret)}</strong>
@@ -363,21 +475,106 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
             className="btn btn-secondary small"
             aria-label={`${revealLabel} ${label}`}
             title={revealLabel}
-            onClick={() => setRevealedFields((prev) => ({ ...prev, [key]: !prev[key] }))}
+            onClick={(event) => {
+              event.stopPropagation();
+              setRevealedFields((prev) => ({ ...prev, [key]: !prev[key] }));
+            }}
           >
             {isRevealed ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
           </button>
-          <button
-            type="button"
-            className="btn btn-secondary small"
-            aria-label={`${t('txt_copy')} ${label}`}
-            title={t('txt_copy')}
-            onClick={() => void copyToClipboard(secret)}
-          >
-            <Clipboard size={14} className="btn-icon" />
-          </button>
+          {copyable ? (
+            <CopyHint />
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary small"
+              aria-label={`${t('txt_copy')} ${label}`}
+              title={t('txt_copy')}
+              onClick={() => void copyToClipboard(secret)}
+            >
+              <Clipboard size={14} className="btn-icon" />
+            </button>
+          )}
         </span>
-      </div>
+      </>
+    );
+    if (!copyable) return <div className="kv-line">{body}</div>;
+    return (
+      <CopyTarget className="kv-line" label={label} onCopy={() => void copyToClipboard(secret)}>
+        {body}
+      </CopyTarget>
+    );
+  };
+
+  // A custom field shows what it holds: a known name shows the canonical
+  // label, and a field that only looks like a secret is masked like a hidden
+  // one. The stored name stays available as the tooltip of the label.
+  const renderCustomField = (entry: CustomFieldEntry) => {
+    const { index, type, name, value, presentation } = entry;
+    const labelKey = presentation.labelKey ? FIELD_KIND_LABEL_KEYS[presentation.kind] ?? presentation.labelKey : null;
+    const label = labelKey ? t(labelKey) : name || t('txt_field');
+    const KindIcon = FIELD_KIND_ICONS[presentation.kind];
+    const labelTitle = labelKey ? name : undefined;
+    if (type === 2) {
+      const checked = toBooleanFieldValue(value);
+      return (
+        <div key={`view-field-${index}`} className="custom-field-card">
+          <div className="custom-field-label" title={labelTitle}>
+            <span className="custom-field-icon" aria-hidden="true">
+              <KindIcon size={13} />
+            </span>
+            {label}
+          </div>
+          <div className="custom-field-body">
+            <div className="custom-field-value">
+              <label className="check-line cf-check view custom-field-check">
+                <input type="checkbox" checked={checked} disabled />
+                <span className="boolean-text value-ellipsis" title={checked ? t('txt_checked') : t('txt_unchecked')}>
+                  {checked ? t('txt_checked') : t('txt_unchecked')}
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    const masked = presentation.secret;
+    const revealed = !masked || !!props.hiddenFieldVisibleMap[index];
+    return (
+      <CopyTarget key={`view-field-${index}`} className="custom-field-card" label={label} onCopy={() => void copyToClipboard(value)}>
+        <div className="custom-field-label" title={labelTitle}>
+          <span className="custom-field-icon" aria-hidden="true">
+            <KindIcon size={13} />
+          </span>
+          {label}
+        </div>
+        <div className="custom-field-body">
+          <div className="custom-field-value">
+            <strong
+              className={masked && !revealed ? 'value-ellipsis' : 'custom-field-display'}
+              title={masked && !revealed ? (type === 1 ? '' : t('txt_field_masked_hint')) : value}
+            >
+              {masked && !revealed ? maskSecret(value) : value}
+            </strong>
+          </div>
+          <div className="kv-actions">
+            {masked && (
+              <button
+                type="button"
+                className="btn btn-secondary small"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  props.onToggleHiddenField(index);
+                }}
+              >
+                {revealed ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
+                {revealed ? t('txt_hide') : t('txt_reveal')}
+              </button>
+            )}
+            <CopyHint />
+          </div>
+        </div>
+      </CopyTarget>
     );
   };
 
@@ -505,23 +702,21 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           {props.selectedCipher.login && (
             <div className="card" role="group" aria-label={t('txt_login_credentials')}>
               <DetailSectionHead icon={<KeyRound size={15} />} title={t('txt_login_credentials')} />
-              <div className="kv-field">
+              <CopyTarget className="kv-field" label={usernameLabel} onCopy={() => void copyToClipboard(usernameValue)}>
                 <span className="kv-field-icon" aria-hidden="true">
-                  <User size={15} />
+                  <UsernameIcon size={15} />
                 </span>
                 <div className="kv-field-body">
-                  <span className="kv-field-label">{t('txt_username')}</span>
+                  <span className="kv-field-label">{usernameLabel}</span>
                   <div className="kv-field-value">
-                    <strong className="value-ellipsis" title={props.selectedCipher.login.decUsername || ''}>{props.selectedCipher.login.decUsername || ''}</strong>
+                    <strong className="value-ellipsis" title={usernameValue}>{usernameValue}</strong>
                   </div>
                 </div>
                 <div className="kv-actions">
-                  <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.login?.decUsername || '')}>
-                    <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
-                  </button>
+                  <CopyHint />
                 </div>
-              </div>
-              <div className="kv-field">
+              </CopyTarget>
+              <CopyTarget className="kv-field" label={t('txt_password')} onCopy={() => void copyLoginPassword()}>
                 <span className="kv-field-icon" aria-hidden="true">
                   <KeyRound size={15} />
                 </span>
@@ -532,17 +727,22 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </div>
                 </div>
                 <div className="kv-actions">
-                  <button type="button" className="btn btn-secondary small" onClick={props.onToggleShowPassword}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      props.onToggleShowPassword();
+                    }}
+                  >
                     {props.showPassword ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
                     {props.showPassword ? t('txt_hide') : t('txt_reveal')}
                   </button>
-                  <button type="button" className="btn btn-secondary small" onClick={() => void copyLoginPassword()}>
-                    <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
-                  </button>
+                  <CopyHint />
                 </div>
-              </div>
+              </CopyTarget>
               {!!props.selectedCipher.login.decTotp && (
-                <div className="kv-field">
+                <CopyTarget className="kv-field" label={t('txt_totp')} onCopy={() => void copyToClipboard(props.totpLive?.code || '')}>
                   <span className="kv-field-icon" aria-hidden="true">
                     <Lock size={15} />
                   </span>
@@ -578,11 +778,9 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                     </div>
                   </div>
                   <div className="kv-actions">
-                    <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.totpLive?.code || '')}>
-                      <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
-                    </button>
+                    <CopyHint />
                   </div>
-                </div>
+                </CopyTarget>
               )}
               {!!props.passkeyCreatedAt && (
                 <div className="kv-field">
@@ -667,21 +865,49 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
             <div className="card" role="group" aria-label={t('txt_websites')}>
               <DetailSectionHead icon={<Globe size={15} />} title={t('txt_websites')} />
               <div className="detail-uri-list">
-                {websiteValues.map((value, index) => (
-                  <div key={`view-uri-${index}`} className="detail-uri-row">
-                    <button type="button" className="detail-uri-link" title={value} onClick={() => openUri(value)}>
-                      {value}
-                    </button>
-                    <div className="kv-actions">
-                      <button type="button" className="btn btn-secondary small" title={t('txt_open')} onClick={() => openUri(value)}>
-                        <ExternalLink size={14} className="btn-icon" /> {t('txt_open')}
+                {websiteValues.map((value, index) => {
+                  // An Android app is not a page that can be opened: the row
+                  // only carries the package name.
+                  if (value.startsWith('androidapp://')) {
+                    const appPackage = value.slice('androidapp://'.length);
+                    return (
+                      <CopyTarget key={`view-uri-${index}`} className="detail-uri-row" label={appPackage} onCopy={() => void copyToClipboard(appPackage)}>
+                        <span className="detail-uri-app-icon" aria-hidden="true">
+                          <Smartphone size={15} />
+                        </span>
+                        <div className="detail-uri-app-body">
+                          <span className="detail-uri-app-label">{t('txt_android_app')}</span>
+                          <strong className="detail-uri-app-value">{appPackage}</strong>
+                        </div>
+                        <div className="kv-actions">
+                          <CopyHint />
+                        </div>
+                      </CopyTarget>
+                    );
+                  }
+                  return (
+                    <div key={`view-uri-${index}`} className="detail-uri-row">
+                      <button type="button" className="detail-uri-link" title={value} onClick={() => openUri(value)}>
+                        {value}
                       </button>
-                      <button type="button" className="btn btn-secondary small" title={t('txt_copy')} onClick={() => copyToClipboard(value)}>
-                        <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
-                      </button>
+                      {value.startsWith('http://') && <span className="detail-uri-badge">{t('txt_not_secure')}</span>}
+                      <div className="kv-actions">
+                        <button type="button" className="btn btn-secondary small" title={t('txt_open')} onClick={() => openUri(value)}>
+                          <ExternalLink size={14} className="btn-icon" /> {t('txt_open')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary small"
+                          title={t('txt_copy')}
+                          aria-label={t('txt_copy_field', { label: value })}
+                          onClick={() => void copyToClipboard(value)}
+                        >
+                          <Copy size={14} className="btn-icon" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -689,8 +915,12 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           {props.selectedCipher.card && (
             <div className="card">
               <DetailSectionHead icon={<CreditCard size={15} />} title={t('txt_card_details')} />
-              <div className="kv-line"><span>{t('txt_cardholder_name')}</span><strong>{props.selectedCipher.card.decCardholderName || ''}</strong></div>
-              {renderSecretLine('card-number', t('txt_number'), props.selectedCipher.card.decNumber || '')}
+              <CopyTarget className="kv-line" label={t('txt_cardholder_name')} onCopy={() => void copyToClipboard(props.selectedCipher.card?.decCardholderName || '')}>
+                <span>{t('txt_cardholder_name')}</span>
+                <strong>{props.selectedCipher.card.decCardholderName || ''}</strong>
+                <CopyHint />
+              </CopyTarget>
+              {renderSecretLine('card-number', t('txt_number'), props.selectedCipher.card.decNumber || '', true)}
               <div className="kv-line">
                 <span>{t('txt_brand')}</span>
                 <strong className="card-brand-detail">
@@ -699,7 +929,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                 </strong>
               </div>
               <div className="kv-line"><span>{t('txt_expiry')}</span><strong>{`${props.selectedCipher.card.decExpMonth || ''}/${props.selectedCipher.card.decExpYear || ''}`}</strong></div>
-              {renderSecretLine('card-code', t('txt_security_code'), props.selectedCipher.card.decCode || '')}
+              {renderSecretLine('card-code', t('txt_security_code'), props.selectedCipher.card.decCode || '', true)}
             </div>
           )}
 
@@ -718,7 +948,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
           {props.selectedCipher.sshKey && (
             <div className="card">
               <DetailSectionHead icon={<Terminal size={15} />} title={t('txt_ssh_key')} />
-              <div className="kv-field">
+              <CopyTarget className="kv-field" label={t('txt_private_key')} onCopy={() => void copyToClipboard(props.selectedCipher.sshKey?.decPrivateKey || '')}>
                 <span className="kv-field-icon" aria-hidden="true">
                   <KeyRound size={15} />
                 </span>
@@ -734,16 +964,21 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </div>
                 </div>
                 <div className="kv-actions">
-                  <button type="button" className="btn btn-secondary small" onClick={() => setShowSshPrivateKey((value) => !value)}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setShowSshPrivateKey((value) => !value);
+                    }}
+                  >
                     {showSshPrivateKey ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
                     {showSshPrivateKey ? t('txt_hide') : t('txt_reveal')}
                   </button>
-                  <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.sshKey?.decPrivateKey || '')}>
-                    <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
-                  </button>
+                  <CopyHint />
                 </div>
-              </div>
-              <div className="kv-field">
+              </CopyTarget>
+              <CopyTarget className="kv-field" label={t('txt_public_key')} onCopy={() => void copyToClipboard(props.selectedCipher.sshKey?.decPublicKey || '')}>
                 <span className="kv-field-icon" aria-hidden="true">
                   <KeyRound size={15} />
                 </span>
@@ -756,12 +991,10 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </div>
                 </div>
                 <div className="kv-actions">
-                  <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.sshKey?.decPublicKey || '')}>
-                    <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
-                  </button>
+                  <CopyHint />
                 </div>
-              </div>
-              <div className="kv-field">
+              </CopyTarget>
+              <CopyTarget className="kv-field" label={t('txt_fingerprint')} onCopy={() => void copyToClipboard(props.selectedCipher.sshKey?.decFingerprint || '')}>
                 <span className="kv-field-icon" aria-hidden="true">
                   <List size={15} />
                 </span>
@@ -774,11 +1007,9 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   </div>
                 </div>
                 <div className="kv-actions">
-                  <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.sshKey?.decFingerprint || '')}>
-                    <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
-                  </button>
+                  <CopyHint />
                 </div>
-              </div>
+              </CopyTarget>
             </div>
           )}
 
@@ -831,74 +1062,121 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
             </div>
           )}
 
-          {!!plainValue(props.selectedCipher.decNotes, props.selectedCipher.notes).trim() && (
+          {!!noteText.trim() && (
             <div className="card">
               <DetailSectionHead icon={<StickyNote size={15} />} title={t('txt_notes')} />
-              <div className="notes">{plainValue(props.selectedCipher.decNotes, props.selectedCipher.notes)}</div>
-            </div>
-          )}
-
-          {(props.selectedCipher.fields || []).some((x) => parseFieldType(x.type) !== 3) && (
-            <div className="card">
-              <DetailSectionHead icon={<List size={15} />} title={t('txt_custom_fields')} />
-              {(props.selectedCipher.fields || [])
-                .filter((x) => parseFieldType(x.type) !== 3)
-                .map((field, index) => {
-                  const fieldType = parseFieldType(field.type);
-                  const fieldName = plainValue(field.decName, field.name) || t('txt_field');
-                  const rawValue = plainValue(field.decValue, field.value);
-                  const isHiddenVisible = !!props.hiddenFieldVisibleMap[index];
-                  if (fieldType === 2) {
-                    const checked = toBooleanFieldValue(rawValue);
-                    return (
-                      <div key={`view-field-${index}`} className="custom-field-card">
-                        <div className="custom-field-label">{fieldName}</div>
-                        <div className="custom-field-body">
-                          <div className="custom-field-value">
-                            <label className="check-line cf-check view custom-field-check">
-                              <input type="checkbox" checked={checked} disabled />
-                              <span className="boolean-text value-ellipsis" title={checked ? t('txt_checked') : t('txt_unchecked')}>
-                                {checked ? t('txt_checked') : t('txt_unchecked')}
-                              </span>
-                            </label>
-                          </div>
-                          <div className="kv-actions">
-                            <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(rawValue)}>
-                              <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
+              <div className="note-actions">
+                <button type="button" className="btn btn-secondary small" onClick={() => void copyToClipboard(noteText)}>
+                  <Clipboard size={14} className="btn-icon" /> {t('txt_copy_note')}
+                </button>
+              </div>
+              {noteBlocks.map((block, index) => {
+                if (block.kind === 'text') {
+                  return <div key={`note-${index}`} className="notes">{block.text}</div>;
+                }
+                if (block.kind === 'pem') {
                   return (
-                    <div key={`view-field-${index}`} className="custom-field-card">
-                      <div className="custom-field-label" title={fieldName}>{fieldName}</div>
-                      <div className="custom-field-body">
-                        <div className="custom-field-value">
-                          <strong
-                            className={fieldType === 1 && !isHiddenVisible ? 'value-ellipsis' : 'custom-field-display'}
-                            title={fieldType === 1 && !isHiddenVisible ? '' : rawValue}
-                          >
-                            {fieldType === 1 && !isHiddenVisible ? maskSecret(rawValue) : rawValue}
-                          </strong>
-                        </div>
-                        <div className="kv-actions">
-                        {fieldType === 1 && (
-                          <button type="button" className="btn btn-secondary small" onClick={() => props.onToggleHiddenField(index)}>
-                            {isHiddenVisible ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
-                            {isHiddenVisible ? t('txt_hide') : t('txt_reveal')}
-                          </button>
-                        )}
-                        <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(rawValue)}>
-                          <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
+                    <div key={`note-${index}`} className="note-block">
+                      <div className="note-block-head">
+                        <button type="button" className="btn btn-secondary small" onClick={() => void copyToClipboard(block.text)}>
+                          <Clipboard size={14} className="btn-icon" /> {t('txt_copy_all')}
                         </button>
-                        </div>
+                      </div>
+                      <pre className="note-pem">{block.text}</pre>
+                    </div>
+                  );
+                }
+                if (block.kind === 'recoveryCodes') {
+                  return (
+                    <div key={`note-${index}`} className="note-block">
+                      <div className="note-block-head">
+                        <button
+                          type="button"
+                          className="btn btn-secondary small"
+                          onClick={() => void copyToClipboard(block.codes.join('\n'))}
+                        >
+                          <Clipboard size={14} className="btn-icon" /> {t('txt_copy_all')}
+                        </button>
+                      </div>
+                      <div className="note-codes">
+                        {block.codes.map((code, codeIndex) => (
+                          <button
+                            key={`note-code-${index}-${codeIndex}`}
+                            type="button"
+                            className="note-code"
+                            onClick={() => void copyToClipboard(code)}
+                          >
+                            {code}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   );
-                })}
+                }
+                return (
+                  <div key={`note-${index}`} className="note-pairs">
+                    {block.pairs.map((pair, pairIndex) => {
+                      const pairKey = `note-pair-${index}-${pairIndex}`;
+                      const pairRevealed = !!revealedFields[pairKey];
+                      const PairIcon = FIELD_KIND_ICONS[presentField(pair.label, 0).kind];
+                      return (
+                        <CopyTarget
+                          key={pairKey}
+                          className="kv-field"
+                          label={pair.label}
+                          onCopy={() => void copyToClipboard(pair.value)}
+                        >
+                          <span className="kv-field-icon" aria-hidden="true">
+                            <PairIcon size={15} />
+                          </span>
+                          <div className="kv-field-body">
+                            <span className="kv-field-label">{pair.label}</span>
+                            <div className="kv-field-value">
+                              <strong className="value-ellipsis" title={pair.secret && !pairRevealed ? '' : pair.value}>
+                                {pair.secret && !pairRevealed ? maskSecret(pair.value) : pair.value}
+                              </strong>
+                            </div>
+                          </div>
+                          <div className="kv-actions">
+                            {pair.secret && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary small"
+                                aria-label={`${pairRevealed ? t('txt_hide') : t('txt_reveal')} ${pair.label}`}
+                                title={pairRevealed ? t('txt_hide') : t('txt_reveal')}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setRevealedFields((prev) => ({ ...prev, [pairKey]: !prev[pairKey] }));
+                                }}
+                              >
+                                {pairRevealed ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
+                              </button>
+                            )}
+                            <CopyHint />
+                          </div>
+                        </CopyTarget>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
+          )}
+
+          {customFields.visible.length > 0 && (
+            <div className="card">
+              <DetailSectionHead icon={<List size={15} />} title={t('txt_custom_fields')} />
+              {customFields.visible.map((entry) => renderCustomField(entry))}
+            </div>
+          )}
+
+          {customFields.noise.length > 0 && (
+            <details className="card detail-more-info">
+              <summary>{t('txt_more_info_count', { count: customFields.noise.length })}</summary>
+              <div className="detail-more-info-body">
+                {customFields.noise.map((entry) => renderCustomField(entry))}
+              </div>
+            </details>
           )}
 
           {selectedAttachments.some((attachment) => String(attachment?.id || '').trim()) && (
