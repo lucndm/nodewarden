@@ -661,6 +661,19 @@ export default function VaultPage(props: VaultPageProps) {
     return () => window.removeEventListener('nodewarden:focus-cipher', focusCipher);
   }, []);
 
+  // The palette filters the list the same way typing in the search box does.
+  useEffect(() => {
+    const filterList = (event: Event): void => {
+      const detail = String((event as CustomEvent<string>).detail ?? '');
+      handleSearchInput(detail);
+      // The list filters at once, the delay of the typed search is not wanted
+      // here.
+      setSearchQuery(detail.trim().toLowerCase());
+    };
+    window.addEventListener('nodewarden:vault-filter', filterList);
+    return () => window.removeEventListener('nodewarden:vault-filter', filterList);
+  }, []);
+
   useEffect(() => {
     const focusId = pendingFocusCipherIdRef.current;
     if (!focusId) return;

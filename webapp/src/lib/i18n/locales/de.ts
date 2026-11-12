@@ -1801,6 +1801,9 @@ Object.assign(de, {
   "txt_palette_fields": "Felder",
   "txt_palette_hint": "↑↓ wechseln · Enter öffnen · Esc schließen",
   "txt_palette_no_results": "Keine Ergebnisse",
+  "txt_palette_filter_list": "Liste nach „{query}“ filtern",
+  "txt_palette_clear_filter": "Gesamte Liste anzeigen",
+  "txt_palette_filter": "Tresor-Liste",
 });
 
 export default de;

@@ -1880,6 +1880,9 @@ Object.assign(zhTW, {
   "txt_palette_fields": "欄位",
   "txt_palette_hint": "↑↓ 移動 · Enter 開啟 · Esc 關閉",
   "txt_palette_no_results": "沒有結果",
+  "txt_palette_filter_list": "依「{query}」篩選清單",
+  "txt_palette_clear_filter": "顯示整份清單",
+  "txt_palette_filter": "密碼庫清單",
 });
 
 export default zhTW;

@@ -1801,6 +1801,9 @@ Object.assign(it, {
   "txt_palette_fields": "Campi",
   "txt_palette_hint": "↑↓ per spostarsi · Invio per aprire · Esc per chiudere",
   "txt_palette_no_results": "Nessun risultato",
+  "txt_palette_filter_list": "Filtra l'elenco per “{query}”",
+  "txt_palette_clear_filter": "Mostra tutto l'elenco",
+  "txt_palette_filter": "Elenco della vault",
 });
 
 export default it;

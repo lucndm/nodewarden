@@ -1880,6 +1880,9 @@ Object.assign(en, {
   "txt_palette_fields": "Fields",
   "txt_palette_hint": "↑↓ to move · Enter to open · Esc to close",
   "txt_palette_no_results": "No results",
+  "txt_palette_filter_list": "Filter the list by “{query}”",
+  "txt_palette_clear_filter": "Show the whole list",
+  "txt_palette_filter": "Vault list",
 });
 
 export default en;

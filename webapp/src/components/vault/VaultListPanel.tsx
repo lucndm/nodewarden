@@ -19,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Search,
   ShieldUser,
   Star,
   StickyNote,
@@ -149,6 +150,13 @@ function dateGroupLabel(cipher: Cipher, previous?: Cipher): string | undefined {
 function keyboardMenuAllowed(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return !window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+}
+
+// The key of the shortcut on the keyboard of the machine.
+function shortcutKeyLabel(): string {
+  if (typeof navigator === 'undefined') return 'Ctrl P';
+  const source = `${navigator.platform || ''} ${navigator.userAgent || ''}`;
+  return /mac|iphone|ipad|ipod/i.test(source) ? '⌘ P' : 'Ctrl P';
 }
 
 const CipherListItem = memo(function CipherListItem(props: CipherListItemProps) {
@@ -346,7 +354,29 @@ export default function VaultListPanel(props: VaultListPanelProps) {
     </div>
   );
 
-  const searchControl = (
+  // The palette of the shortcut opens from the search bar of the desktop.
+  const openPalette = (query: string): void => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('nodewarden:open-palette', { detail: { query } }));
+  };
+
+  const clearButton = (
+    <button
+      type="button"
+      className="search-clear-btn"
+      aria-label={t('txt_clear_search')}
+      title={t('txt_clear_search_esc')}
+      onClick={(event) => {
+        // The bar opens the palette, the button only empties the filter.
+        event.stopPropagation();
+        props.onClearSearch();
+      }}
+    >
+      <X size={14} />
+    </button>
+  );
+
+  const searchControl = props.isMobileLayout ? (
     <div className="search-input-wrap">
       <input
         className="search-input"
@@ -361,11 +391,42 @@ export default function VaultListPanel(props: VaultListPanelProps) {
           props.onClearSearch();
         }}
       />
-      {!!props.searchInput && (
-        <button type="button" className="search-clear-btn" aria-label={t('txt_clear_search')} title={t('txt_clear_search_esc')} onClick={props.onClearSearch}>
-          <X size={14} />
-        </button>
-      )}
+      {!!props.searchInput && clearButton}
+    </div>
+  ) : (
+    <div className="search-input-wrap">
+      <button
+        type="button"
+        className="search-input search-trigger"
+        aria-haspopup="dialog"
+        aria-label={props.searchInput ? `${t('txt_command_palette')}: ${props.searchInput}` : t('txt_command_palette')}
+        onClick={() => openPalette(props.searchInput)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            if (!props.searchInput) return;
+            event.preventDefault();
+            props.onClearSearch();
+            return;
+          }
+          if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
+            event.preventDefault();
+            openPalette(props.searchInput);
+            return;
+          }
+          // A typed character opens the palette with it.
+          if (event.key.length !== 1) return;
+          if (event.ctrlKey || event.metaKey || event.altKey) return;
+          event.preventDefault();
+          openPalette(event.key);
+        }}
+      >
+        <Search size={15} />
+        <span className={props.searchInput ? 'search-trigger-label' : 'search-trigger-label search-trigger-placeholder'}>
+          {props.searchInput || t('txt_search_your_secure_vault')}
+        </span>
+        {!props.searchInput && <kbd className="search-shortcut">{shortcutKeyLabel()}</kbd>}
+      </button>
+      {!!props.searchInput && clearButton}
     </div>
   );
 

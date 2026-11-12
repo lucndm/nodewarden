@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeQuery, searchPalette, type PageEntry, type PaletteEntry } from '../webapp/src/lib/command-palette';
+import { normalizeQuery, searchPalette, withListFilter, type PageEntry, type PaletteEntry } from '../webapp/src/lib/command-palette';
 import type { Cipher } from '../webapp/src/lib/types';
 
 const PAGES: PageEntry[] = [
@@ -139,6 +139,10 @@ function fieldEntries(results: PaletteEntry[]): Array<Extract<PaletteEntry, { ki
   return results.filter((entry): entry is Extract<PaletteEntry, { kind: 'field' }> => entry.kind === 'field');
 }
 
+function filterEntries(results: PaletteEntry[]): Array<Extract<PaletteEntry, { kind: 'filter' }>> {
+  return results.filter((entry): entry is Extract<PaletteEntry, { kind: 'filter' }> => entry.kind === 'filter');
+}
+
 test('a query loses its case, its diacritics and its extra spaces', () => {
   assert.equal(normalizeQuery('  Đăng  NHẬP '), 'dang nhap');
 });
@@ -234,4 +238,66 @@ test('no result carries a secret of an item', () => {
       }
     }
   }
+});
+
+test('a query in the vault offers to filter the list with it', () => {
+  const results = withListFilter(searchPalette('bank', PAGES, CIPHERS), 'bank', {
+    listFilterAvailable: true,
+    activeFilter: '',
+  });
+
+  assert.equal(results[0].kind, 'filter');
+  const filters = filterEntries(results);
+  assert.equal(filters.length, 1);
+  assert.equal(filters[0].id, 'filter');
+  assert.ok(filters[0].label.includes('bank'));
+});
+
+test('a palette that puts the filter row last offers it behind the results', () => {
+  const results = withListFilter(searchPalette('bank', PAGES, CIPHERS), 'bank', {
+    listFilterAvailable: true,
+    activeFilter: '',
+    placement: 'last',
+  });
+
+  // The first row is the first result of the search, so the chosen row
+  // opens the result and not the filter of the list.
+  const first = searchPalette('bank', PAGES, CIPHERS)[0];
+  assert.equal(results[0].kind, first.kind);
+  assert.equal(results[0].id, first.id);
+  assert.notEqual(results[0].kind, 'filter');
+  const filters = filterEntries(results);
+  assert.equal(filters.length, 1);
+  assert.equal(filters[0].id, 'filter');
+  assert.equal(results[results.length - 1].kind, 'filter');
+});
+
+test('an empty query in a filtered vault offers to show the whole list', () => {
+  const results = withListFilter(searchPalette('', PAGES, CIPHERS), '', {
+    listFilterAvailable: true,
+    activeFilter: 'bank',
+  });
+
+  const filters = filterEntries(results);
+  assert.equal(filters.length, 1);
+  assert.equal(filters[0].id, 'filter-clear');
+  assert.equal(results[0].kind, 'filter');
+});
+
+test('a page outside the vault offers no filter of a list', () => {
+  const results = withListFilter(searchPalette('bank', PAGES, CIPHERS), 'bank', {
+    listFilterAvailable: false,
+    activeFilter: 'bank',
+  });
+
+  assert.equal(filterEntries(results).length, 0);
+});
+
+test('a vault without a filter offers no filter of a list', () => {
+  const results = withListFilter(searchPalette('', PAGES, CIPHERS), '', {
+    listFilterAvailable: true,
+    activeFilter: '',
+  });
+
+  assert.equal(filterEntries(results).length, 0);
 });

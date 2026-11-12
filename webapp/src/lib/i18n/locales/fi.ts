@@ -1801,6 +1801,9 @@ Object.assign(fi, {
   "txt_palette_fields": "Kentät",
   "txt_palette_hint": "↑↓ vaihda · Enter avaa · Esc sulje",
   "txt_palette_no_results": "Ei tuloksia",
+  "txt_palette_filter_list": "Suodata listaa hakusanalla ”{query}”",
+  "txt_palette_clear_filter": "Näytä koko lista",
+  "txt_palette_filter": "Holpin luettelo",
 });
 
 export default fi;

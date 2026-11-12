@@ -1801,6 +1801,9 @@ Object.assign(es, {
   "txt_palette_fields": "Campos",
   "txt_palette_hint": "↑↓ para moverse · Enter para abrir · Esc para cerrar",
   "txt_palette_no_results": "Sin resultados",
+  "txt_palette_filter_list": "Filtrar la lista por «{query}»",
+  "txt_palette_clear_filter": "Mostrar toda la lista",
+  "txt_palette_filter": "Lista de la bóveda",
 });
 
 export default es;

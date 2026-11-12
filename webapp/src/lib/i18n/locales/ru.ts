@@ -1801,6 +1801,9 @@ Object.assign(ru, {
   "txt_palette_fields": "Поля",
   "txt_palette_hint": "↑↓ — перемещение · Enter — открыть · Esc — закрыть",
   "txt_palette_no_results": "Ничего не найдено",
+  "txt_palette_filter_list": "Фильтровать список по «{query}»",
+  "txt_palette_clear_filter": "Показать весь список",
+  "txt_palette_filter": "Список хранилища",
 });
 
 export default ru;
