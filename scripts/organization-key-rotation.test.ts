@@ -260,7 +260,6 @@ test('a collection name that is still plain text is sealed with the new key', as
 test('a collection name that cannot be read stays as it is', async () => {
   const owner = await memberKeyPair();
   const oldOrganizationKey = randomKey();
-  const oldHalves = halves(oldOrganizationKey);
   // A well-formed encrypted string that was made with another key: the name
   // was broken before this rotation.
   const otherHalves = halves(randomKey());

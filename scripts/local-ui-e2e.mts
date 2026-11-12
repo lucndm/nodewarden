@@ -991,11 +991,14 @@ async function main() {
     // The name of a collection is sealed with the organization key, and the
     // rotation sealed it again with the new one: the sidebar shows the name
     // and not the ciphertext it was before.
-    await waitFor(
-      `[...document.querySelectorAll('.sidebar .tree-btn')].some((button) => button.textContent.includes(${JSON.stringify(seeded.collectionName)}))`,
-      'the collection name in the sidebar',
-      20000
-    ).catch(() => false);
+    const sidebarDeadline = Date.now() + 20000;
+    while (Date.now() < sidebarDeadline) {
+      const names = await evaluate(
+        `[...document.querySelectorAll('.sidebar .tree-btn')].map((button) => button.textContent.trim())`
+      ).catch(() => []);
+      if (Array.isArray(names) && names.some((name) => name.includes(seeded.collectionName))) break;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
     const sidebarCollections = await evaluate(`(() => {
       const buttons = [...document.querySelectorAll('.sidebar .tree-btn')];
       const names = buttons.map((button) => button.textContent.trim());
