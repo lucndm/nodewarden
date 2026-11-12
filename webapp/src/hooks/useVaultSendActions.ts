@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'preact/hooks';
 import { cipherFieldMetadata } from '@/lib/cipher-fields';
 import type { ImportAttachmentFile, ImportResultSummary } from '@/components/ImportPage';
-import type { ExportRequest, ZipAttachmentEntry } from '@/lib/export-formats';
+import type { ExportRequest, ExportScope, NodeWardenAttachmentRecord, ZipAttachmentEntry } from '@/lib/export-formats';
 import {
   attachNodeWardenEncryptedAttachmentPayload,
   buildAccountEncryptedBitwardenJsonString,
   buildBitwardenCsvString,
+  buildBitwardenOrganizationCsvString,
   buildBitwardenZipBytes,
   buildExportFileName,
   buildNodeWardenAttachmentRecords,
@@ -13,8 +14,9 @@ import {
   buildPasswordProtectedBitwardenJsonString,
   buildPlainBitwardenJsonString,
   encryptZipBytesWithPassword,
+  isOrganizationExportFormat,
 } from '@/lib/export-formats';
-import { base64ToBytes, decryptBw, decryptBwFileData, decryptStr } from '@/lib/crypto';
+import { base64ToBytes, bytesToBase64, decryptBw, decryptBwFileData, decryptStr } from '@/lib/crypto';
 import { decryptSingleCipher } from '@/lib/decrypt-cipher';
 import { t } from '@/lib/i18n';
 import {
@@ -58,7 +60,8 @@ import {
 import { decryptItemHistoryEntry, decryptItemHistoryVersion, type ItemHistoryEntry, type ItemHistoryVersion } from '@/lib/item-history';
 import { deriveLoginHash, getPreloginKdfConfig, verifyMasterPassword } from '@/lib/api/auth';
 import type { AuthedFetch } from '@/lib/api/shared';
-import type { VaultOrganization } from '@/lib/api/organizations';
+import { recordOrganizationExport, type VaultCollection, type VaultOrganization } from '@/lib/api/organizations';
+import { decryptCollectionNames, openOrganizationKeys } from '@/lib/vault-decrypt';
 import { openOrganizationKey } from '@/lib/organization-key-rotation';
 import { downloadBytesAsFile } from '@/lib/download';
 import type { Cipher, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, VaultDraft } from '@/lib/types';
@@ -76,6 +79,8 @@ interface UseVaultSendActionsOptions {
   decryptedFolders: VaultFolder[];
   /** The organizations the member belongs to, with the key wrapped for them. */
   organizations: VaultOrganization[];
+  /** The collections of those organizations, with the name as the server holds it. */
+  collections: VaultCollection[];
   refetchCiphers: () => Promise<{ data?: Cipher[] | undefined } | unknown>;
   refetchFolders: () => Promise<{ data?: VaultFolder[] | undefined } | unknown>;
   refetchSends: () => Promise<unknown>;
@@ -304,6 +309,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
     encryptedFolders,
     decryptedFolders,
     organizations,
+    collections,
     refetchCiphers,
     refetchFolders,
     refetchSends,
@@ -1343,18 +1349,67 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         const rawCiphers = encryptedCiphers || [];
         if (!rawFolders || !rawCiphers) throw new Error(t('txt_vault_not_ready'));
 
+        // The key the export is written with: the member's own key for the
+        // personal vault, the organization key for an organization.
+        let scope: ExportScope = { kind: 'personal' };
+        let exportEncB64 = session.symEncKey!;
+        let exportMacB64 = session.symMacKey!;
+
+        const organizationId = String(request.organizationId || '').trim();
+        if (organizationId) {
+          const organization = organizations.find((entry) => entry.id === organizationId);
+          if (!organization || (organization.type !== 0 && organization.type !== 1) || organization.status !== 2) {
+            throw new Error(t('txt_export_org_not_allowed'));
+          }
+          // The organization key is wrapped for this member with their RSA
+          // key, so it opens here or nowhere.
+          const organizationKeys = await openOrganizationKeys({
+            organizations: [organization],
+            symEncKeyB64: session.symEncKey!,
+            symMacKeyB64: session.symMacKey!,
+            encryptedPrivateKey: profile?.privateKey ?? null,
+          });
+          const organizationKey = organizationKeys.get(organizationId);
+          if (!organizationKey) throw new Error(t('txt_export_org_key_unavailable'));
+
+          const organizationCollections = collections.filter((entry) => entry.organizationId === organizationId);
+          const storedNameById = new Map(organizationCollections.map((entry) => [entry.id, entry.name]));
+          const decrypted = await decryptCollectionNames({
+            collections: organizationCollections,
+            organizations: [organization],
+            symEncKeyB64: session.symEncKey!,
+            symMacKeyB64: session.symMacKey!,
+            encryptedPrivateKey: profile?.privateKey ?? null,
+            organizationKeys,
+          });
+
+          scope = {
+            kind: 'organization',
+            organizationId,
+            collections: decrypted.map((entry) => ({
+              id: entry.id,
+              name: entry.name,
+              encryptedName: storedNameById.get(entry.id) ?? entry.name,
+              externalId: null,
+            })),
+          };
+          exportEncB64 = bytesToBase64(organizationKey.encKey);
+          exportMacB64 = bytesToBase64(organizationKey.macKey);
+        }
+
         let plainJsonCache: string | null = null;
         let plainJsonDocCache: Record<string, unknown> | null = null;
         let encryptedJsonCache: string | null = null;
-        let nodeWardenAttachmentsCache: ReturnType<typeof buildNodeWardenAttachmentRecords> | null = null;
+        let nodeWardenAttachmentsCache: NodeWardenAttachmentRecord[] | null = null;
 
         const getPlainJson = async () => {
           if (!plainJsonCache) {
             plainJsonCache = await buildPlainBitwardenJsonString({
               folders: rawFolders,
               ciphers: rawCiphers,
-              userEncB64: session.symEncKey!,
-              userMacB64: session.symMacKey!,
+              userEncB64: exportEncB64,
+              userMacB64: exportMacB64,
+              scope,
             });
           }
           return plainJsonCache;
@@ -1372,8 +1427,9 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
             encryptedJsonCache = await buildAccountEncryptedBitwardenJsonString({
               folders: rawFolders,
               ciphers: rawCiphers,
-              userEncB64: session.symEncKey!,
-              userMacB64: session.symMacKey!,
+              userEncB64: exportEncB64,
+              userMacB64: exportMacB64,
+              scope,
             });
           }
           return encryptedJsonCache;
@@ -1461,18 +1517,26 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
 
         let result: { fileName: string; mimeType: string; bytes: Uint8Array } | null = null;
         const format = request.format;
+        const isOrganization = scope.kind === 'organization';
+        if (isOrganization && !isOrganizationExportFormat(format)) {
+          throw new Error(t('txt_unsupported_export_format'));
+        }
 
         if (format === 'bitwarden_json') {
           result = {
-            fileName: buildExportFileName(format),
+            fileName: buildExportFileName(format, false, isOrganization),
             mimeType: 'application/json',
             bytes: new TextEncoder().encode(await getPlainJson()),
           };
         } else if (format === 'bitwarden_csv') {
           result = {
-            fileName: buildExportFileName(format),
+            fileName: buildExportFileName(format, false, isOrganization),
             mimeType: 'text/csv;charset=utf-8',
-            bytes: new TextEncoder().encode(buildBitwardenCsvString(await getPlainJsonDoc())),
+            bytes: new TextEncoder().encode(
+              isOrganization
+                ? buildBitwardenOrganizationCsvString(await getPlainJsonDoc())
+                : buildBitwardenCsvString(await getPlainJsonDoc())
+            ),
           };
         } else if (format === 'bitwarden_encrypted_json') {
           if (request.encryptedJsonMode === 'password') {
@@ -1484,13 +1548,13 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
               kdf,
             });
             result = {
-              fileName: buildExportFileName(format),
+              fileName: buildExportFileName(format, false, isOrganization),
               mimeType: 'application/json',
               bytes: new TextEncoder().encode(encrypted),
             };
           } else {
             result = {
-              fileName: buildExportFileName(format),
+              fileName: buildExportFileName(format, false, isOrganization),
               mimeType: 'application/json',
               bytes: new TextEncoder().encode(await getEncryptedJson()),
             };
@@ -1557,6 +1621,23 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         }
 
         if (!result) throw new Error(t('txt_unsupported_export_format'));
+
+        // An export of an organization leaves a record on the server. The
+        // server never sees the exported data, so this is the only trace of
+        // the export; it is written before the file is handed over, and a
+        // failure here means the export does not happen.
+        if (isOrganization) {
+          let itemCount = 0;
+          if (format === 'bitwarden_encrypted_json' && request.encryptedJsonMode !== 'password') {
+            const encryptedDoc = JSON.parse(await getEncryptedJson()) as { items?: unknown };
+            itemCount = Array.isArray(encryptedDoc.items) ? encryptedDoc.items.length : 0;
+          } else {
+            const plainDoc = await getPlainJsonDoc();
+            itemCount = Array.isArray(plainDoc.items) ? plainDoc.items.length : 0;
+          }
+          await recordOrganizationExport(authedFetch, organizationId, { format, itemCount });
+        }
+
         downloadBytesAsFile(result.bytes, result.fileName, result.mimeType);
       },
       downloadingAttachmentKey,
@@ -1570,6 +1651,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
     attachmentDownloadPercent,
     attachmentUploadPercent,
     authedFetch,
+    collections,
     defaultKdfIterations,
     downloadingAttachmentKey,
     encryptedCiphers,
@@ -1577,6 +1659,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
     decryptedFolders,
     importAuthedFetch,
     onNotify,
+    organizations,
     patchDecryptedCiphers,
     patchDecryptedFolders,
     patchDecryptedSends,

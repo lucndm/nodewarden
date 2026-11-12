@@ -22,6 +22,7 @@ import {
   EXPORT_FORMATS,
   type ExportFormatId,
   type ExportRequest,
+  isOrganizationExportFormat,
 } from '@/lib/export-formats';
 import {
   parseImportPayloadBySource,
@@ -72,6 +73,8 @@ interface ImportPageProps {
   onNotify: (type: 'success' | 'error', text: string) => void;
   folders: Folder[];
   onExport: (request: ExportRequest) => Promise<void>;
+  /** The organizations the member may export: the ones they own or administer. */
+  exportOrganizations?: Array<{ id: string; name: string }>;
   authedFetch?: AuthedFetch | null;
   session?: SessionState | null;
   onRefreshVault?: () => Promise<void>;
@@ -446,7 +449,7 @@ function parseNodeWardenAttachmentArray(raw: unknown): ImportAttachmentFile[] {
   return out;
 }
 
-export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys, onNotify, folders, onExport, authedFetch, session, onRefreshVault }: ImportPageProps) {
+export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys, onNotify, folders, onExport, exportOrganizations, authedFetch, session, onRefreshVault }: ImportPageProps) {
   const [source, setSource] = useState<ImportSourceId>('bitwarden_json');
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -461,6 +464,7 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
   const [folderMode, setFolderMode] = useState<'original' | 'none' | 'target'>('original');
   const [targetFolderId, setTargetFolderId] = useState('');
   const [exportFormat, setExportFormat] = useState<ExportFormatId>('bitwarden_json');
+  const [exportOrganizationId, setExportOrganizationId] = useState('');
   const [encryptedJsonMode, setEncryptedJsonMode] = useState<EncryptedJsonMode>('account');
   const [exportPassword, setExportPassword] = useState('');
   const [zipPassword, setZipPassword] = useState('');
@@ -792,6 +796,17 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
     exportFormat === 'nodewarden_encrypted_json';
   const exportNeedsFilePassword = exportNeedsMode && encryptedJsonMode === 'password';
   const exportIsZip = exportFormat === 'bitwarden_json_zip' || exportFormat === 'bitwarden_encrypted_json_zip';
+  const exportOrganizationOptions = exportOrganizations ?? [];
+  // An organization export carries items and collections only, so the formats
+  // that hold folders or attachments are not offered for it.
+  const exportFormats = exportOrganizationId
+    ? EXPORT_FORMATS.filter((item) => isOrganizationExportFormat(item.id))
+    : EXPORT_FORMATS;
+
+  function handleExportOrganizationChange(next: string) {
+    setExportOrganizationId(next);
+    if (next && !isOrganizationExportFormat(exportFormat)) setExportFormat('bitwarden_json');
+  }
 
   async function runExportWithMasterPassword(masterPassword: string) {
     const filePassword = exportPassword.trim();
@@ -809,6 +824,7 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
         filePassword,
         zipPassword: exportIsZip ? zipPass : '',
         masterPassword,
+        organizationId: exportOrganizationId || null,
       });
       onNotify('success', t('txt_export_completed'));
     } catch (error) {
@@ -927,6 +943,28 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
         <h3>{t('txt_export')}</h3>
         <p className="backup-inline-note">{t('txt_export_vault_data_hint')}</p>
         <div className="field-grid">
+          {exportOrganizationOptions.length > 0 && (
+            <label className="field field-span-2">
+              <span>{t('txt_export_from')}</span>
+              <select
+                className="input"
+                value={exportOrganizationId}
+                onChange={(e) => handleExportOrganizationChange((e.currentTarget as HTMLSelectElement).value)}
+              >
+                <option value="">{t('txt_export_from_my_vault')}</option>
+                {exportOrganizationOptions.map((organization) => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {exportOrganizationId && (
+            <p className="field-help field-span-2">{t('txt_export_org_help')}</p>
+          )}
+
           <label className="field field-span-2">
             <span>{t('txt_format')}</span>
             <select
@@ -937,7 +975,7 @@ export default function ImportPage({ onImport, onImportEncryptedRaw, accountKeys
                 setExportFormat(next);
               }}
             >
-              {EXPORT_FORMATS.map((item) => (
+              {exportFormats.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.label}
                 </option>

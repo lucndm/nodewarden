@@ -1887,6 +1887,123 @@ async function main() {
     }
     await cdp.send('Emulation.clearDeviceMetricsOverride', {}, sessionId);
 
+    // The export page offers the organizations the member may export, and an
+    // organization export carries items and collections only.
+    await gotoPath('/backup/import-export');
+    await waitFor(`!!document.querySelector('.import-export-panels')`, 'the import and export page', 20000);
+    const exportPanel = await evaluate(`(() => {
+      const panel = [...document.querySelectorAll('section.import-export-panel')].find(
+        (section) => (section.querySelector('h3')?.textContent || '').trim() === 'Export'
+      );
+      if (!panel) return null;
+      const labelOf = (text) => [...panel.querySelectorAll('label.field')].find((label) => {
+        const span = label.querySelector('span');
+        return span && (span.textContent || '').trim() === text;
+      });
+      const scopeSelect = labelOf('Export from')?.querySelector('select') || null;
+      const formatSelect = labelOf('Format')?.querySelector('select') || null;
+      return {
+        scopeOptions: scopeSelect ? [...scopeSelect.options].map((option) => (option.textContent || '').trim()) : [],
+        formatOptions: formatSelect ? [...formatSelect.options].map((option) => (option.textContent || '').trim()) : [],
+        help: [...panel.querySelectorAll('.field-help')].map((element) => (element.textContent || '').trim()),
+      };
+    })()`);
+    checks.ok(
+      'the export page offers the organizations the member may export',
+      Array.isArray(exportPanel?.scopeOptions) && exportPanel.scopeOptions.includes('UI Team'),
+      JSON.stringify(exportPanel?.scopeOptions || [])
+    );
+
+    const picked = await evaluate(`(() => {
+      const panel = [...document.querySelectorAll('section.import-export-panel')].find(
+        (section) => (section.querySelector('h3')?.textContent || '').trim() === 'Export'
+      );
+      const label = panel && [...panel.querySelectorAll('label.field')].find((entry) => {
+        const span = entry.querySelector('span');
+        return span && (span.textContent || '').trim() === 'Export from';
+      });
+      const select = label && label.querySelector('select');
+      if (!select) return false;
+      const option = [...select.options].find((entry) => (entry.textContent || '').trim() === 'UI Team');
+      if (!option) return false;
+      select.value = option.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const organizationExport = await evaluate(`(() => {
+      const panel = [...document.querySelectorAll('section.import-export-panel')].find(
+        (section) => (section.querySelector('h3')?.textContent || '').trim() === 'Export'
+      );
+      if (!panel) return null;
+      const label = [...panel.querySelectorAll('label.field')].find((entry) => {
+        const span = entry.querySelector('span');
+        return span && (span.textContent || '').trim() === 'Format';
+      });
+      const select = label && label.querySelector('select');
+      return {
+        formatOptions: select ? [...select.options].map((option) => (option.textContent || '').trim()) : [],
+        help: [...panel.querySelectorAll('.field-help')].map((element) => (element.textContent || '').trim()),
+      };
+    })()`);
+    checks.ok(
+      'an organization export offers only the formats that carry items and collections',
+      picked === true && organizationExport?.formatOptions?.length === 3,
+      JSON.stringify(organizationExport?.formatOptions || [])
+    );
+    checks.ok(
+      'an organization export says what it leaves out',
+      (organizationExport?.help || []).some((text) => text.includes('Folders and favorites are personal')),
+      JSON.stringify(organizationExport?.help || [])
+    );
+
+    // The export itself leaves a record on the server, so the log center
+    // names it. The file itself is not caught here: the script has no way to
+    // hold a download.
+    await evaluate(`(() => {
+      const panel = [...document.querySelectorAll('section.import-export-panel')].find(
+        (section) => (section.querySelector('h3')?.textContent || '').trim() === 'Export'
+      );
+      const label = panel && [...panel.querySelectorAll('label.field')].find((entry) => {
+        const span = entry.querySelector('span');
+        return span && (span.textContent || '').trim() === 'Format';
+      });
+      const select = label && label.querySelector('select');
+      if (!select) return false;
+      select.value = 'bitwarden_json';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    await evaluate(`(() => {
+      const panel = [...document.querySelectorAll('section.import-export-panel')].find(
+        (section) => (section.querySelector('h3')?.textContent || '').trim() === 'Export'
+      );
+      const button = panel && [...panel.querySelectorAll('button')].find((entry) => (entry.textContent || '').trim() === 'Export');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    await waitFor(`document.querySelector('[role=dialog]') !== null`, 'the master password dialog', 10000);
+    await evaluate(fill('Master Password', PASSWORD));
+    await evaluate(clickInDialog('Verify'));
+    await waitFor(`document.body.textContent.includes('Export completed')`, 'the export to finish', 30000);
+
+    await gotoPath('/logs');
+    await waitFor(`!!document.querySelector('.log-list')`, 'the log center', 20000);
+    // The log center was opened earlier in this run, so its first paint can be
+    // the cached list; give the refetch time to bring the new record in.
+    await waitFor(
+      `(document.querySelector('.log-list')?.textContent || '').includes('Export organization vault')`,
+      'the export record in the log center',
+      20000
+    ).catch(() => false);
+    const logText = await evaluate(`document.querySelector('.log-list')?.textContent || ''`);
+    checks.ok(
+      'the log center names the export of the organization',
+      logText.includes('Export organization vault'),
+      logText.slice(0, 200)
+    );
+
     return checks.finish() ? 0 : 1;
   } finally {
     if (browser) await browser.stop();

@@ -163,6 +163,7 @@ import {
   handleGetOrganizationKeys,
   handleInviteOrganizationUser,
   handleLeaveOrganization,
+  handleRecordOrganizationExport,
   handleSetOrganizationKeys,
   handleUnsupportedOrganizationAction,
 } from './handlers/organizations';
@@ -716,6 +717,16 @@ export async function handleAuthenticatedRoute(
     const rotateMatch = path.match(/^\/api\/organizations\/([^/]+)\/rotate-key$/i);
     if (rotateMatch) {
       if (method === 'POST') return handleRotateOrganizationKey(request, env, userId, rotateMatch[1]);
+      return handleUnsupportedOrganizationAction();
+    }
+
+    // POST /api/organizations/:orgId/export-events — the record of an export
+    // of the organization's items.
+    const exportEventsMatch = path.match(/^\/api\/organizations\/([^/]+)\/export-events$/i);
+    if (exportEventsMatch) {
+      if (method === 'POST') {
+        return handleRecordOrganizationExport(request, env, userId, exportEventsMatch[1]);
+      }
       return handleUnsupportedOrganizationAction();
     }
 
