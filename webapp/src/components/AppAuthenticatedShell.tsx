@@ -77,6 +77,12 @@ export default function AppAuthenticatedShell(props: AppAuthenticatedShellProps)
   const [expandedGroups, setExpandedGroups] = useState<ExpandedGroups>(readExpandedGroups);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteSignal, setPaletteSignal] = useState(0);
+  const [paletteQuery, setPaletteQuery] = useState('');
+  // The palette that opens from the search bar filters the list of the vault,
+  // so its filter row comes first. The palette that opens with the shortcut
+  // searches the app, so its filter row comes last and the first result
+  // stays the chosen one.
+  const [palettePlacement, setPalettePlacement] = useState<'first' | 'last'>('last');
 
   // The pages of the palette follow the menu: only the destinations the
   // member may open are listed, and the tabs of the settings page lead to
@@ -119,11 +125,26 @@ export default function AppAuthenticatedShell(props: AppAuthenticatedShellProps)
       // Another dialog is open: the shortcut belongs to that dialog.
       if (document.querySelector('[role="dialog"][aria-modal="true"]:not(.palette-card)')) return;
       event.preventDefault();
+      setPaletteQuery('');
+      setPalettePlacement('last');
       setPaletteOpen(true);
       setPaletteSignal((signal) => signal + 1);
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
+
+  // The search bar of the vault opens the palette with the filter it holds.
+  useEffect(() => {
+    const openPalette = (event: Event): void => {
+      const detail = (event as CustomEvent<{ query?: string }>).detail;
+      setPaletteQuery(String(detail?.query ?? ''));
+      setPalettePlacement('first');
+      setPaletteOpen(true);
+      setPaletteSignal((signal) => signal + 1);
+    };
+    window.addEventListener('nodewarden:open-palette', openPalette);
+    return () => window.removeEventListener('nodewarden:open-palette', openPalette);
   }, []);
 
   function toggleGroup(group: NavGroup): void {
@@ -229,6 +250,9 @@ export default function AppAuthenticatedShell(props: AppAuthenticatedShellProps)
         pages={palettePages}
         ciphers={props.paletteCiphers}
         focusSignal={paletteSignal}
+        initialQuery={paletteQuery}
+        listFilterAvailable={props.location === '/vault'}
+        listFilterPlacement={palettePlacement}
         onClose={() => setPaletteOpen(false)}
         onTrackPasswordCopy={props.onTrackPasswordCopy}
       />

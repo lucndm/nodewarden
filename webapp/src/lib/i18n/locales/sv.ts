@@ -1801,6 +1801,9 @@ Object.assign(sv, {
   "txt_palette_fields": "Fält",
   "txt_palette_hint": "↑↓ flytta · Enter öppna · Esc stänga",
   "txt_palette_no_results": "Inga resultat",
+  "txt_palette_filter_list": "Filtrera listan efter ”{query}”",
+  "txt_palette_clear_filter": "Visa hela listan",
+  "txt_palette_filter": "Vaultlista",
 });
 
 export default sv;

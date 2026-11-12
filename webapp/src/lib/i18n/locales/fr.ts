@@ -1801,6 +1801,9 @@ Object.assign(fr, {
   "txt_palette_fields": "Champs",
   "txt_palette_hint": "↑↓ pour naviguer · Entrée pour ouvrir · Échap pour fermer",
   "txt_palette_no_results": "Aucun résultat",
+  "txt_palette_filter_list": "Filtrer la liste par « {query} »",
+  "txt_palette_clear_filter": "Afficher toute la liste",
+  "txt_palette_filter": "Liste du coffre",
 });
 
 export default fr;

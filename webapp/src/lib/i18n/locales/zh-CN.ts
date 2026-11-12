@@ -1830,6 +1830,9 @@ Object.assign(zhCN, {
   "txt_palette_fields": "字段",
   "txt_palette_hint": "↑↓ 移动 · Enter 打开 · Esc 关闭",
   "txt_palette_no_results": "没有结果",
+  "txt_palette_filter_list": "按“{query}”筛选列表",
+  "txt_palette_clear_filter": "显示整个列表",
+  "txt_palette_filter": "密码库列表",
 });
 
 export default zhCN;

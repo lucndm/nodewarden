@@ -29,7 +29,10 @@ export interface PageEntry {
 export type PaletteEntry =
   | ({ kind: 'page' } & PageEntry)
   | { kind: 'item'; id: string; cipherId: string; label: string; hint: string }
-  | { kind: 'field'; id: string; cipherId: string; label: string; hint: string; field: PaletteField };
+  | { kind: 'field'; id: string; cipherId: string; label: string; hint: string; field: PaletteField }
+  // A row that filters the list of the vault. It is not a result of the
+  // search, it is put in front of the results by the dialog.
+  | { kind: 'filter'; id: 'filter' | 'filter-clear'; label: string; hint?: string };
 
 const PAGE_LIMIT = 8;
 const ITEM_LIMIT = 20;
@@ -47,8 +50,9 @@ const BUILT_IN_FIELDS: Record<'username' | 'password' | 'totp' | 'cardNumber' | 
 };
 
 // The order of the kinds decides which result comes first when two results
-// match the search equally well.
-const KIND_ORDER: Record<PaletteEntry['kind'], number> = { page: 0, item: 1, field: 2 };
+// match the search equally well. The filter row is not a result, it is put
+// in front of the results by the dialog.
+const KIND_ORDER: Record<PaletteEntry['kind'], number> = { filter: -1, page: 0, item: 1, field: 2 };
 
 interface Scored {
   score: number;
@@ -261,4 +265,31 @@ export function searchPalette(
   ];
   const limit = options?.limit;
   return typeof limit === 'number' && limit >= 0 ? entries.slice(0, limit) : entries;
+}
+
+/**
+ * The rows that filter the list of the vault. A query offers to filter the
+ * list with it, and an empty query offers to take the filter away when the
+ * list carries one.
+ *
+ * The placement says where the row goes: 'first' puts it in front of the
+ * results, 'last' puts it behind them. The palette that opens from the
+ * search bar filters the list with the text of the bar, so its row comes
+ * first; the palette that opens with the shortcut searches the app, so its
+ * row comes last and the first result stays the chosen one.
+ */
+export function withListFilter(
+  entries: PaletteEntry[],
+  query: string,
+  options: { listFilterAvailable: boolean; activeFilter: string; placement?: 'first' | 'last' }
+): PaletteEntry[] {
+  if (!options.listFilterAvailable) return entries;
+  const text = query.trim();
+  const filter = text
+    ? { kind: 'filter' as const, id: 'filter' as const, label: t('txt_palette_filter_list', { query: text }) }
+    : options.activeFilter.trim()
+      ? { kind: 'filter' as const, id: 'filter-clear' as const, label: t('txt_palette_clear_filter') }
+      : null;
+  if (!filter) return entries;
+  return options.placement === 'last' ? [...entries, filter] : [filter, ...entries];
 }

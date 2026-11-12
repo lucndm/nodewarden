@@ -1,10 +1,10 @@
 import { createPortal } from 'preact/compat';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { Copy, FileText, KeyRound } from 'lucide-preact';
+import { Copy, FileText, KeyRound, ListFilter, ListX } from 'lucide-preact';
 import { useLocation } from 'wouter';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import { copyToClipboard } from '@/components/vault/vault-page-helpers';
-import { searchPalette, type PageEntry, type PaletteEntry, type PaletteField } from '@/lib/command-palette';
+import { searchPalette, withListFilter, type PageEntry, type PaletteEntry, type PaletteField } from '@/lib/command-palette';
 import { calcTotpNow } from '@/lib/crypto';
 import { presentField } from '@/lib/field-display';
 import { t } from '@/lib/i18n';
@@ -16,6 +16,12 @@ interface CommandPaletteProps {
   ciphers: Cipher[];
   /** Rises every time the shortcut is pressed, so the input takes the focus again. */
   focusSignal: number;
+  /** The text the input starts with. */
+  initialQuery?: string;
+  /** The list of the vault can be filtered from the palette. */
+  listFilterAvailable?: boolean;
+  /** Where the row that filters the list goes: in front of the results or behind them. */
+  listFilterPlacement?: 'first' | 'last';
   onClose: () => void;
   onTrackPasswordCopy?: (cipherId: string) => void;
 }
@@ -65,26 +71,51 @@ export default function CommandPalette(props: CommandPaletteProps) {
 
   // The search only runs while the palette is open.
   const results = useMemo(
-    () => (props.open ? searchPalette(query, props.pages, props.ciphers) : []),
-    [props.open, query, props.pages, props.ciphers]
+    () => (props.open
+      ? withListFilter(searchPalette(query, props.pages, props.ciphers), query, {
+        listFilterAvailable: !!props.listFilterAvailable,
+        activeFilter: props.initialQuery ?? '',
+        placement: props.listFilterPlacement ?? 'first',
+      })
+      : []),
+    [props.open, query, props.pages, props.ciphers, props.listFilterAvailable, props.initialQuery, props.listFilterPlacement]
   );
   const cipherById = useMemo(() => new Map(props.ciphers.map((cipher) => [cipher.id, cipher])), [props.ciphers]);
 
+  const filters = results.filter((entry): entry is Extract<PaletteEntry, { kind: 'filter' }> => entry.kind === 'filter');
   const pages = results.filter((entry): entry is Extract<PaletteEntry, { kind: 'page' }> => entry.kind === 'page');
   const items = results.filter((entry): entry is Extract<PaletteEntry, { kind: 'item' }> => entry.kind === 'item');
   const fields = results.filter((entry): entry is Extract<PaletteEntry, { kind: 'field' }> => entry.kind === 'field');
-  const groups = [
-    { kind: 'page', title: t('txt_palette_pages'), entries: pages, offset: 0 },
-    { kind: 'item', title: t('txt_palette_items'), entries: items, offset: pages.length },
-    { kind: 'field', title: t('txt_palette_fields'), entries: fields, offset: pages.length + items.length },
-  ];
+  // The group of the filter row keeps the place the placement gives it: the
+  // group is drawn in front of the results or behind them. The offset of a
+  // group is the place of its first row in the list of the results.
+  const groupsInOrder = props.listFilterPlacement === 'last'
+    ? [
+      { kind: 'page' as const, title: t('txt_palette_pages'), entries: pages },
+      { kind: 'item' as const, title: t('txt_palette_items'), entries: items },
+      { kind: 'field' as const, title: t('txt_palette_fields'), entries: fields },
+      { kind: 'filter' as const, title: t('txt_palette_filter'), entries: filters },
+    ]
+    : [
+      { kind: 'filter' as const, title: t('txt_palette_filter'), entries: filters },
+      { kind: 'page' as const, title: t('txt_palette_pages'), entries: pages },
+      { kind: 'item' as const, title: t('txt_palette_items'), entries: items },
+      { kind: 'field' as const, title: t('txt_palette_fields'), entries: fields },
+    ];
+  let groupOffset = 0;
+  const groups = groupsInOrder.map((group) => {
+    const offset = groupOffset;
+    groupOffset += group.entries.length;
+    return { ...group, offset };
+  });
   const active = results.length > 0 ? Math.min(activeIndex, results.length - 1) : -1;
 
   useDialogLifecycle(props.open, props.onClose);
 
   useEffect(() => {
     if (!props.open) return;
-    setQuery('');
+    // The palette starts with the text it was opened with.
+    setQuery(props.initialQuery ?? '');
     setActiveIndex(0);
   }, [props.open]);
 
@@ -92,7 +123,11 @@ export default function CommandPalette(props: CommandPaletteProps) {
     if (!props.open || typeof document === 'undefined') return;
     const focused = document.activeElement;
     restoreFocusRef.current = focused instanceof HTMLElement ? focused : null;
-    const frame = window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+    const frame = window.requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+      // The text of the palette is selected, so typing replaces it.
+      inputRef.current?.select();
+    });
     return () => {
       window.cancelAnimationFrame(frame);
       const previous = restoreFocusRef.current;
@@ -119,6 +154,14 @@ export default function CommandPalette(props: CommandPaletteProps) {
   }
 
   async function select(entry: PaletteEntry): Promise<void> {
+    if (entry.kind === 'filter') {
+      // The list of the vault is filtered by the text of the palette.
+      window.dispatchEvent(new CustomEvent('nodewarden:vault-filter', {
+        detail: entry.id === 'filter-clear' ? '' : query.trim(),
+      }));
+      props.onClose();
+      return;
+    }
     if (entry.kind === 'page') {
       const target = entry.settingsSection
         ? `${entry.href}?section=${encodeURIComponent(entry.settingsSection)}`
@@ -218,7 +261,13 @@ export default function CommandPalette(props: CommandPaletteProps) {
                     onClick={() => void select(entry)}
                   >
                     <span className="palette-row-icon" aria-hidden="true">
-                      {entry.kind === 'page' ? <FileText size={16} /> : entry.kind === 'item' ? <KeyRound size={16} /> : <Copy size={16} />}
+                      {entry.kind === 'page'
+                        ? <FileText size={16} />
+                        : entry.kind === 'item'
+                          ? <KeyRound size={16} />
+                          : entry.kind === 'filter'
+                            ? entry.id === 'filter-clear' ? <ListX size={16} /> : <ListFilter size={16} />
+                            : <Copy size={16} />}
                     </span>
                     <span className="palette-row-label">{entry.label}</span>
                     {entry.hint && <span className="palette-row-hint">{entry.hint}</span>}

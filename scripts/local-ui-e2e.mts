@@ -2556,6 +2556,113 @@ async function main() {
       `palette open before: ${paletteBeforeEscape}, after: ${paletteAfterEscape}`
     );
 
+    // The search bar of the vault opens the palette, and the palette filters
+    // the list of the vault. The mouse and the keys go through the browser,
+    // so the check covers what a person does.
+    const clickElement = async (selector) => {
+      const point = await evaluate(`(() => {
+        const target = document.querySelector(${JSON.stringify(selector)});
+        if (!target) return null;
+        const box = target.getBoundingClientRect();
+        if (!box.width || !box.height) return null;
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      })()`);
+      if (!point) return false;
+      const mouse = { x: point.x, y: point.y, button: 'left', clickCount: 1 };
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...mouse }, sessionId);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...mouse }, sessionId);
+      return true;
+    };
+
+    const clickedSearchBar = await clickElement('.search-trigger');
+    await waitFor(`!!document.querySelector('.palette-card[role="dialog"]')`, 'the palette of the search bar', 10000).catch(
+      () => false
+    );
+    await waitFor(
+      `document.activeElement && document.activeElement.getAttribute('role') === 'combobox'`,
+      'the focus in the palette of the search bar',
+      10000
+    ).catch(() => false);
+    const searchBarPalette = await evaluate(`(() => {
+      const card = document.querySelector('.palette-card[role="dialog"]');
+      const input = card && card.querySelector('[role="combobox"]');
+      return { palette: !!card, focused: document.activeElement === input };
+    })()`);
+    checks.ok(
+      'the search bar of the vault opens the palette and puts the focus in its input',
+      clickedSearchBar && searchBarPalette?.palette === true && searchBarPalette?.focused === true,
+      JSON.stringify(searchBarPalette || {})
+    );
+
+    // The first row of the palette filters the list of the vault.
+    await typeInPalette('UI Shared');
+    await waitFor(
+      `[...document.querySelectorAll('.palette-card [role="option"]')].some((row) => (row.querySelector('.palette-row-label')?.textContent || '').trim().startsWith('Filter the list'))`,
+      'the filter row of the palette',
+      10000
+    ).catch(() => false);
+    const filterRow = await evaluate(`(() => {
+      const rows = [...document.querySelectorAll('.palette-card [role="option"]')];
+      const selected = rows.find((row) => row.getAttribute('aria-selected') === 'true');
+      return {
+        first: rows[0] === selected,
+        label: (selected?.querySelector('.palette-row-label')?.textContent || '').trim(),
+      };
+    })()`);
+    checks.ok(
+      'the first row of the palette filters the list of the vault',
+      filterRow?.first === true && (filterRow?.label || '').includes('UI Shared'),
+      JSON.stringify(filterRow || {})
+    );
+
+    await pressKey(enterKey);
+    await waitFor(`!document.querySelector('.palette-card[role="dialog"]')`, 'the closed palette of the filter', 5000).catch(
+      () => false
+    );
+    await waitFor(
+      `[...document.querySelectorAll('.list-item .row-main')].some((row) => (row.textContent || '').includes('UI Shared Login'))`,
+      'the filtered list of the vault',
+      10000
+    ).catch(() => false);
+    const filteredRows = await evaluate(
+      `[...document.querySelectorAll('.list-item .row-main')].map((row) => (row.textContent || '').trim())`
+    );
+    const searchBarText = await evaluate(`(document.querySelector('.search-trigger')?.textContent || '').trim()`);
+    checks.ok(
+      'the palette filters the list of the vault',
+      filteredRows.some((text) => text.includes('UI Shared Login')) &&
+        !filteredRows.some((text) => text.includes('UI History Login')) &&
+        searchBarText.includes('UI Shared'),
+      JSON.stringify({ filteredRows, searchBarText })
+    );
+
+    // The clear button of the search bar empties the filter again.
+    // The toast of the earlier copy is closed, so it does not cover the X button
+    // in the top right corner.
+    await evaluate(`(() => {
+      for (const button of [...document.querySelectorAll('.toast-close')]) button.click();
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const clickedClear = await clickElement('.search-clear-btn');
+    await waitFor(
+      `[...document.querySelectorAll('.list-item .row-main')].some((row) => (row.textContent || '').includes('UI History Login'))`,
+      'the list of the vault again',
+      10000
+    ).catch(() => false);
+    const restoredRows = await evaluate(
+      `[...document.querySelectorAll('.list-item .row-main')].map((row) => (row.textContent || '').trim())`
+    );
+    const clearedSearchBarText = await evaluate(`(document.querySelector('.search-trigger')?.textContent || '').trim()`);
+    checks.ok(
+      'the clear button of the search bar empties the filter',
+      clickedClear &&
+        restoredRows.some((text) => text.includes('UI History Login')) &&
+        !clearedSearchBarText.includes('UI Shared'),
+      JSON.stringify({ restoredRows, clearedSearchBarText })
+    );
+
     return checks.finish() ? 0 : 1;
   } finally {
     if (browser) await browser.stop();
