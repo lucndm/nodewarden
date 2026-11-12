@@ -153,7 +153,7 @@
 :root[data-theme='dark'] .totp-qr svg,
 :root[data-theme='dark'] .totp-qr img {
   background: #ffffff;
-  border-color: rgba(18, 16, 32, 0.12);
+  border-color: var(--line);
 }
 
 /* ── dark mode scrollbar ── */
@@ -174,7 +174,7 @@
 }
 
 :root[data-theme='dark'] .topbar {
-  background: rgba(17, 24, 39, 0.78);
+  background: color-mix(in srgb, var(--panel-soft) 78%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -220,7 +220,7 @@
 
 :root[data-theme='dark'] .card-brand-icon {
   color: var(--primary-strong);
-  background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+  background: linear-gradient(180deg, var(--panel-subtle) 0%, var(--panel) 100%);
   border-color: color-mix(in srgb, var(--primary) 30%, var(--line));
 }
 
@@ -229,14 +229,14 @@
 }
 
 :root[data-theme='dark'] .card-brand-american-express {
-  color: #fff;
-  background: #6d4aff;
+  color: var(--on-primary);
+  background: var(--primary);
 }
 
 :root[data-theme='dark'] .card-brand-mastercard,
 :root[data-theme='dark'] .card-brand-maestro,
 :root[data-theme='dark'] .card-brand-discover {
-  color: #f8fafc;
+  color: var(--text);
 }
 
 :root[data-theme='dark'] .mobile-sidebar-sheet,

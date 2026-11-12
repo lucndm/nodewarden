@@ -183,7 +183,7 @@ input[type='file'].input::file-selector-button:hover {
 }
 
 .btn-primary {
-  @apply text-white;
+  color: var(--on-primary);
   background: linear-gradient(135deg, #6d4aff 0%, #4b2fb8 100%);
   border: 1px solid rgba(109, 74, 255, 0.4);
   box-shadow: 0 4px 14px rgba(109, 74, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -215,7 +215,8 @@ input[type='file'].input::file-selector-button:hover {
 }
 
 .btn-secondary {
-  @apply bg-panel text-brand-strong;
+  @apply text-brand-strong;
+  background: var(--control-secondary-bg);
   border: 1px solid rgba(109, 74, 255, 0.22);
   box-shadow: 0 2px 8px rgba(18, 16, 32, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
