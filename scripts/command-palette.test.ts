@@ -102,7 +102,17 @@ const KNOWN_FIELDS: Cipher = {
   fields: [{ type: 0, decName: 'E-mail', decValue: 'known@example.test' }],
 } as Cipher;
 
-const CIPHERS = [DIGITALOCEAN, BANK, TRASHED, GUARDED, NO_SECRETS, RICH, KNOWN_FIELDS];
+const AUTOFILL: Cipher = {
+  id: 'cipher-autofill',
+  type: 1,
+  decName: 'Autofill Form',
+  fields: [
+    { type: 0, decName: 'remember me', decValue: '1' },
+    { type: 0, decName: 'E-mail', decValue: 'autofill@example.test' },
+  ],
+} as Cipher;
+
+const CIPHERS = [DIGITALOCEAN, BANK, TRASHED, GUARDED, NO_SECRETS, RICH, KNOWN_FIELDS, AUTOFILL];
 
 const SECRETS = [
   'digitalocean-pass',
@@ -205,6 +215,14 @@ test('a field with a known kind shows its translated label', () => {
   // would be shown to the reader.
   assert.ok(fields.some((entry) => entry.label === 'Email'));
   assert.ok(!fields.some((entry) => entry.label.includes('txt_field_kind_')));
+});
+
+test('a noise field of an autofilled form is not a result', () => {
+  const results = searchPalette('autofill', PAGES, CIPHERS);
+  const fields = fieldEntries(results);
+
+  assert.ok(fields.some((entry) => entry.cipherId === 'cipher-autofill' && entry.label === 'Email'));
+  assert.ok(!fields.some((entry) => entry.label === 'remember me'));
 });
 
 test('no result carries a secret of an item', () => {

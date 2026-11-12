@@ -147,6 +147,10 @@ function fieldCandidates(cipher: Cipher): FieldCandidate[] {
     // A field with a known kind is shown under its canonical name, a field
     // without one keeps the name it was stored with.
     const presented = presentField(name, type);
+    // A noise field is left over from an autofilled form (remember me,
+    // agree...). It lives in the "More info" of the detail page, so it is not
+    // a result of the search.
+    if (presented.noise) return;
     const canonical = presented.labelKey ? t(presented.labelKey) : name;
     candidates.push({
       label: presented.labelKey ? canonical : name,
