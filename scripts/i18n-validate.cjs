@@ -29,6 +29,12 @@ const intentionallyEnglishKeys = new Set([
   'txt_generator_provider_simplelogin',
   // "Details" is the same word in German (and several other locales).
   'txt_email_breach_details',
+  // Technical terms that German, French, Italian and Swedish spell the same
+  // way as English does.
+  'txt_field_kind_database',
+  'txt_field_kind_port',
+  'txt_field_kind_server',
+  'txt_field_kind_website',
   // "Collections" is spelled the same in French and English.
   'txt_collections',
   // "Organisationen"/"Organizations" differ, but the singular is a technical
