@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useSearch } from 'wouter';
 import { Clipboard, KeyRound, RefreshCw, ShieldCheck, ShieldOff, Trash2 } from 'lucide-preact';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import qrcode from 'qrcode-generator';
@@ -207,23 +208,22 @@ export default function SettingsPage(props: SettingsPageProps) {
     void refreshSsoStatus();
   }, [activeSection]);
 
-  // A link may name the section of the page it opens.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const section = settingsSectionFrom(new URLSearchParams(window.location.search || '').get('section') || '');
-    if (section) setActiveSection(section);
-  }, []);
+  // The URL is the only source of the section to open. A link or the palette
+  // names the section of the page in the query.
+  const search = useSearch();
+  const requestedSection = settingsSectionFrom(new URLSearchParams(search || '').get('section') || '');
 
-  // The palette opens a tab of the settings page.
   useEffect(() => {
-    const openSection = (event: Event): void => {
-      const section = settingsSectionFrom((event as CustomEvent<string>).detail);
-      if (!section) return;
-      setActiveSection(section);
-    };
-    window.addEventListener('nodewarden:settings-section', openSection);
-    return () => window.removeEventListener('nodewarden:settings-section', openSection);
-  }, []);
+    if (!requestedSection) return;
+    setActiveSection(requestedSection);
+    // The section leaves the URL, so the same section opens again when it is
+    // picked a second time.
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('section')) return;
+    url.searchParams.delete('section');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [requestedSection]);
 
   async function startSsoLink(): Promise<void> {
     if (!props.authedFetch) return;

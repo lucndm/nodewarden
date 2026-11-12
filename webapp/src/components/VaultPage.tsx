@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
+import { useSearch } from 'wouter';
 import LoadingState from '@/components/LoadingState';
 import VaultDialogs from '@/components/vault/VaultDialogs';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -642,24 +643,16 @@ export default function VaultPage(props: VaultPageProps) {
     if (sidebarFilter.kind === 'duplicates') setSelectedMap({});
   }, [sidebarFilter.kind, duplicateMode]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const focusId = String(new URLSearchParams(window.location.search || '').get('cipher') || '').trim();
-    if (!focusId) return;
-    pendingFocusCipherIdRef.current = focusId;
-  }, []);
+  // The URL is the only source of the item to open. The palette names the
+  // item in the query.
+  const search = useSearch();
+  const requestedCipherId = String(new URLSearchParams(search || '').get('cipher') || '').trim();
 
-  // The palette asks for an item while the page is already open.
   useEffect(() => {
-    const focusCipher = (event: Event): void => {
-      const focusId = String((event as CustomEvent<string>).detail || '').trim();
-      if (!focusId) return;
-      pendingFocusCipherIdRef.current = focusId;
-      setFocusSignal((signal) => signal + 1);
-    };
-    window.addEventListener('nodewarden:focus-cipher', focusCipher);
-    return () => window.removeEventListener('nodewarden:focus-cipher', focusCipher);
-  }, []);
+    if (!requestedCipherId) return;
+    pendingFocusCipherIdRef.current = requestedCipherId;
+    setFocusSignal((signal) => signal + 1);
+  }, [requestedCipherId]);
 
   // The palette filters the list the same way typing in the search box does.
   useEffect(() => {
