@@ -527,6 +527,12 @@ export default function useOrganizationActions(input: UseOrganizationActionsInpu
           membershipId: member.membershipId,
           publicKey: member.publicKey as string,
         })),
+        // The collection names are sealed with the organization key, so the
+        // rotation seals them again with the new one.
+        collections: rotation.collections.map((collection) => ({
+          id: collection.id,
+          name: collection.name,
+        })),
         ciphers: rotation.ciphers.map((cipher) => ({
           id: cipher.id,
           key: cipher.key,

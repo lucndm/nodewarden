@@ -660,6 +660,12 @@ async function run(baseUrl, checks, cli, cliEnv, workerLog = () => '') {
       membershipId: member.membershipId,
       publicKey: member.publicKey,
     })),
+    // The collection names are sealed with the organization key, so the
+    // rotation seals them again with the new one.
+    collections: (rotationData.body?.collections ?? []).map((collection) => ({
+      id: collection.id,
+      name: collection.name,
+    })),
     ciphers: (rotationData.body?.ciphers ?? []).map((cipher) => ({
       id: cipher.id,
       key: cipher.key,

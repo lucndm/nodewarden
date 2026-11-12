@@ -81,6 +81,12 @@ export async function getOrganizations(authedFetch: AuthedFetch): Promise<VaultO
 export interface OrganizationRotationData {
   organization: { id: string; name: string; privateKey: string | null };
   members: Array<{ membershipId: string; userId: string; publicKey: string | null }>;
+  /**
+   * The collections of the organization, with the name as it is stored: an
+   * encrypted string, or plain text in a collection created before the names
+   * were encrypted.
+   */
+  collections: Array<{ id: string; name: string }>;
   ciphers: Array<{
     id: string;
     key: string | null;
@@ -109,6 +115,7 @@ export async function getOrganizationRotationData(
   const body = await parseJson<Record<string, unknown>>(resp);
   const organization = (body?.organization ?? {}) as Record<string, unknown>;
   const rows = Array.isArray(body?.members) ? (body.members as Record<string, unknown>[]) : [];
+  const collectionRows = Array.isArray(body?.collections) ? (body.collections as Record<string, unknown>[]) : [];
   const ciphers = Array.isArray(body?.ciphers) ? (body.ciphers as Record<string, unknown>[]) : [];
   return {
     organization: {
@@ -120,6 +127,10 @@ export async function getOrganizationRotationData(
       membershipId: String(entry.membershipId || ''),
       userId: String(entry.userId || ''),
       publicKey: typeof entry.publicKey === 'string' && entry.publicKey.trim() ? entry.publicKey : null,
+    })),
+    collections: collectionRows.map((entry) => ({
+      id: String(entry.id || ''),
+      name: String(entry.name || ''),
     })),
     ciphers: ciphers.map((entry) => ({
       id: String(entry.id || ''),
