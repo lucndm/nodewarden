@@ -177,11 +177,13 @@ type SessionTimeoutAction = 'lock' | 'logout';
 const LOCK_TIMEOUT_STORAGE_KEY = 'nodewarden.lock.timeout-minutes.v1';
 const SESSION_TIMEOUT_ACTION_STORAGE_KEY = 'nodewarden.session.timeout-action.v1';
 const LOCK_TIMEOUT_VALUES = new Set<LockTimeoutMinutes>([0, 1, 5, 15, 30]);
+// A first visit without a stored preference lands on dark; a stored choice
+// (including "system") still wins.
 function readThemePreference(): ThemePreference {
-  if (typeof window === 'undefined') return 'system';
+  if (typeof window === 'undefined') return 'dark';
   const stored = String(window.localStorage.getItem(THEME_STORAGE_KEY) || '').trim();
   if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
-  return 'system';
+  return 'dark';
 }
 
 function resolveSystemTheme(): 'light' | 'dark' {

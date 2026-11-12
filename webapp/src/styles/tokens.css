@@ -1,13 +1,12 @@
 /*
  * Design tokens.
  *
- * Palette provenance: the semantic roles below follow Proton's Carbon theme
- * (ProtonMail/design-system, ISC licensed): a cool neutral surface ramp, a
- * blue-violet interaction colour, and the signal colours for info, success,
- * warning and danger. The interaction colour is the violet Proton Pass uses on
- * its own screens, and the dark ramp is a navy-violet rather than a flat grey.
- * Light and dark carry the same role names, so every surface below is written
- * once and only the values differ per theme.
+ * The semantic roles below are shared by both themes, so every surface is
+ * written once and only the values differ per theme. Light keeps a bright
+ * canvas with a violet interaction colour. Dark uses a near-black violet
+ * surface ramp and a light lavender interaction colour, so the primary button
+ * is a lavender fill carrying dark text (see --on-primary) rather than white
+ * text on a saturated hue.
  */
 :root {
   --bg-accent: #f4f3f8;
@@ -25,6 +24,8 @@
   --primary: #6d4aff;
   --primary-hover: #5b3ce0;
   --primary-strong: #4b2fb8;
+  --on-primary: #ffffff;
+  --control-secondary-bg: var(--panel);
   --brand: var(--primary);
   --brand-strong: var(--primary-strong);
   --accent: var(--primary);
@@ -103,32 +104,34 @@
 }
 
 :root[data-theme='dark'] {
-  --bg-accent: #0f0d1a;
-  --panel: #1a1726;
-  --panel-soft: #151320;
-  --panel-muted: #100e1b;
-  --panel-subtle: #221e33;
-  --surface: #1a1726;
-  --line: rgba(163, 148, 232, 0.17);
-  --line-soft: rgba(163, 148, 232, 0.1);
-  --text: #f0eef8;
-  --text-muted: #9a95b3;
-  --muted: #9a95b3;
-  --muted-strong: #c6c1da;
-  /* The interaction hue stays constant across themes, as in Proton's Carbon
-     theme; only its hover and its on-surface text tone shift for dark. */
-  --primary: #6d4aff;
-  --primary-hover: #8566ff;
-  --primary-strong: #b9a4ff;
+  --bg-accent: #191826;
+  --panel: #201f30;
+  --panel-soft: #1d1c2b;
+  --panel-muted: #1b1a29;
+  --panel-subtle: #292838;
+  --surface: #201f30;
+  --line: #39384b;
+  --line-soft: #312f42;
+  --text: #eeeeef;
+  --text-muted: #a3a2ad;
+  --muted: #a3a2ad;
+  --muted-strong: #cfcfd2;
+  /* The interaction colour is a light lavender in dark mode, so its fill
+     carries a dark label instead of white. */
+  --primary: #b3b1f4;
+  --primary-hover: #c4c2f7;
+  --primary-strong: #b99fea;
+  --on-primary: #1b1a29;
+  --control-secondary-bg: #302d44;
   --brand: var(--primary);
   --brand-strong: var(--primary-strong);
   --accent: var(--primary);
   --accent-hover: var(--primary-hover);
   --accent-strong: var(--primary-strong);
-  --accent-soft: rgba(127, 92, 255, 0.16);
+  --accent-soft: #302949;
   --info: #2c89db;
-  --danger: #ed4c51;
-  --success: #349172;
+  --danger: #e593a5;
+  --success: #67bc9e;
   --warning: #f5930a;
   --overlay-strong: rgba(6, 5, 12, 0.72);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
